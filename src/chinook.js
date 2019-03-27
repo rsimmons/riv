@@ -83,7 +83,7 @@ function getUpdatingExecutionContext() {
   return updatingExecutionContext;
 }
 
-export function useRef(initVal) {
+export function useVar(initVal) {
   const ctx = getUpdatingExecutionContext();
   const record = ctx._beginHook();
 
@@ -137,7 +137,7 @@ export function useInitialize(initializer) {
 /*
 export function useAsync(inner) {
   const requestUpdate = useRequestUpdate();
-  const queuedOutput = useRef();
+  const queuedOutput = useVar();
 
   if (queuedOutput.current !== undefined) {
     const qv = queuedOutput.current;

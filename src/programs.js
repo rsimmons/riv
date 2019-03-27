@@ -1,7 +1,7 @@
-import { useRef, useRequestUpdate, useInitialize } from './chinook';
+import { useVar, useRequestUpdate, useInitialize } from './chinook';
 
 function displayAsString(v) {
-  const elem = useRef(null);
+  const elem = useVar(null);
 
   useInitialize(() => {
     elem.current = document.createElement('div');
@@ -17,8 +17,31 @@ function displayAsString(v) {
   elem.current.textContent = (v === undefined) ? '(undefined)' : v.toString();
 }
 
+function animationTime() {
+  const requestUpdate = useRequestUpdate();
+  const time = useVar();
+  const reqId = useVar();
+
+  useInitialize(() => {
+    const onFrame = (t) => {
+      time.current = 0.001*t;
+      reqId.current = requestAnimationFrame(onFrame); // request another
+      requestUpdate();
+    };
+
+    time.current = 0.001*performance.now();
+    reqId.current = requestAnimationFrame(onFrame);
+
+    return () => { // cleanup
+      cancelAnimationFrame(reqId.current);
+    }
+  });
+
+  return time.current;
+}
+
 function countEvents(e) {
-  const count = useRef(0);
+  const count = useVar(0);
 
   if (e) { // e will be a boxed value if present, undefined if not
     count.current++;
@@ -30,7 +53,7 @@ function countEvents(e) {
 /*
 function mouseClicks() {
   const requestUpdate = useRequestUpdate();
-  const queued = useRef();
+  const queued = useVar();
 
   useInitialize(() => {
     const onMouseDown = () => {
@@ -59,29 +82,6 @@ function mouseClicks2() {
   });
 }
 */
-
-function animationTime() {
-  const requestUpdate = useRequestUpdate();
-  const time = useRef();
-  const reqId = useRef();
-
-  useInitialize(() => {
-    const onFrame = (t) => {
-      time.current = 0.001*t;
-      reqId.current = requestAnimationFrame(onFrame); // request another
-      requestUpdate();
-    };
-
-    time.current = 0.001*performance.now();
-    reqId.current = requestAnimationFrame(onFrame);
-
-    return () => { // cleanup
-      cancelAnimationFrame(reqId.current);
-    }
-  });
-
-  return time.current;
-}
 
 export default [
   {
