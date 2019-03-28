@@ -108,7 +108,7 @@ function random(repick) {
 }
 
 function audioDriver(generator) {
-  const frameCount = useVar();
+  const frameCount = useVar(0);
   const requestUpdate = useRequestUpdate();
   const generatingSample = useVar(false);
   const latestAmplitude = useVar(0);
