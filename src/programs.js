@@ -186,8 +186,8 @@ export default [
     name: 'audio noise when mouse is down',
     main: () => {
       const md = mouseDown();
-      audioDriver((audioTime, advanceFrameStream) => {
-        const noise = random(advanceFrameStream) - 0.5; // centered
+      audioDriver((audioTime, advanceFrame) => {
+        const noise = random(advanceFrame) - 0.5; // centered
         return md ? noise : 0;
       });
     },
