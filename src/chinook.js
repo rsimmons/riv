@@ -20,7 +20,10 @@ class ExecutionContext {
 
     this.mainFunc();
 
-    this.recordCursor = null;
+    // This should be null, otherwise there are hook records we didn't get to, and something is amiss
+    if (this.recordCursor.next) {
+      throw new Error('Did not reach all hook records in update');
+    }
 
     // Clear updating context
     updatingExecutionContext = null;
