@@ -113,7 +113,7 @@ function audioDriver(generator) {
   const generatingSample = useVar(false);
   const latestAmplitude = useVar(0);
   const sampleRate = useVar();
-  const [nextFrameStream, emitNextFrame] = useEventEmitter();
+  const [advanceFrameStream, emitAdvanceFrame] = useEventEmitter();
 
   useInitialize(() => {
     const BUFFER_SIZE = 1024;
@@ -141,10 +141,10 @@ function audioDriver(generator) {
   });
 
   if (generatingSample.current) {
-    emitNextFrame({});
+    emitAdvanceFrame({});
   }
   const audioTime = frameCount.current / sampleRate.current;
-  latestAmplitude.current = generator(audioTime, nextFrameStream);
+  latestAmplitude.current = generator(audioTime, advanceFrameStream);
 }
 
 export default [
@@ -186,8 +186,8 @@ export default [
     name: 'audio noise when mouse is down',
     main: () => {
       const md = mouseDown();
-      audioDriver((time, nextFrame) => {
-        const noise = random(nextFrame) - 0.5; // centered
+      audioDriver((audioTime, advanceFrameStream) => {
+        const noise = random(advanceFrameStream) - 0.5; // centered
         return md ? noise : 0;
       });
     },
