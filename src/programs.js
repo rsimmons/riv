@@ -107,6 +107,46 @@ function random(repick) {
   return val.current;
 }
 
+function audioDriver(generator) {
+  const frameCount = useVar();
+  const requestUpdate = useRequestUpdate();
+  const generatingSample = useVar(false);
+  const latestAmplitude = useVar(0);
+  const sampleRate = useVar();
+  const [nextFrameStream, emitNextFrame] = useEventEmitter();
+
+  useInitialize(() => {
+    const BUFFER_SIZE = 1024;
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const scriptNode = audioContext.createScriptProcessor(BUFFER_SIZE, 0, 1); // 0 input channels, 1 output channel
+    scriptNode.onaudioprocess = (e) => {
+      const buffer = e.outputBuffer.getChannelData(0);
+      for (let i = 0; i < buffer.length; i++) {
+        generatingSample.current = true;
+        requestUpdate(); // NOTE: This is synchronous! The audioDriver function will be called before this returns
+        generatingSample.current = false;
+
+        buffer[i] = latestAmplitude.current;
+        frameCount.current++;
+      }
+    };
+    scriptNode.connect(audioContext.destination);
+
+    sampleRate.current = audioContext.sampleRate;
+
+    return () => {
+      scriptNode.disconnect();
+      audioContext.close();
+    };
+  });
+
+  if (generatingSample.current) {
+    emitNextFrame({});
+  }
+  const audioTime = frameCount.current / sampleRate.current;
+  latestAmplitude.current = generator(audioTime, nextFrameStream);
+}
+
 export default [
   {
     name: 'do nothing',
@@ -139,6 +179,18 @@ export default [
     name: 'random number, click to repick',
     main: () => {
       displayAsString(random(mouseClicks()));
+    },
+  },
+
+  {
+    name: 'audio noise when mouse is down',
+    main: () => {
+      const md = mouseDown();
+      audioDriver((time, nextFrame) => {
+        const noise = random(nextFrame) - 0.5; // centered
+        // if (Math.random() < 0.001) { console.log(noise, md); }
+        return md ? noise : 0;
+      });
     },
   },
 ]
