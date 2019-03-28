@@ -70,6 +70,32 @@ function mouseClicks() {
   return clickStream;
 }
 
+function mouseDown() {
+  const requestUpdate = useRequestUpdate();
+  const isDown = useVar(false); // we can't poll down-ness, so we assume it's not down
+
+  useInitialize(() => {
+    const onMouseDown = () => {
+      isDown.current = true;
+      requestUpdate();
+    }
+    const onMouseUp = () => {
+      isDown.current = false;
+      requestUpdate();
+    }
+
+    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('mouseup', onMouseUp);
+
+    return () => { // cleanup
+      document.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('mouseup', onMouseUp);
+    }
+  });
+
+  return isDown.current;
+}
+
 export default [
   {
     name: 'do nothing',
@@ -88,6 +114,13 @@ export default [
     name: 'count clicks',
     main: () => {
       displayAsString(countEvents(mouseClicks()));
+    },
+  },
+
+  {
+    name: 'mouse button down',
+    main: () => {
+      displayAsString(mouseDown());
     },
   },
 ]
