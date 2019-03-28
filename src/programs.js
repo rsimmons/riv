@@ -96,6 +96,17 @@ function mouseDown() {
   return isDown.current;
 }
 
+function random(repick) {
+  const val = useVar(Math.random());
+  const repickEvent = useEventReceiver(repick);
+
+  if (repickEvent) {
+    val.current = Math.random();
+  }
+
+  return val.current;
+}
+
 export default [
   {
     name: 'do nothing',
@@ -121,6 +132,13 @@ export default [
     name: 'mouse button down',
     main: () => {
       displayAsString(mouseDown());
+    },
+  },
+
+  {
+    name: 'random number, click to repick',
+    main: () => {
+      displayAsString(random(mouseClicks()));
     },
   },
 ]
