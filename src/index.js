@@ -2,6 +2,7 @@ import { createExecutionContext } from './chinook';
 import programs from './programs';
 
 const programListElem = document.getElementById('program-list');
+const programSourceElem = document.getElementById('program-source');
 
 let currentContext;
 
@@ -11,6 +12,7 @@ const startProgram = (program) => {
     currentContext = undefined;
   }
 
+  programSourceElem.textContent = program.main.toString(); // hacky but works for now
   currentContext = createExecutionContext(program.main);
   currentContext.update(); // do initial update. any further updates will be async
 }
