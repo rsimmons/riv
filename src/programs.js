@@ -188,7 +188,6 @@ export default [
       const md = mouseDown();
       audioDriver((time, nextFrame) => {
         const noise = random(nextFrame) - 0.5; // centered
-        // if (Math.random() < 0.001) { console.log(noise, md); }
         return md ? noise : 0;
       });
     },
