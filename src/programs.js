@@ -147,6 +147,17 @@ function audioDriver(generator) {
   latestAmplitude.current = generator(audioTime, advanceFrameStream);
 }
 
+function sampleUpon(toSample, upon, initialValue) {
+  const held = useVar(initialValue);
+  const uponEvent = useEventReceiver(upon);
+
+  if (uponEvent) {
+    held.current = toSample;
+  }
+
+  return held.current;
+}
+
 export default [
   {
     name: 'do nothing',
@@ -187,8 +198,21 @@ export default [
     main: () => {
       const md = mouseDown();
       audioDriver((audioTime, advanceFrame) => {
-        const noise = random(advanceFrame) - 0.5; // centered
+        const noise = random(advanceFrame) - 0.5;
         return md ? noise : 0;
+      });
+    },
+  },
+
+  {
+    name: 'decaying noise upon click',
+    main: () => {
+      const clicks = mouseClicks();
+      audioDriver((audioTime, advanceFrame) => {
+        const noise = random(advanceFrame) - 0.5;
+        const lastClickTime = sampleUpon(audioTime, clicks, -Infinity);
+        const decayingGain = Math.exp(5*(lastClickTime - audioTime));
+        return decayingGain*noise;
       });
     },
   },
