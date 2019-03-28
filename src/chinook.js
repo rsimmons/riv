@@ -104,7 +104,7 @@ export function useRequestUpdate() {
   // Create callback if necessary. We store it so that we already return the same one.
   if (!record.data) {
     record.data = {requestUpdate: () => {
-      ctx.update();
+      ctx.update(); // it's important that we use ctx from closure, not getUpdatingExecutionContext() here
     }};
   }
 
@@ -127,6 +127,66 @@ export function useInitialize(initializer) {
   }
 
   ctx._endHook();
+}
+
+export function useEventEmitter() {
+  const ctx = getUpdatingExecutionContext();
+  const record = ctx._beginHook();
+
+  // Initialize record data if necessary
+  if (!record.data) {
+    const stream = {
+      count: 0, // how many events have occurred on this stream
+      latestValue: undefined,
+    }
+
+    record.data = {
+      stream,
+      emit: (value) => {
+        // This function closes over the stream variable
+        stream.latestValue = value;
+        stream.count++;
+      },
+    };
+  }
+
+  ctx._endHook();
+
+  return [record.data.stream, record.data.emit];
+}
+
+export function useEventReceiver(stream) {
+  const ctx = getUpdatingExecutionContext();
+  const record = ctx._beginHook();
+
+  // Initialize record data if necessary
+  if (!record.data) {
+    record.data = {
+      stream, // the stream we are receiving on
+      lastSeenNumber: stream.count,
+    };
+  }
+
+  // TODO: We could support this, just need to consider details.
+  if (stream !== record.data.stream) {
+    throw new Error('Event receiver found that stream object changed identity');
+  }
+
+  let boxedEvent;
+
+  if (record.data.lastSeenNumber === stream.count) {
+    // There have not been any new events on the stream
+  } else if (record.data.lastSeenNumber === (stream.count - 1)) {
+    // There has been exactly one new event on the stream that we haven't seen yet.
+    boxedEvent = {value: stream.latestValue};
+    record.data.lastSeenNumber++;
+  } else {
+    throw new Error('Event receiver got too many events or missed some');
+  }
+
+  ctx._endHook();
+
+  return boxedEvent;
 }
 
 /**

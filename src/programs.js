@@ -1,4 +1,4 @@
-import { useVar, useRequestUpdate, useInitialize } from './chinook';
+import { useVar, useRequestUpdate, useInitialize, useEventEmitter, useEventReceiver } from './chinook';
 
 function displayAsString(v) {
   const elem = useVar(null);
@@ -40,23 +40,24 @@ function animationTime() {
   return time.current;
 }
 
-function countEvents(e) {
+function countEvents(es) {
   const count = useVar(0);
+  const boxedEvent = useEventReceiver(es);
 
-  if (e) { // e will be a boxed value if present, undefined if not
+  if (boxedEvent) {
     count.current++;
   }
 
   return count.current;
 }
 
-/*
 function mouseClicks() {
   const requestUpdate = useRequestUpdate();
-  const queued = useVar();
+  const [clickStream, emitClick] = useEventEmitter();
 
   useInitialize(() => {
     const onMouseDown = () => {
+      emitClick();
       requestUpdate();
     }
     document.addEventListener('mousedown', onMouseDown);
@@ -64,24 +65,10 @@ function mouseClicks() {
     return () => { // cleanup
       document.removeEventListener('mousedown', onMouseDown);
     }
-  })
-}
-
-function mouseClicks2() {
-  return useAsync(asyncOutput => {
-    useInitialize(() => {
-      const onMouseDown = () => {
-        asyncOutput({}); // emit unit event
-      }
-      document.addEventListener('mousedown', onMouseDown);
-
-      return () => { // cleanup
-        document.removeEventListener('mousedown', onMouseDown);
-      }
-    });
   });
+
+  return clickStream;
 }
-*/
 
 export default [
   {
@@ -97,12 +84,10 @@ export default [
     },
   },
 
-/*
   {
     name: 'count clicks',
     main: () => {
       displayAsString(countEvents(mouseClicks()));
     },
   },
-*/
 ]
