@@ -200,28 +200,3 @@ export function useEventReceiver(stream) {
 
   return boxedEvent;
 }
-
-/**
- * Runs inner function with callback that lets it do an async output.
- * Upon async output, does a requestUpdate and "queues" the output value.
- * Upon the next (requested) update,
- */
-/*
-export function useAsync(inner) {
-  const requestUpdate = useRequestUpdate();
-  const queuedOutput = useVar();
-
-  if (queuedOutput.current !== undefined) {
-    const qv = queuedOutput.current;
-    queuedOutput.current = undefined;
-    return qv;
-  }
-
-  return inner((outputValue) => {
-    if (queuedOutput.current !== undefined) {
-      throw new Error('this should not happen');
-    }
-    queuedOutput.current = outputValue;
-  });
-}
-*/
