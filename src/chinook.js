@@ -1,40 +1,49 @@
-let updatingExecutionContext = null;
+let updatingExecutionContextStack = [];
 
 class ExecutionContext {
-  constructor(mainFunc) {
-    this.mainFunc = mainFunc;
+  constructor(streamFunc, isRoot=false) {
+    this.streamFunc = streamFunc;
+    this.isRoot = isRoot;
     this.hookRecordChain = {next: null}; // dummy
     this.recordCursor = null; // only set when this context is updating
     this.updateCount = 0;
   }
 
   update() {
-    // Set this context to be updating
-    if (updatingExecutionContext) {
-      throw new Error('Cannot update context since there is already an updating context');
+    // Push this context onto the stack
+    if (this.isRoot && updatingExecutionContextStack.length !== 0) {
+      throw new Error('Went to update root context but stack is not empty');
     }
-    updatingExecutionContext = this;
+    updatingExecutionContextStack.push(this);
 
     // Move hook record cursor to start of chain
     this.recordCursor = this.hookRecordChain;
 
-    this.mainFunc();
+    this.streamFunc();
 
     // This should be null, otherwise there are hook records we didn't get to, and something is amiss
     if (this.recordCursor.next) {
       throw new Error('Did not reach all hook records in update');
     }
 
-    // Clear updating context
-    updatingExecutionContext = null;
+    // Pop this context from the stack, making sure it is the top entry.
+    if (!updatingExecutionContextStack.length || (updatingExecutionContextStack[updatingExecutionContextStack.length-1] !== this)) {
+      throw new Error('Cannot pop context because it is not at top of stack');
+    }
+    updatingExecutionContextStack.pop();
+    if (this.isRoot && updatingExecutionContextStack.length !== 0) {
+      throw new Error('Popped root context but stack is not empty');
+    }
 
     this.updateCount++;
   }
 
   terminate() {
-    // Make sure no context is updating
-    if (updatingExecutionContext) {
-      throw new Error('Should not terminate context when one is updating');
+    // I'm not sure if we need to check this, but let's verify that this context isn't anywhere in the stack
+    for (const ctx of updatingExecutionContextStack) {
+      if (ctx === this) {
+        throw new Error('Should not be terminating context that is in updating stack');
+      }
     }
 
     // Call any cleanup functions set by hooks
@@ -71,23 +80,23 @@ class ExecutionContext {
   }
 }
 
-export function createExecutionContext(mainFunc) {
-  return new ExecutionContext(mainFunc);
+export function createRootExecutionContext(streamFunc) {
+  return new ExecutionContext(streamFunc, true);
 }
 
 /**
  * This is used by hooks to get the currently updating context (after verifying it is set)
  */
-function getUpdatingExecutionContext() {
-  if (!updatingExecutionContext) {
+function getTopUpdatingExecutionContext() {
+  if (!updatingExecutionContextStack.length) {
     throw new Error('Cannot call hook outside of execution context?');
   }
 
-  return updatingExecutionContext;
+  return updatingExecutionContextStack[updatingExecutionContextStack.length-1];
 }
 
 export function useVar(initVal) {
-  const ctx = getUpdatingExecutionContext();
+  const ctx = getTopUpdatingExecutionContext();
   const record = ctx._beginHook();
 
   // Create value box if necessary
@@ -101,13 +110,13 @@ export function useVar(initVal) {
 }
 
 export function useRequestUpdate() {
-  const ctx = getUpdatingExecutionContext();
+  const ctx = getTopUpdatingExecutionContext();
   const record = ctx._beginHook();
 
   // Create callback if necessary. We store it so that we already return the same one.
   if (!record.data) {
     record.data = {requestUpdate: () => {
-      ctx.update(); // it's important that we use ctx from closure, not getUpdatingExecutionContext() here
+      ctx.update(); // it's important that we use ctx from closure, not getTopUpdatingExecutionContext() here
     }};
   }
 
@@ -117,7 +126,7 @@ export function useRequestUpdate() {
 }
 
 export function useInitialize(initializer) {
-  const ctx = getUpdatingExecutionContext();
+  const ctx = getTopUpdatingExecutionContext();
   const record = ctx._beginHook();
 
   // Initialize if necessary
@@ -133,7 +142,7 @@ export function useInitialize(initializer) {
 }
 
 export function useEventEmitter() {
-  const ctx = getUpdatingExecutionContext();
+  const ctx = getTopUpdatingExecutionContext();
   const record = ctx._beginHook();
 
   // Initialize record data if necessary
@@ -159,7 +168,7 @@ export function useEventEmitter() {
 }
 
 export function useEventReceiver(stream) {
-  const ctx = getUpdatingExecutionContext();
+  const ctx = getTopUpdatingExecutionContext();
   const record = ctx._beginHook();
 
   // Initialize record data if necessary
