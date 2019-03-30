@@ -1,4 +1,4 @@
-import { useVar, useRequestUpdate, useInitialize, useEventEmitter, useEventReceiver } from './chinook';
+import { useVar, useRequestUpdate, useInitialize, useEventEmitter, useEventReceiver, useDynamic } from './chinook';
 
 function displayAsString(v) {
   const elem = useVar(null);
@@ -38,6 +38,28 @@ function animationTime() {
   });
 
   return time.current;
+}
+
+function animationFrames() {
+  const requestUpdate = useRequestUpdate();
+  const reqId = useVar();
+  const [frameStream, emitFrame] = useEventEmitter();
+
+  useInitialize(() => {
+    const onFrame = (t) => {
+      emitFrame();
+      reqId.current = requestAnimationFrame(onFrame); // request another
+      requestUpdate();
+    };
+
+    reqId.current = requestAnimationFrame(onFrame);
+
+    return () => { // cleanup
+      cancelAnimationFrame(reqId.current);
+    }
+  });
+
+  return frameStream;
 }
 
 function countEvents(es) {
@@ -216,4 +238,28 @@ export default [
       });
     },
   },
+
+  {
+    name: 'resetting frame counter (useDynamic)',
+    main: () => {
+      const frames = animationFrames();
+      const clicks = mouseClicks();
+      const clickEvent = useEventReceiver(clicks);
+      const createCounter = useDynamic(countEvents);
+      const activeCounter = useVar();
+
+      if (clickEvent) {
+        if (activeCounter.current) {
+          activeCounter.current.terminate();
+        }
+        activeCounter.current = createCounter();
+      }
+      if (!activeCounter.current) {
+        activeCounter.current = createCounter();
+      }
+
+      const displayedCount = activeCounter.current.update(frames);
+      displayAsString(displayedCount);
+    }
+  }
 ]

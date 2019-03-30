@@ -19,7 +19,7 @@ class ExecutionContext {
     // Move hook record cursor to start of chain
     this.recordCursor = this.hookRecordChain;
 
-    this.streamFunc();
+    const retval = this.streamFunc.apply(null, arguments);
 
     // This should be null, otherwise there are hook records we didn't get to, and something is amiss
     if (this.recordCursor.next) {
@@ -36,6 +36,8 @@ class ExecutionContext {
     }
 
     this.updateCount++;
+
+    return retval;
   }
 
   terminate() {
@@ -199,4 +201,31 @@ export function useEventReceiver(stream) {
   ctx._endHook();
 
   return boxedEvent;
+}
+
+export function useDynamic(streamFunc) {
+  const ctx = getTopUpdatingExecutionContext();
+  const record = ctx._beginHook();
+
+  // Initialize record data if necessary
+  if (!record.data) {
+    // Create "factory" function to instantiate new contexts
+    const createContext = () => {
+      return new ExecutionContext(streamFunc);
+    };
+
+    record.data = {
+      createContext, // save this since we only create it once
+      streamFunc, // this is sort of redundant
+    };
+  }
+
+  // Sanity check: the streamFunc arg should not be changing
+  if (streamFunc !== record.data.streamFunc) {
+    throw new Error('The streamFunc passed to useDynamic should not change');
+  }
+
+  ctx._endHook();
+
+  return record.data.createContext;
 }
