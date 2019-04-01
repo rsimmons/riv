@@ -290,10 +290,10 @@ export default [
     name: 'dynamic array of async clocks',
     main: () => {
       const clicks = mouseClicks();
-      const clickEvent = useEventReceiver(clicks);
       const createClock = useDynamic(asyncClock);
       const clockArray = useVar([]);
 
+      const clickEvent = useEventReceiver(clicks);
       if (clickEvent) {
         clockArray.current.push(createClock());
       }
