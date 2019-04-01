@@ -1,4 +1,5 @@
-import { useVar, useRequestUpdate, useInitialize, useEventEmitter, useEventReceiver, useDynamic } from './chinook';
+// NOTE: Using require instead of import here makes the thing where we print program text work better.
+const { useVar, useRequestUpdate, useInitialize, useEventEmitter, useEventReceiver, useDynamic } = require('./chinook');
 
 function displayAsString(v) {
   const elem = useVar(null);
