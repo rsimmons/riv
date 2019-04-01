@@ -190,7 +190,7 @@ export default [
   {
     name: 'animation time',
     main: () => {
-      displayAsString(animationTime());
+      displayAsString(animationTime().toFixed(3));
     },
   },
 
