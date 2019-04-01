@@ -180,6 +180,29 @@ function sampleUpon(toSample, upon, initialValue) {
   return held.current;
 }
 
+function everySecond() {
+  const requestUpdate = useRequestUpdate();
+  const [tickStream, emitTick] = useEventEmitter();
+
+  useInitialize(() => {
+    const onInterval = () => {
+      emitTick();
+      requestUpdate();
+    }
+    const timerId = setInterval(onInterval, 1000);
+
+    return () => { // cleanup
+      clearInterval(timerId);
+    }
+  });
+
+  return tickStream;
+}
+
+function asyncClock() {
+  return countEvents(everySecond());
+}
+
 export default [
   {
     name: 'do nothing',
@@ -260,6 +283,23 @@ export default [
 
       const displayedCount = activeCounter.current.update(frames);
       displayAsString(displayedCount);
+    }
+  },
+
+  {
+    name: 'dynamic array of async clocks',
+    main: () => {
+      const clicks = mouseClicks();
+      const clickEvent = useEventReceiver(clicks);
+      const createClock = useDynamic(asyncClock);
+      const clockArray = useVar([]);
+
+      if (clickEvent) {
+        clockArray.current.push(createClock());
+      }
+
+      const nums = clockArray.current.map(clock => clock.update());
+      displayAsString(nums.join(' '));
     }
   }
 ]
