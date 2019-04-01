@@ -1,9 +1,9 @@
 let updatingExecutionContextStack = [];
 
 class ExecutionContext {
-  constructor(streamFunc, isRoot=false) {
+  constructor(streamFunc, onRequestUpdate) {
     this.streamFunc = streamFunc;
-    this.isRoot = isRoot;
+    this.onRequestUpdate = onRequestUpdate;
     this.hookRecordChain = {next: null}; // dummy
     this.recordCursor = null; // only set when this context is updating
     this.updateCount = 0;
@@ -11,9 +11,6 @@ class ExecutionContext {
 
   update() {
     // Push this context onto the stack
-    if (this.isRoot && updatingExecutionContextStack.length !== 0) {
-      throw new Error('Went to update root context but stack is not empty');
-    }
     updatingExecutionContextStack.push(this);
 
     // Move hook record cursor to start of chain
@@ -31,9 +28,6 @@ class ExecutionContext {
       throw new Error('Cannot pop context because it is not at top of stack');
     }
     updatingExecutionContextStack.pop();
-    if (this.isRoot && updatingExecutionContextStack.length !== 0) {
-      throw new Error('Popped root context but stack is not empty');
-    }
 
     this.updateCount++;
 
@@ -80,10 +74,16 @@ class ExecutionContext {
   _endHook() {
     this.recordCursor = this.recordCursor.next; // move cursor forward
   }
+
+  _requestUpdate() {
+    this.onRequestUpdate();
+}
 }
 
-export function createRootExecutionContext(streamFunc) {
-  return new ExecutionContext(streamFunc, true);
+export function createNoInOutExecutionContext(streamFunc) {
+  const onRequestUpdate = () => { ctx.update() };
+  const ctx = new ExecutionContext(streamFunc, onRequestUpdate)
+  return ctx;
 }
 
 /**
@@ -111,6 +111,11 @@ export function useVar(initVal) {
   return record.data;
 }
 
+/**
+ * Why do we need a hook? Why can't we just call ctx.requestUpdate()? Because the requestUpdate
+ * function that we return will often be called without there being any updating execution context
+ * (e.g. from an event handler). So it has to be bound to the correct context.
+ */
 export function useRequestUpdate() {
   const ctx = getTopUpdatingExecutionContext();
   const record = ctx._beginHook();
@@ -118,7 +123,7 @@ export function useRequestUpdate() {
   // Create callback if necessary. We store it so that we already return the same one.
   if (!record.data) {
     record.data = {requestUpdate: () => {
-      ctx.update(); // it's important that we use ctx from closure, not getTopUpdatingExecutionContext() here
+      ctx._requestUpdate(); // it's important that we use ctx from closure, not getTopUpdatingExecutionContext() here
     }};
   }
 
@@ -203,15 +208,20 @@ export function useEventReceiver(stream) {
   return boxedEvent;
 }
 
-export function useDynamic(streamFunc) {
+export function useDynamic(streamFunc, onRequestUpdate) {
   const ctx = getTopUpdatingExecutionContext();
   const record = ctx._beginHook();
 
   // Initialize record data if necessary
   if (!record.data) {
+    // If no onRequestUpdate is provided, default to requesting update on the current context
+    const oru = onRequestUpdate || (() => {
+      ctx._requestUpdate();
+    });
+
     // Create "factory" function to instantiate new contexts
     const createContext = () => {
-      return new ExecutionContext(streamFunc);
+      return new ExecutionContext(streamFunc, oru);
     };
 
     record.data = {

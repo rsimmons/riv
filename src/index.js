@@ -1,4 +1,4 @@
-import { createRootExecutionContext } from './chinook';
+import { createNoInOutExecutionContext } from './chinook';
 import programs from './programs';
 
 const programListElem = document.getElementById('program-list');
@@ -13,7 +13,7 @@ const startProgram = (program) => {
   }
 
   programSourceElem.textContent = program.main.toString(); // hacky but works for now
-  currentContext = createRootExecutionContext(program.main);
+  currentContext = createNoInOutExecutionContext(program.main);
   currentContext.update(); // do initial update. any further updates will be async
 }
 
