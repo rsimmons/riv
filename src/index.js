@@ -6,13 +6,18 @@ const programSourceElem = document.getElementById('program-source');
 
 let currentContext;
 
+// NOTE: This is a hack but works for now
+const fixIndent = (code) => {
+  return code.split('\n').map((line, idx) => (idx === 0) ? line : line.substr(2)).join('\n');
+}
+
 const startProgram = (program) => {
   if (currentContext) {
     currentContext.terminate();
     currentContext = undefined;
   }
 
-  programSourceElem.textContent = program.main.toString(); // hacky but works for now
+  programSourceElem.textContent = fixIndent(program.main.toString()); // hacky but works for now
   currentContext = createNoInOutExecutionContext(program.main);
   currentContext.update(); // do initial update. any further updates will be async
 }
