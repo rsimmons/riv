@@ -226,7 +226,7 @@ export default [
   },
 
   {
-    name: 'mouse button down',
+    name: 'is mouse button down',
     main: () => {
       displayAsString(mouseDown());
     },
@@ -264,7 +264,7 @@ export default [
   },
 
   {
-    name: 'resetting frame counter (useDynamic)',
+    name: 'resetting frame counter, click to reset',
     main: () => {
       const frames = animationFrames();
       const clicks = mouseClicks();
@@ -288,7 +288,7 @@ export default [
   },
 
   {
-    name: 'dynamic array of async clocks',
+    name: 'dynamic array of async clocks, click to add',
     main: () => {
       const clicks = mouseClicks();
       const createClock = useDynamic(asyncClock);
