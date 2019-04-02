@@ -6,6 +6,20 @@
     <style type="text/css">
 body {
   font-family: sans-serif;
+  padding: 0 10px;
+}
+
+#columns {
+  display: flex;
+}
+
+#left-column {
+  flex: none;
+}
+
+#right-column {
+  flex: auto;
+  padding-left: 1em;
 }
 
 #program-list {
@@ -14,10 +28,13 @@ body {
   margin: 0;
 }
 
+#helper-funcs {
+  margin-top: 1em;
+}
+
 #program-source {
   font-family: monospace;
   white-space: pre;
-  margin-top: 2em;
   padding: 1em;
   background-color: #eee;
 }
@@ -26,9 +43,18 @@ body {
   </head>
   <body>
     <h1>Chinook Example Programs</h1>
-    <ul id="program-list">
-    </ul>
-    <div id="program-source"></div>
+    <div id="columns">
+      <div id="left-column">
+        <ul id="program-list">
+        </ul>
+      </div>
+      <div id="right-column">
+        <div id="program-source"></div>
+        <div id="helper-funcs">
+          The implementation of "helper functions" used in the examples (showString(), mouseClickEvts(), etc.) can be found <a href="https://github.com/rsimmons/chinook/blob/master/src/programs.js">here</a>.
+        </div>
+      </div>
+    </div>
     <script src="bundle.js"></script>
   </body>
 </html>
