@@ -1,9 +1,11 @@
 let updatingExecutionContextStack = [];
 
 class ExecutionContext {
-  constructor(streamFunc, onRequestUpdate) {
+  constructor(streamFunc, onRequestUpdate, afterTerminate) {
     this.streamFunc = streamFunc;
     this.onRequestUpdate = onRequestUpdate;
+    this.afterTerminate = afterTerminate;
+
     this.hookRecordChain = {next: null}; // dummy
     this.recordCursor = null; // only set when this context is updating
     this.updateCount = 0;
@@ -48,6 +50,10 @@ class ExecutionContext {
       if (c.cleanup) {
         c.cleanup();
       }
+    }
+
+    if (this.afterTerminate) {
+      this.afterTerminate();
     }
   }
 
@@ -219,14 +225,25 @@ export function useDynamic(streamFunc, onRequestUpdate) {
       ctx._requestUpdate();
     });
 
+    // Track ExecutionContexts created (and not yet terminated) so we can terminate them upon cleanup
+    const activeContexts = new Set();
+
     // Create "factory" function to instantiate new contexts
     const createContext = () => {
-      return new ExecutionContext(streamFunc, oru);
+      const ctx = new ExecutionContext(streamFunc, oru, () => { activeContexts.delete(ctx); });
+      activeContexts.add(ctx);
+      return ctx;
     };
 
     record.data = {
       createContext, // save this since we only create it once
       streamFunc, // this is sort of redundant
+    };
+
+    record.cleanup = () => {
+      for (const ctx of activeContexts) {
+        ctx.terminate();
+      }
     };
   }
 
