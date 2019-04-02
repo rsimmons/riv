@@ -83,7 +83,16 @@ class ExecutionContext {
 
   _requestUpdate() {
     this.onRequestUpdate();
-}
+  }
+
+  /**
+   * This is only safe to do if the replacement function calls the same hooks, has same signature, etc.
+   * It's currently used to provide a function that is lexically the same but bound to different outer-scope
+   * variables.
+   */
+  _setStreamFunc(newStreamFunc) {
+    this.streamFunc = newStreamFunc;
+  }
 }
 
 export function createNoInOutExecutionContext(streamFunc) {
@@ -214,42 +223,49 @@ export function useEventReceiver(stream) {
   return boxedEvent;
 }
 
+/**
+ * The streamFunc argument may change, but it should only change to a function that can be safely
+ * swapped in (i.e. one that calls the same hooks, etc.). A common case is that streamFunc is a
+ * closure that references some outer scope variables, and when those change, a new "version" of
+ * the function is created (lexically the same, but closing over a different scope).
+ *
+ * onRequestUpdate is currently only read on the first call, so changes to it will have no effect.
+ */
 export function useDynamic(streamFunc, onRequestUpdate) {
   const ctx = getTopUpdatingExecutionContext();
   const record = ctx._beginHook();
 
   // Initialize record data if necessary
   if (!record.data) {
+    const data = {};
+
     // If no onRequestUpdate is provided, default to requesting update on the current context
     const oru = onRequestUpdate || (() => {
       ctx._requestUpdate();
     });
 
     // Track ExecutionContexts created (and not yet terminated) so we can terminate them upon cleanup
-    const activeContexts = new Set();
+    data.activeContexts = new Set();
 
     // Create "factory" function to instantiate new contexts
-    const createContext = () => {
-      const ctx = new ExecutionContext(streamFunc, oru, () => { activeContexts.delete(ctx); });
-      activeContexts.add(ctx);
+    data.createContext = () => {
+      const ctx = new ExecutionContext(data.streamFunc, oru, () => { data.activeContexts.delete(ctx); });
+      data.activeContexts.add(ctx);
       return ctx;
     };
 
-    record.data = {
-      createContext, // save this since we only create it once
-      streamFunc, // this is sort of redundant
-    };
-
+    record.data = data;
     record.cleanup = () => {
-      for (const ctx of activeContexts) {
+      for (const ctx of data.activeContexts) {
         ctx.terminate();
       }
     };
   }
 
-  // Sanity check: the streamFunc arg should not be changing
-  if (streamFunc !== record.data.streamFunc) {
-    throw new Error('The streamFunc passed to useDynamic should not change');
+  // Update the stream function in record and all active contexts.
+  record.data.streamFunc = streamFunc;
+  for (const ctx of record.data.activeContexts) {
+    ctx._setStreamFunc(streamFunc);
   }
 
   ctx._endHook();
