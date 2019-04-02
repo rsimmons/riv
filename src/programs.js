@@ -41,10 +41,10 @@ function animationTime() {
   return time.current;
 }
 
-function animationFrames() {
+function animationFrameEvts() {
   const requestUpdate = useRequestUpdate();
   const reqId = useVar();
-  const [frameStream, emitFrame] = useEventEmitter();
+  const [frameEvts, emitFrame] = useEventEmitter();
 
   useInitialize(() => {
     const onFrame = (t) => {
@@ -60,23 +60,23 @@ function animationFrames() {
     }
   });
 
-  return frameStream;
+  return frameEvts;
 }
 
-function countEvents(es) {
+function countEvents(evts) {
   const count = useVar(0);
-  const boxedEvent = useEventReceiver(es);
+  const event = useEventReceiver(evts);
 
-  if (boxedEvent) {
+  if (event) {
     count.current++;
   }
 
   return count.current;
 }
 
-function mouseClicks() {
+function mouseClickEvts() {
   const requestUpdate = useRequestUpdate();
-  const [clickStream, emitClick] = useEventEmitter();
+  const [clickEvts, emitClick] = useEventEmitter();
 
   useInitialize(() => {
     const onMouseDown = () => {
@@ -90,12 +90,12 @@ function mouseClicks() {
     }
   });
 
-  return clickStream;
+  return clickEvts;
 }
 
 function mouseDown() {
   const requestUpdate = useRequestUpdate();
-  const isDown = useVar(false); // we can't poll down-ness, so we assume it's not down
+  const isDown = useVar(false); // we can't poll down-ness, so we assume it's initially not down
 
   useInitialize(() => {
     const onMouseDown = () => {
@@ -119,11 +119,11 @@ function mouseDown() {
   return isDown.current;
 }
 
-function random(repick) {
+function random(repickEvts) {
   const val = useVar(Math.random());
-  const repickEvent = useEventReceiver(repick);
+  const repick = useEventReceiver(repickEvts);
 
-  if (repickEvent) {
+  if (repick) {
     val.current = Math.random();
   }
 
@@ -135,7 +135,7 @@ function audioDriver(generator) {
   const generatorCtx = useVar();
   const frameCount = useVar(0);
   const sampleRate = useVar();
-  const [advanceFrameStream, emitAdvanceFrame] = useEventEmitter();
+  const [advanceFrameEvts, emitAdvanceFrame] = useEventEmitter();
 
   useInitialize(() => {
     generatorCtx.current = createGenerator();
@@ -147,7 +147,7 @@ function audioDriver(generator) {
       const buffer = e.outputBuffer.getChannelData(0);
       for (let i = 0; i < buffer.length; i++) {
         emitAdvanceFrame({});
-        buffer[i] = generatorCtx.current.update(frameCount.current/sampleRate.current, advanceFrameStream);
+        buffer[i] = generatorCtx.current.update(frameCount.current/sampleRate.current, advanceFrameEvts);
         frameCount.current++;
       }
     };
@@ -167,14 +167,14 @@ function audioDriver(generator) {
    * reference that the generator depends on has changed. So we must update the generator,
    * but don't need its output amplitude.
    */
-  generatorCtx.current.update(frameCount.current/sampleRate.current, advanceFrameStream); // NOTE: we discard retval
+  generatorCtx.current.update(frameCount.current/sampleRate.current, advanceFrameEvts); // NOTE: we discard retval
 }
 
-function sampleUpon(toSample, upon, initialValue) {
+function sampleUpon(toSample, uponEvts, initialValue) {
   const held = useVar(initialValue);
-  const uponEvent = useEventReceiver(upon);
+  const upon = useEventReceiver(uponEvts);
 
-  if (uponEvent) {
+  if (upon) {
     held.current = toSample;
   }
 
@@ -183,7 +183,7 @@ function sampleUpon(toSample, upon, initialValue) {
 
 function everySecond() {
   const requestUpdate = useRequestUpdate();
-  const [tickStream, emitTick] = useEventEmitter();
+  const [tickEvts, emitTick] = useEventEmitter();
 
   useInitialize(() => {
     const onInterval = () => {
@@ -197,7 +197,7 @@ function everySecond() {
     }
   });
 
-  return tickStream;
+  return tickEvts;
 }
 
 export default [
@@ -217,7 +217,7 @@ export default [
   {
     name: 'count clicks',
     main: () => {
-      displayAsString(countEvents(mouseClicks()));
+      displayAsString(countEvents(mouseClickEvts()));
     },
   },
 
@@ -231,7 +231,7 @@ export default [
   {
     name: 'random number, click to repick',
     main: () => {
-      displayAsString(random(mouseClicks()));
+      displayAsString(random(mouseClickEvts()));
     },
   },
 
@@ -239,8 +239,8 @@ export default [
     name: 'audio noise when mouse is down',
     main: () => {
       const md = mouseDown();
-      audioDriver((audioTime, advanceFrame) => {
-        const noise = random(advanceFrame) - 0.5;
+      audioDriver((audioTime, advanceFrameEvts) => {
+        const noise = random(advanceFrameEvts) - 0.5;
         return md ? noise : 0;
       });
     },
@@ -249,10 +249,10 @@ export default [
   {
     name: 'decaying noise upon click',
     main: () => {
-      const clicks = mouseClicks();
-      audioDriver((audioTime, advanceFrame) => {
-        const noise = random(advanceFrame) - 0.5;
-        const lastClickTime = sampleUpon(audioTime, clicks, -Infinity);
+      const clickEvts = mouseClickEvts();
+      audioDriver((audioTime, advanceFrameEvts) => {
+        const noise = random(advanceFrameEvts) - 0.5;
+        const lastClickTime = sampleUpon(audioTime, clickEvts, -Infinity);
         const decayingGain = Math.exp(5*(lastClickTime - audioTime));
         return decayingGain*noise;
       });
@@ -262,13 +262,13 @@ export default [
   {
     name: 'resetting frame counter, click to reset',
     main: () => {
-      const frames = animationFrames();
-      const clicks = mouseClicks();
-      const clickEvent = useEventReceiver(clicks);
+      const frameEvts = animationFrameEvts();
+      const clickEvts = mouseClickEvts();
+      const click = useEventReceiver(clickEvts);
       const createCounter = useDynamic(countEvents);
       const activeCounter = useVar();
 
-      if (clickEvent) {
+      if (click) {
         if (activeCounter.current) {
           activeCounter.current.terminate();
         }
@@ -278,7 +278,7 @@ export default [
         activeCounter.current = createCounter();
       }
 
-      const displayedCount = activeCounter.current.update(frames);
+      const displayedCount = activeCounter.current.update(frameEvts);
       displayAsString(displayedCount);
     }
   },
@@ -286,13 +286,12 @@ export default [
   {
     name: 'dynamic array of async clocks, click to add',
     main: () => {
-      const clicks = mouseClicks();
-      const asyncClock = () => countEvents(everySecond());
-      const createClock = useDynamic(asyncClock);
+      const clickEvts = mouseClickEvts();
+      const click = useEventReceiver(clickEvts);
+      const createClock = useDynamic(() => countEvents(everySecond()));
       const clockArray = useVar([]);
 
-      const clickEvent = useEventReceiver(clicks);
-      if (clickEvent) {
+      if (click) {
         clockArray.current.push(createClock());
       }
 
