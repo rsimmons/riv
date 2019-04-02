@@ -5,12 +5,14 @@
   "license": "MIT",
   "scripts": {
     "build": "webpack --progress --colors --mode=production",
-    "watch": "webpack --watch --progress --colors --mode=development"
+    "watch": "webpack --watch --progress --colors --mode=development",
+    "deploy": "yarn build && gh-pages -d public"
   },
   "devDependencies": {
     "@babel/core": "^7.4.0",
     "@babel/preset-env": "^7.4.2",
     "babel-loader": "^8.0.5",
+    "gh-pages": "^2.0.1",
     "webpack": "^4.29.6",
     "webpack-cli": "^3.3.0"
   }
