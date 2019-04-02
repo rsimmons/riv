@@ -131,25 +131,23 @@ function random(repick) {
 }
 
 function audioDriver(generator) {
+  const createGenerator = useDynamic(generator);
+  const generatorCtx = useVar();
   const frameCount = useVar(0);
-  const requestUpdate = useRequestUpdate();
-  const generatingSample = useVar(false);
-  const latestAmplitude = useVar(0);
   const sampleRate = useVar();
   const [advanceFrameStream, emitAdvanceFrame] = useEventEmitter();
 
   useInitialize(() => {
+    generatorCtx.current = createGenerator();
+
     const BUFFER_SIZE = 1024;
     const audioContext = new (window.AudioContext || window.webkitAudioContext)();
     const scriptNode = audioContext.createScriptProcessor(BUFFER_SIZE, 0, 1); // 0 input channels, 1 output channel
     scriptNode.onaudioprocess = (e) => {
       const buffer = e.outputBuffer.getChannelData(0);
       for (let i = 0; i < buffer.length; i++) {
-        generatingSample.current = true;
-        requestUpdate(); // NOTE: This is synchronous! The audioDriver function will be called before this returns
-        generatingSample.current = false;
-
-        buffer[i] = latestAmplitude.current;
+        emitAdvanceFrame({});
+        buffer[i] = generatorCtx.current.update(frameCount.current/sampleRate.current, advanceFrameStream);
         frameCount.current++;
       }
     };
@@ -163,11 +161,13 @@ function audioDriver(generator) {
     };
   });
 
-  if (generatingSample.current) {
-    emitAdvanceFrame({});
-  }
-  const audioTime = frameCount.current / sampleRate.current;
-  latestAmplitude.current = generator(audioTime, advanceFrameStream);
+  /**
+   * Most of our generator updating will happen in the audio processing callback above.
+   * This update here is for when the audioDriver update is called, e.g. when an outer scope
+   * reference that the generator depends on has changed. So we must update the generator,
+   * but don't need its output amplitude.
+   */
+  generatorCtx.current.update(frameCount.current/sampleRate.current, advanceFrameStream); // NOTE: we discard retval
 }
 
 function sampleUpon(toSample, upon, initialValue) {
