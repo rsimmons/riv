@@ -1,4 +1,4 @@
-let updatingExecutionContextStack = [];
+let currentUpdateFrame = null;
 
 class ExecutionContext {
   constructor(streamFunc, onRequestUpdate, afterTerminate) {
@@ -12,8 +12,12 @@ class ExecutionContext {
   }
 
   update() {
-    // Push this context onto the stack
-    updatingExecutionContextStack.push(this);
+    // Push a new update frame onto the update stack for this context
+    const newFrame = {
+      executionContext: this,
+      previousFrame: currentUpdateFrame,
+    };
+    currentUpdateFrame = newFrame;
 
     // Move hook record cursor to start of chain
     this.recordCursor = this.hookRecordChain;
@@ -25,11 +29,15 @@ class ExecutionContext {
       throw new Error('Did not reach all hook records in update');
     }
 
-    // Pop this context from the stack, making sure it is the top entry.
-    if (!updatingExecutionContextStack.length || (updatingExecutionContextStack[updatingExecutionContextStack.length-1] !== this)) {
-      throw new Error('Cannot pop context because it is not at top of stack');
+    // Pop the top frame from the update stack
+    const poppedFrame = currentUpdateFrame;
+    if (!poppedFrame) {
+      throw new Error('Cannot pop update frame because current is null');
     }
-    updatingExecutionContextStack.pop();
+    if (poppedFrame.executionContext !== this) {
+      throw new Error("Popped frame from update stack but context did not match");
+    }
+    currentUpdateFrame = poppedFrame.previousFrame;
 
     this.updateCount++;
 
@@ -37,12 +45,7 @@ class ExecutionContext {
   }
 
   terminate() {
-    // I'm not sure if we need to check this, but let's verify that this context isn't anywhere in the stack
-    for (const ctx of updatingExecutionContextStack) {
-      if (ctx === this) {
-        throw new Error('Should not be terminating context that is in updating stack');
-      }
-    }
+    // NOTE: Might we want to sanity check that this context isn't anywhere in the current update stack?
 
     // Call any cleanup functions set by hooks
     // TODO: Do we need to worry about order?
@@ -105,11 +108,10 @@ export function createNoInOutExecutionContext(streamFunc) {
  * This is used by hooks to get the currently updating context (after verifying it is set)
  */
 function getTopUpdatingExecutionContext() {
-  if (!updatingExecutionContextStack.length) {
-    throw new Error('Cannot call hook outside of execution context?');
+  if (!currentUpdateFrame) {
+    throw new Error('Cannot get currently updating execution context because update stack is empty. Was a hook called outside of an execution context update?');
   }
-
-  return updatingExecutionContextStack[updatingExecutionContextStack.length-1];
+  return currentUpdateFrame.executionContext;
 }
 
 export function useVar(initVal) {
