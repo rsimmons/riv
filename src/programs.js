@@ -1,12 +1,12 @@
 // NOTE: Using require instead of import here makes the thing where we print program text work better.
 const { useVar, useRequestUpdate, useInitialize, useEventEmitter, useEventReceiver, useDynamic } = require('./chinook');
 
-function displayAsString(v) {
+function showString(v) {
   const elem = useVar(null);
 
   useInitialize(() => {
     elem.current = document.createElement('div');
-    elem.current.style.cssText = 'position: absolute; top: 0; right: 0; pointer-events: none; background: white; border: 1px solid red; color: black; font-size: 24px; padding: 5px';
+    elem.current.style.cssText = 'border: 1px solid red; color: black; font-size: 24px; padding: 5px; margin-top: 20px';
     elem.current.textContent = '(undefined)';
     document.body.appendChild(elem.current);
 
@@ -15,7 +15,7 @@ function displayAsString(v) {
     }
   })
 
-  elem.current.textContent = (v === undefined) ? '(undefined)' : v.toString();
+  elem.current.textContent = 'showString: ' + ((v === undefined) ? '(undefined)' : v.toString());
 }
 
 function animationTime() {
@@ -210,28 +210,28 @@ export default [
   {
     name: 'animation time',
     main: () => {
-      displayAsString(animationTime().toFixed(3));
+      showString(animationTime().toFixed(3));
     },
   },
 
   {
     name: 'count clicks',
     main: () => {
-      displayAsString(countEvents(mouseClickEvts()));
+      showString(countEvents(mouseClickEvts()));
     },
   },
 
   {
     name: 'is mouse button down',
     main: () => {
-      displayAsString(mouseDown());
+      showString(mouseDown());
     },
   },
 
   {
     name: 'random number, click to repick',
     main: () => {
-      displayAsString(random(mouseClickEvts()));
+      showString(random(mouseClickEvts()));
     },
   },
 
@@ -279,7 +279,7 @@ export default [
       }
 
       const displayedCount = activeCounter.current.update(frameEvts);
-      displayAsString(displayedCount);
+      showString(displayedCount);
     }
   },
 
@@ -296,7 +296,7 @@ export default [
       }
 
       const nums = clockArray.current.map(clock => clock.update());
-      displayAsString(nums.join(' '));
+      showString(nums.join(' '));
     }
   }
 ]
