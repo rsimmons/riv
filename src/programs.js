@@ -200,10 +200,6 @@ function everySecond() {
   return tickStream;
 }
 
-function asyncClock() {
-  return countEvents(everySecond());
-}
-
 export default [
   {
     name: 'do nothing',
@@ -291,6 +287,7 @@ export default [
     name: 'dynamic array of async clocks, click to add',
     main: () => {
       const clicks = mouseClicks();
+      const asyncClock = () => countEvents(everySecond());
       const createClock = useDynamic(asyncClock);
       const clockArray = useVar([]);
 
