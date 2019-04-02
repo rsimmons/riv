@@ -1,6 +1,6 @@
 # Chinook (*experimental*)
 
-Chinook lets you write reactive/dataflow/FRP style programs in Javascript using an API similar to [React Hooks](https://reactjs.org/docs/hooks-intro.html). Compared to React, Chinook is more general purpose and in some ways simpler; it is not tied to any notion of a UI tree or components.
+Chinook lets you write reactive/dataflow/[FRP](https://en.wikipedia.org/wiki/Functional_reactive_programming) style programs in Javascript using an API similar to [React Hooks](https://reactjs.org/docs/hooks-intro.html). Compared to React, Chinook is more general purpose and in some ways simpler; it is not tied to any notion of a UI tree or components.
 
 ## In Comparison to React
 
