@@ -274,3 +274,10 @@ export function useDynamic(streamFunc, onRequestUpdate) {
 
   return record.data.createContext;
 }
+
+export function useReducer(actionEvts, reducerFunc, initialState) {
+  const state = useVar(initialState);
+  const action = useEventReceiver(actionEvts);
+  state.current = reducerFunc(action, state.current);
+  return state.current;
+}

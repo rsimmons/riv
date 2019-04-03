@@ -1,5 +1,5 @@
 // NOTE: Using require instead of import here makes the thing where we print program text work better.
-const { useVar, useRequestUpdate, useInitialize, useEventEmitter, useEventReceiver, useDynamic } = require('./chinook');
+const { useVar, useRequestUpdate, useInitialize, useEventEmitter, useEventReceiver, useDynamic, useReducer } = require('./chinook');
 
 function showString(v) {
   const elem = useVar(null);
@@ -117,6 +117,29 @@ function mouseDown() {
   });
 
   return isDown.current;
+}
+
+function mousePosition() {
+  const requestUpdate = useRequestUpdate();
+  const position = useVar({x: 0, y: 0}); // we can't poll position, so start it at origin
+
+  useInitialize(() => {
+    const onMouseMove = (e) => {
+      position.current = {
+        x: e.clientX || e.pageX,
+        y: e.clientY || e.pageY,
+      };
+      requestUpdate();
+    }
+
+    document.addEventListener('mousemove', onMouseMove);
+
+    return () => { // cleanup
+      document.removeEventListener('mousemove', onMouseMove);
+    }
+  });
+
+  return position.current;
 }
 
 function random(repickEvts) {
@@ -258,6 +281,31 @@ function smoothFollow(targetValue, time, speedConstant) {
   return integral(currentValue => speedConstant*(targetValue - currentValue), time);
 }
 
+function redCircle(position, radius = 25) {
+  const elem = useVar(null);
+
+  useInitialize(() => {
+    elem.current = document.createElement('div');
+    elem.current.style.cssText = 'position: absolute; border-radius: 50%; background: red; pointer-events: none; user-select: none';
+    document.body.appendChild(elem.current);
+
+    return () => { // cleanup
+      document.body.removeChild(elem.current);
+    }
+  })
+
+  const p = position || {x: 0, y: 0};
+  if (radius < 0) {
+    radius = 0;
+  }
+  const halfRadius = 0.5*radius;
+
+  elem.current.style.left = (p.x - halfRadius) + 'px';
+  elem.current.style.top = (p.y - halfRadius) + 'px';
+  elem.current.style.width = radius + 'px';
+  elem.current.style.height = radius + 'px';
+}
+
 export default [
   {
     name: 'do nothing',
@@ -369,6 +417,30 @@ export default [
         const pos = Math.floor(integral(() => speed, audioTime));
         return pcm[pos % pcm.length]; // modulo so as to loop
       });
+    }
+  },
+
+  {
+    name: 'circle follows mouse',
+    main: () => {
+      redCircle(mousePosition());
+    }
+  },
+
+  {
+    name: 'circle moves halfway to mouse with each click',
+    main: () => {
+      const midpoint = (a, b) => ({x: 0.5*(a.x+b.x), y: 0.5*(a.y+b.y)});
+      const mpos = mousePosition();
+      const clickEvts = mouseClickEvts();
+      const cpos = useReducer(clickEvts, (action, prevState) => {
+        if (action) {
+          return midpoint(prevState, mpos);
+        } else {
+          return prevState;
+        }
+      }, {x: 0, y: 0});
+      redCircle(cpos);
     }
   },
 ]
