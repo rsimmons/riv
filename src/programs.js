@@ -200,6 +200,64 @@ function everySecond() {
   return tickEvts;
 }
 
+/**
+ * Until audio is loaded and decoded, a single-sample buffer of silence is returned.
+ */
+function loadAudioAsArray(url) {
+  const requestUpdate = useRequestUpdate();
+  const pcm = useVar([0]); // until loaded, just return single sample of silence
+
+  useInitialize(() => {
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    let cleanedUp = false;
+
+    const request = new XMLHttpRequest();
+    request.open('GET', url, true);
+    request.responseType = 'arraybuffer';
+    request.onload = () => {
+      const audioData = request.response;
+      audioCtx.decodeAudioData(audioData, buffer => {
+        if (!cleanedUp) {
+          pcm.current = buffer.getChannelData(0);
+          requestUpdate();
+        }
+      });
+    };
+
+    request.send();
+
+    return () => { // cleanup
+      request.abort(); // it's safe to always abort here. if already completed, it will be ignored
+
+      // decodeAudioData cannot be canceled. So to be correct, we must set a flag here to make sure
+      // that decoding is ignored
+      cleanedUp = true;
+    }
+  });
+
+  return pcm.current;
+}
+
+function consoleLog(v) {
+  console.log(v);
+}
+
+function integral(integrandFunc, time, initialValue = 0) {
+  const accum = useVar(initialValue);
+  const prevTime = useVar(time);
+
+  const integrand = integrandFunc(accum.current, prevTime.current);
+  accum.current += (time - prevTime.current)*integrand;
+
+  prevTime.current = time;
+
+  return accum.current;
+}
+
+function smoothFollow(targetValue, time, speedConstant) {
+  return integral(currentValue => speedConstant*(targetValue - currentValue), time);
+}
+
 export default [
   {
     name: 'do nothing',
@@ -298,5 +356,19 @@ export default [
       const nums = clockArray.current.map(clock => clock.update());
       showString(nums.join(' '));
     }
-  }
+  },
+
+  {
+    name: 'record player spin up/down, hold mouse down and release',
+    main: () => {
+      const pcm = loadAudioAsArray('amen_break.mp3');
+      showString(pcm.length > 1 ? 'loaded audio' : 'loading audio...');
+      audioDriver((audioTime, advanceFrameEvts, sampleRate) => {
+        const targetSpeed = mouseDown() ? sampleRate : 0;
+        const speed = smoothFollow(targetSpeed, audioTime, 3);
+        const pos = Math.floor(integral(() => speed, audioTime));
+        return pcm[pos % pcm.length]; // modulo so as to loop
+      });
+    }
+  },
 ]
