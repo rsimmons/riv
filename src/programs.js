@@ -147,7 +147,7 @@ function audioDriver(generator) {
       const buffer = e.outputBuffer.getChannelData(0);
       for (let i = 0; i < buffer.length; i++) {
         emitAdvanceFrame({});
-        buffer[i] = generatorCtx.current.update(frameCount.current/sampleRate.current, advanceFrameEvts);
+        buffer[i] = generatorCtx.current.update(frameCount.current/sampleRate.current, advanceFrameEvts, sampleRate.current);
         frameCount.current++;
       }
     };
@@ -167,7 +167,7 @@ function audioDriver(generator) {
    * reference that the generator depends on has changed. So we must update the generator,
    * but don't need its output amplitude.
    */
-  generatorCtx.current.update(frameCount.current/sampleRate.current, advanceFrameEvts); // NOTE: we discard retval
+  generatorCtx.current.update(frameCount.current/sampleRate.current, advanceFrameEvts, sampleRate.current); // NOTE: we discard retval
 }
 
 function sampleUpon(toSample, uponEvts, initialValue) {
