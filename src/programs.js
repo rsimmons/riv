@@ -434,11 +434,7 @@ export default [
       const mpos = mousePosition();
       const clickEvts = mouseClickEvts();
       const cpos = useReducer(clickEvts, (action, prevState) => {
-        if (action) {
-          return midpoint(prevState, mpos);
-        } else {
-          return prevState;
-        }
+        return action ? midpoint(prevState, mpos) : prevState;
       }, {x: 0, y: 0});
       redCircle(cpos);
     }
