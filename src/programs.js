@@ -307,7 +307,7 @@ function redCircle(position, radius = 25) {
 }
 
 function followAtSpeed2d(target, speed, time, initial) {
-  const pos = useVar({x: initial.x, y: initial.y});
+  const pos = useVar(initial);
   const prevTime = useVar(time);
 
   const dt = time - prevTime.current;
@@ -315,11 +315,13 @@ function followAtSpeed2d(target, speed, time, initial) {
   const dist = Math.sqrt(delta.x*delta.x + delta.y*delta.y);
   if (speed*dt >= dist) {
     // Jump to target position
-    pos.current.x = target.x;
-    pos.current.y = target.y;
+    pos.current = target;
   } else {
-    pos.current.x += dt*speed*delta.x/dist;
-    pos.current.y += dt*speed*delta.y/dist;
+    // NOTE: We must not mutate pos.current, since we return that
+    pos.current = {
+      x: pos.current.x + dt*speed*delta.x/dist,
+      y: pos.current.y + dt*speed*delta.y/dist,
+    };
   }
 
   prevTime.current = time;
