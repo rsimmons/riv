@@ -277,8 +277,8 @@ function integral(integrandFunc, time, initialValue = 0) {
   return accum.current;
 }
 
-function smoothFollow(targetValue, time, speedConstant) {
-  return integral(currentValue => speedConstant*(targetValue - currentValue), time);
+function expFollow(targetValue, speedConstant, time, initialValue) {
+  return integral(currentValue => speedConstant*(targetValue - currentValue), time, initialValue);
 }
 
 function redCircle(position, radius = 25) {
@@ -434,7 +434,7 @@ export default [
       showString(pcm.length > 1 ? 'loaded audio' : 'loading audio...');
       audioDriver((audioTime, advanceFrameEvts, sampleRate) => {
         const targetSpeed = mouseDown() ? sampleRate : 0;
-        const speed = smoothFollow(targetSpeed, audioTime, 3);
+        const speed = expFollow(targetSpeed, 3, audioTime, 0);
         const pos = Math.floor(integral(() => speed, audioTime));
         return pcm[pos % pcm.length]; // modulo so as to loop
       });
