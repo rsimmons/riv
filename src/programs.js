@@ -1,5 +1,5 @@
 // NOTE: Using require instead of import here makes the thing where we print program text work better.
-const { useVar, useRequestUpdate, useInitialize, useEventEmitter, useEventReceiver, useDynamic, useReducer } = require('./chinook');
+const { useVar, useRequestUpdate, useInitialize, useEventEmitter, useEventReceiver, useDynamic, useReducer } = require('./riv');
 
 function showString(v) {
   const elem = useVar(null);

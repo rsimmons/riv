@@ -1,4 +1,4 @@
-import { createNoInOutExecutionContext } from './chinook';
+import { createNoInOutExecutionContext } from './riv';
 import programs from './programs';
 
 const programListElem = document.getElementById('program-list');
