@@ -306,6 +306,27 @@ function redCircle(position, radius = 25) {
   elem.current.style.height = radius + 'px';
 }
 
+function followAtSpeed2d(target, speed, time, initial) {
+  const pos = useVar({x: initial.x, y: initial.y});
+  const prevTime = useVar(time);
+
+  const dt = time - prevTime.current;
+  const delta = {x: target.x-pos.current.x, y: target.y-pos.current.y};
+  const dist = Math.sqrt(delta.x*delta.x + delta.y*delta.y);
+  if (speed*dt >= dist) {
+    // Jump to target position
+    pos.current.x = target.x;
+    pos.current.y = target.y;
+  } else {
+    pos.current.x += dt*speed*delta.x/dist;
+    pos.current.y += dt*speed*delta.y/dist;
+  }
+
+  prevTime.current = time;
+
+  return pos.current;
+}
+
 export default [
   {
     name: 'do nothing',
@@ -424,6 +445,15 @@ export default [
     name: 'circle follows mouse',
     main: () => {
       redCircle(mousePosition());
+    }
+  },
+
+  {
+    name: 'circle follows mouse at limited speed',
+    main: () => {
+      const time = animationTime();
+      const mpos = mousePosition();
+      redCircle(followAtSpeed2d(mpos, 300, time, mpos));
     }
   },
 
