@@ -4,7 +4,7 @@ Riv is a Javascript library for building reactive programs using declarative, co
 
 [Check out a demo](https://rsimmons.github.io/riv/) with a few live example programs.
 
-Riv is not directly related to React, but if you’re familiar with React (especially function components and hooks), it can help to [understand Riv by analogy](#compared-to-react).
+Riv is not directly related to React, but if you’re familiar with React (especially function components and hooks), it can help to [understand Riv by comparison](#compared-to-react).
 
 Riv was most directly inspired by:
 - [Functional reactive programming](https://en.wikipedia.org/wiki/Functional_reactive_programming) (FRP), especially the extensive work from the Haskell community
