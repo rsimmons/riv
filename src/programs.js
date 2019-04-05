@@ -1,5 +1,5 @@
 // NOTE: Using require instead of import here makes the thing where we print program text work better.
-const { useVar, useRequestUpdate, useInitialize, useEventEmitter, useEventReceiver, useDynamic, useReducer } = require('./riv');
+const { useVar, useRequestUpdate, useInitialize, useEventEmitter, useEventReceiver, useDynamic, useReducer, useMachine } = require('./riv');
 
 function showString(v) {
   const elem = useVar(null);
@@ -329,6 +329,49 @@ function followAtSpeed2d(target, speed, time, initial) {
   return pos.current;
 }
 
+/**
+ * Note that this _will_ fire in first call if condition starts truthy
+ */
+function eventWhen(condition, valueToEmit) {
+  const [evts, emit] = useEventEmitter();
+  const prevCondition = useVar(false);
+
+  const bcond = !!condition;
+
+  if (bcond && !prevCondition.current) {
+    emit(valueToEmit);
+  }
+  prevCondition.current = bcond;
+
+  return evts;
+}
+
+/**
+ * Note that seconds argument is only read initially. But valueToEmit is re-read on changes
+ */
+function eventAfter(seconds, valueToEmit) {
+  const [evts, emit] = useEventEmitter();
+  const value = useVar(valueToEmit);
+
+  value.current = valueToEmit;
+
+  useInitialize(() => {
+    const timerId = setTimeout(() => {
+      emit(value.current);
+    }, 1000*seconds);
+    return () => {
+      clearTimeout(timerId);
+    };
+  });
+
+  return evts;
+}
+
+function neverEvts() {
+  const [evts, emit] = useEventEmitter();
+  return evts;
+}
+
 export default [
   {
     name: 'do nothing',
@@ -471,4 +514,30 @@ export default [
       redCircle(cpos);
     }
   },
+
+  {
+    name: 'roaming circle (state machine)',
+    main: () => {
+      const time = animationTime();
+      const position = useMachine({
+        moving: (initialPosition) => {
+          const targetPosition = {x: 500*random(neverEvts()), y: 500*random(neverEvts())};
+          const position = followAtSpeed2d(targetPosition, 300, time, initialPosition);
+          const arrived = (position.x === targetPosition.x) && (position.y === targetPosition.y);
+          return [
+            position,
+            eventWhen(arrived, ['resting', position])
+          ];
+        },
+        resting: (initialPosition) => {
+          return [
+            initialPosition,
+            eventAfter(random(neverEvts()), ['moving', initialPosition])
+          ];
+        },
+      }, ['moving', {x: 0, y: 0}]);
+      redCircle(position);
+    }
+  },
+
 ]

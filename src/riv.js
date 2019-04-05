@@ -281,3 +281,62 @@ export function useReducer(actionEvts, reducerFunc, initialState) {
   state.current = reducerFunc(action, state.current);
   return state.current;
 }
+
+/**
+ * TODO: Could/should this take an optional onRequestUpdate parameter?
+ */
+export function useMachine(states, initialTransition) {
+  const ctx = getTopUpdatingExecutionContext();
+  const record = ctx._beginHook();
+
+  const takeTransition = (trans) => {
+    // If there's an old context, terminate it
+    if (record.data.activeContext) {
+      record.data.activeContext.terminate();
+    }
+
+    const [newState, newStateArg] = trans;
+
+    // Create a new context and store it in record (but don't update it)
+    const newCtx = new ExecutionContext(states[newState], () => { ctx._requestUpdate(); });
+
+    record.data.activeState = newState;
+    record.data.activeContext = newCtx;
+    record.data.activeArgument = newStateArg;
+  };
+
+  if (!record.data) {
+    const data = {};
+    record.data = data;
+
+    takeTransition(initialTransition); // this will set stuff in record.data
+
+    record.cleanup = () => {
+      data.activeContext.terminate();
+    };
+  }
+
+  let retval;
+  while (true) {
+    // Set the state function in the active context (in case it changed)
+    record.data.activeContext._setStreamFunc(states[record.data.activeState]);
+
+    // Update the active context
+    const [tmpRetval, transitionEvts] = record.data.activeContext.update(record.data.activeArgument);
+    retval = tmpRetval;
+
+    // Was there a transition event?
+    // NOTE: Because we transition upon first even on this stream, we can sort of special-case this check
+    if (transitionEvts.count) {
+      const transition = transitionEvts.latestValue;
+      takeTransition(transition);
+    } else {
+      // There was no transition
+      break;
+    }
+  }
+
+  ctx._endHook();
+
+  return retval;
+}
