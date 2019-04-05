@@ -191,6 +191,10 @@ export function useEventEmitter() {
   return [record.data.stream, record.data.emit];
 }
 
+/**
+ * We allow stream to be undefined.
+ * We don't currently allow stream object to change identity
+ */
 export function useEventReceiver(stream) {
   const ctx = getTopUpdatingExecutionContext();
   const record = ctx._beginHook();
@@ -199,7 +203,7 @@ export function useEventReceiver(stream) {
   if (!record.data) {
     record.data = {
       stream, // the stream we are receiving on
-      lastSeenNumber: stream.count,
+      lastSeenNumber: stream && stream.count,
     };
   }
 
@@ -210,7 +214,9 @@ export function useEventReceiver(stream) {
 
   let boxedEvent;
 
-  if (record.data.lastSeenNumber === stream.count) {
+  if (!stream) {
+    // Do nothing
+  } else if (record.data.lastSeenNumber === stream.count) {
     // There have not been any new events on the stream
   } else if (record.data.lastSeenNumber === (stream.count - 1)) {
     // There has been exactly one new event on the stream that we haven't seen yet.

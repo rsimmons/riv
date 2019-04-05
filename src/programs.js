@@ -521,7 +521,7 @@ export default [
       const time = animationTime();
       const position = useMachine({
         moving: (initialPosition) => {
-          const targetPosition = {x: 500*random(neverEvts()), y: 500*random(neverEvts())};
+          const targetPosition = {x: 500*random(), y: 500*random()};
           const position = followAtSpeed2d(targetPosition, 300, time, initialPosition);
           const arrived = (position.x === targetPosition.x) && (position.y === targetPosition.y);
           return [
@@ -532,7 +532,7 @@ export default [
         resting: (initialPosition) => {
           return [
             initialPosition,
-            eventAfter(random(neverEvts()), ['moving', initialPosition])
+            eventAfter(random(), ['moving', initialPosition])
           ];
         },
       }, ['moving', {x: 0, y: 0}]);
