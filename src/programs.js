@@ -1,5 +1,5 @@
 // NOTE: Using require instead of import here makes the thing where we print program text work better.
-const { useVar, useRequestUpdate, useInitialize, useEventEmitter, useEventReceiver, useDynamic, useReducer, useMachine } = require('./riv');
+const { useVar, useRequestUpdate, useInitialize, useAsyncEventEmitter, useEventReceiver, useDynamic, useReducer, useMachine } = require('./riv');
 
 function showString(v) {
   const elem = useVar(null);
@@ -44,7 +44,7 @@ function animationTime() {
 function animationFrameEvts() {
   const requestUpdate = useRequestUpdate();
   const reqId = useVar();
-  const [frameEvts, emitFrame] = useEventEmitter();
+  const [frameEvts, emitFrame] = useAsyncEventEmitter();
 
   useInitialize(() => {
     const onFrame = (t) => {
@@ -76,7 +76,7 @@ function countEvents(evts) {
 
 function mouseClickEvts() {
   const requestUpdate = useRequestUpdate();
-  const [clickEvts, emitClick] = useEventEmitter();
+  const [clickEvt, emitClick] = useAsyncEventEmitter();
 
   useInitialize(() => {
     const onMouseDown = () => {
@@ -90,7 +90,7 @@ function mouseClickEvts() {
     }
   });
 
-  return clickEvts;
+  return clickEvt;
 }
 
 function mouseDown() {
@@ -142,9 +142,9 @@ function mousePosition() {
   return position.current;
 }
 
-function random(repickEvts) {
+function random(repickEvt) {
   const val = useVar(Math.random());
-  const repick = useEventReceiver(repickEvts);
+  const repick = useEventReceiver(repickEvt);
 
   if (repick) {
     val.current = Math.random();
@@ -158,7 +158,6 @@ function audioDriver(generator) {
   const generatorCtx = useVar();
   const frameCount = useVar(0);
   const sampleRate = useVar();
-  const [advanceFrameEvts, emitAdvanceFrame] = useEventEmitter();
 
   useInitialize(() => {
     generatorCtx.current = createGenerator();
@@ -169,8 +168,7 @@ function audioDriver(generator) {
     scriptNode.onaudioprocess = (e) => {
       const buffer = e.outputBuffer.getChannelData(0);
       for (let i = 0; i < buffer.length; i++) {
-        emitAdvanceFrame({});
-        buffer[i] = generatorCtx.current.update(frameCount.current/sampleRate.current, advanceFrameEvts, sampleRate.current);
+        buffer[i] = generatorCtx.current.update(frameCount.current/sampleRate.current, {value: undefined}, sampleRate.current);
         frameCount.current++;
       }
     };
@@ -190,12 +188,12 @@ function audioDriver(generator) {
    * reference that the generator depends on has changed. So we must update the generator,
    * but don't need its output amplitude.
    */
-  generatorCtx.current.update(frameCount.current/sampleRate.current, advanceFrameEvts, sampleRate.current); // NOTE: we discard retval
+  generatorCtx.current.update(frameCount.current/sampleRate.current, undefined, sampleRate.current); // NOTE: we discard retval
 }
 
-function sampleUpon(toSample, uponEvts, initialValue) {
+function sampleUpon(toSample, uponEvt, initialValue) {
   const held = useVar(initialValue);
-  const upon = useEventReceiver(uponEvts);
+  const upon = useEventReceiver(uponEvt);
 
   if (upon) {
     held.current = toSample;
@@ -206,7 +204,7 @@ function sampleUpon(toSample, uponEvts, initialValue) {
 
 function everySecond() {
   const requestUpdate = useRequestUpdate();
-  const [tickEvts, emitTick] = useEventEmitter();
+  const [tickEvt, emitTick] = useAsyncEventEmitter();
 
   useInitialize(() => {
     const onInterval = () => {
@@ -220,7 +218,7 @@ function everySecond() {
     }
   });
 
-  return tickEvts;
+  return tickEvt;
 }
 
 /**
@@ -333,24 +331,21 @@ function followAtSpeed2d(target, speed, time, initial) {
  * Note that this _will_ fire in first call if condition starts truthy
  */
 function eventWhen(condition, valueToEmit) {
-  const [evts, emit] = useEventEmitter();
   const prevCondition = useVar(false);
 
   const bcond = !!condition;
 
-  if (bcond && !prevCondition.current) {
-    emit(valueToEmit);
-  }
+  const retval = (bcond && !prevCondition.current) ? {value: valueToEmit} : undefined;
   prevCondition.current = bcond;
 
-  return evts;
+  return retval;
 }
 
 /**
  * Note that seconds argument is only read initially. But valueToEmit is re-read on changes
  */
 function eventAfter(seconds, valueToEmit) {
-  const [evts, emit] = useEventEmitter();
+  const [evt, emit] = useAsyncEventEmitter();
   const value = useVar(valueToEmit);
 
   value.current = valueToEmit;
@@ -364,12 +359,7 @@ function eventAfter(seconds, valueToEmit) {
     };
   });
 
-  return evts;
-}
-
-function neverEvts() {
-  const [evts, emit] = useEventEmitter();
-  return evts;
+  return evt;
 }
 
 export default [
@@ -411,8 +401,8 @@ export default [
     name: 'audio noise when mouse is down',
     main: () => {
       const md = mouseDown();
-      audioDriver((audioTime, advanceFrameEvts) => {
-        const noise = random(advanceFrameEvts) - 0.5;
+      audioDriver((audioTime, advanceFrameEvt) => {
+        const noise = random(advanceFrameEvt) - 0.5;
         return md ? noise : 0;
       });
     },
@@ -421,10 +411,10 @@ export default [
   {
     name: 'decaying noise upon click',
     main: () => {
-      const clickEvts = mouseClickEvts();
-      audioDriver((audioTime, advanceFrameEvts) => {
-        const noise = random(advanceFrameEvts) - 0.5;
-        const lastClickTime = sampleUpon(audioTime, clickEvts, -Infinity);
+      const clickEvt = mouseClickEvts();
+      audioDriver((audioTime, advanceFrameEvt) => {
+        const noise = random(advanceFrameEvt) - 0.5;
+        const lastClickTime = sampleUpon(audioTime, clickEvt, -Infinity);
         const decayingGain = Math.exp(5*(lastClickTime - audioTime));
         return decayingGain*noise;
       });
@@ -435,8 +425,8 @@ export default [
     name: 'resetting frame counter, click to reset',
     main: () => {
       const frameEvts = animationFrameEvts();
-      const clickEvts = mouseClickEvts();
-      const click = useEventReceiver(clickEvts);
+      const clickEvt = mouseClickEvts();
+      const click = useEventReceiver(clickEvt);
       const createCounter = useDynamic(countEvents);
       const activeCounter = useVar();
 
@@ -458,8 +448,8 @@ export default [
   {
     name: 'dynamic array of async clocks, click to add',
     main: () => {
-      const clickEvts = mouseClickEvts();
-      const click = useEventReceiver(clickEvts);
+      const clickEvt = mouseClickEvts();
+      const click = useEventReceiver(clickEvt);
       const createClock = useDynamic(() => countEvents(everySecond()));
       const clockArray = useVar([]);
 
@@ -477,7 +467,7 @@ export default [
     main: () => {
       const pcm = loadAudioAsArray('amen_break.mp3');
       showString(pcm.length > 1 ? 'loaded audio' : 'loading audio...');
-      audioDriver((audioTime, advanceFrameEvts, sampleRate) => {
+      audioDriver((audioTime, advanceFrameEvt, sampleRate) => {
         const targetSpeed = mouseDown() ? sampleRate : 0;
         const speed = expFollow(targetSpeed, 3, audioTime, 0);
         const pos = Math.floor(integral(() => speed, audioTime));
@@ -507,8 +497,8 @@ export default [
     main: () => {
       const midpoint = (a, b) => ({x: 0.5*(a.x+b.x), y: 0.5*(a.y+b.y)});
       const mpos = mousePosition();
-      const clickEvts = mouseClickEvts();
-      const cpos = useReducer(clickEvts, (action, prevState) => {
+      const clickEvt = mouseClickEvts();
+      const cpos = useReducer(clickEvt, (action, prevState) => {
         return action ? midpoint(prevState, mpos) : prevState;
       }, {x: 0, y: 0});
       redCircle(cpos);
