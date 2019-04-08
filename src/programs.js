@@ -1,5 +1,6 @@
 // NOTE: Using require instead of import here makes the thing where we print program text work better.
 const { useVar, useRequestUpdate, useInitialize, useAsyncEventEmitter, useEventReceiver, useDynamic, useReducer, useMachine } = require('./riv');
+const amen_break_url = require('./amen_break.mp3');
 
 function showString(v) {
   const elem = useVar(null);
@@ -465,7 +466,7 @@ export default [
   {
     name: 'record player spin up/down, hold mouse down and release',
     main: () => {
-      const pcm = loadAudioAsArray('amen_break.mp3');
+      const pcm = loadAudioAsArray(amen_break_url);
       showString(pcm.length > 1 ? 'loaded audio' : 'loading audio...');
       audioDriver((audioTime, advanceFrameEvt, sampleRate) => {
         const targetSpeed = mouseDown() ? sampleRate : 0;
