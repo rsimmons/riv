@@ -1,6 +1,9 @@
+import dom from './dom';
 // NOTE: Using require instead of import here makes the thing where we print program text work better.
 const { useVar, useRequestUpdate, useInitialize, useAsyncEventEmitter, useEventReceiver, useDynamic, useReducer, useMachine } = require('./riv');
+const { renderDOMIntoSelector, h } = require('./dom');
 const amen_break_url = require('./amen_break.mp3');
+
 
 function showString(v) {
   const elem = useVar(null);
@@ -363,6 +366,18 @@ function eventAfter(seconds, valueToEmit) {
   return evt;
 }
 
+function makeAsyncCallback() {
+  const [evt, emit] = useAsyncEventEmitter();
+  const requestUpdate = useRequestUpdate();
+
+  const callback = (...args) => {
+    emit(args);
+    requestUpdate();
+  };
+
+  return [callback, evt];
+}
+
 export default [
   {
     name: 'do nothing',
@@ -529,4 +544,41 @@ export default [
     }
   },
 
+  /* ALTERNATE JSX VERSION FOR BELOW
+    const vnode = (
+      <div>
+        <span>{label} {value}{unit}</span>
+        <input type="range" min={min} max={max} value={value} on-input={inputCallback} />
+      </div>
+    );
+  */
+  {
+    name: 'DOM',
+    main: () => {
+      const LabeledSlider = (label, unit, min, initialValue, max) => {
+        const [inputCallback, inputEvt] = makeAsyncCallback();
+        const value = useReducer(inputEvt, ([e], prevState) => e.target.value, initialValue);
+
+        const vnode = h('div', [
+          h('span', label + ' ' + value + unit),
+          h('input', {attrs: {type: 'range', min, max, value}, on: {input: inputCallback}})
+        ]);
+
+        return [vnode, value];
+      };
+
+      const [weightNode, weight] = LabeledSlider('Weight', 'kg', 40, 70, 150);
+      const [heightNode, height] = LabeledSlider('Height', 'cm', 140, 170, 210);
+
+      const heightMeters = 0.01*height;
+      const bmi = Math.round(weight / (heightMeters*heightMeters));
+      const uiNode = h('div', [
+        weightNode,
+        heightNode,
+        h('h2', 'BMI is ' + bmi)
+      ]);
+
+      renderDOMIntoSelector(uiNode, '#output');
+    }
+  },
 ]
