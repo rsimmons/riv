@@ -555,6 +555,7 @@ export default [
   {
     name: 'DOM',
     main: () => {
+      // Based off https://jsbin.com/seqehat/2/edit?js,output for comparison
       const LabeledSlider = (label, unit, min, initialValue, max) => {
         const [inputCallback, inputEvt] = makeAsyncCallback();
         const value = useReducer(inputEvt, ([e], prevState) => e.target.value, initialValue);
