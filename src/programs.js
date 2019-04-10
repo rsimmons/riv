@@ -553,7 +553,7 @@ export default [
     );
   */
   {
-    name: 'DOM',
+    name: 'BMI calculator (DOM)',
     main: () => {
       // Based off https://jsbin.com/seqehat/2/edit?js,output for comparison
       const LabeledSlider = (label, unit, min, initialValue, max) => {
