@@ -8,6 +8,7 @@ class ExecutionContext {
 
     this.hookRecordChain = {next: null}; // dummy
     this.recordCursor = null; // only set when this context is updating
+    this.openRecord = null;
     this.updateCount = 0;
   }
 
@@ -61,6 +62,10 @@ class ExecutionContext {
   }
 
   _beginHook() {
+    if (this.openRecord) {
+      throw new Error('This is already an open hook when beginning another');
+    }
+
     if (this.updateCount === 0) {
       if (this.recordCursor.next) {
         throw new Error('Expecting to create new hook record in chain, but already present');
@@ -77,10 +82,17 @@ class ExecutionContext {
       throw new Error('Expecting to find hook record in chain, but not present');
     }
 
+    this.openRecord = this.recordCursor.next;
+
     return this.recordCursor.next;
   }
 
   _endHook() {
+    if (this.openRecord !== this.recordCursor.next) {
+      throw new Error('Hook close does not match open');
+    }
+    this.openRecord = null;
+
     this.recordCursor = this.recordCursor.next; // move cursor forward
   }
 
