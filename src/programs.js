@@ -68,14 +68,7 @@ function animationFrameEvts() {
 }
 
 function countEvents(evts) {
-  const count = useVar(0);
-  const event = useEventReceiver(evts);
-
-  if (event) {
-    count.current++;
-  }
-
-  return count.current;
+  return useReducer(evts, (action, previousCount) => previousCount+1, 0);
 }
 
 function mouseClickEvts() {
@@ -147,14 +140,7 @@ function mousePosition() {
 }
 
 function random(repickEvts) {
-  const val = useVar(Math.random());
-  const repick = useEventReceiver(repickEvts);
-
-  if (repick) {
-    val.current = Math.random();
-  }
-
-  return val.current;
+  return useReducer(repickEvts, () => Math.random(), Math.random());
 }
 
 function audioDriver(generator) {
@@ -198,14 +184,7 @@ function audioDriver(generator) {
 }
 
 function sampleUpon(toSample, uponEvts, initialValue) {
-  const held = useVar(initialValue);
-  const upon = useEventReceiver(uponEvts);
-
-  if (upon) {
-    held.current = toSample;
-  }
-
-  return held.current;
+  return useReducer(uponEvts, () => toSample, initialValue);
 }
 
 function everySecond() {
