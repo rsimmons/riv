@@ -16,29 +16,6 @@ function showString(v) {
   renderDOMAppendedToBody(vnode);
 }
 
-function animationTime() {
-  const requestUpdate = useRequestUpdate();
-  const time = useVar();
-  const reqId = useVar();
-
-  useInitialize(() => {
-    const onFrame = (t) => {
-      time.current = 0.001*t;
-      reqId.current = requestAnimationFrame(onFrame); // request another
-      requestUpdate();
-    };
-
-    time.current = 0.001*performance.now();
-    reqId.current = requestAnimationFrame(onFrame);
-
-    return () => { // cleanup
-      cancelAnimationFrame(reqId.current);
-    }
-  });
-
-  return time.current;
-}
-
 function animationFrameEvts() {
   const requestUpdate = useRequestUpdate();
   const reqId = useVar();
@@ -46,7 +23,7 @@ function animationFrameEvts() {
 
   useInitialize(() => {
     const onFrame = (t) => {
-      emitFrame();
+      emitFrame(0.001*t);
       requestUpdate();
       reqId.current = requestAnimationFrame(onFrame); // request another
     };
@@ -60,6 +37,15 @@ function animationFrameEvts() {
 
   return frameEvts;
 }
+
+function latestValue(evts, initialValue) {
+  return useReducer(evts, (value) => value, initialValue);
+}
+
+function animationTime() {
+  return latestValue(animationFrameEvts(), 0.001*performance.now()); // TODO: use thunk for iv
+}
+
 
 function countEvents(evts) {
   return useReducer(evts, (action, previousCount) => previousCount+1, 0);
