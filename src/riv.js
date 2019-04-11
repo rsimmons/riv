@@ -177,57 +177,95 @@ export function useInitialize(initializer) {
   ctx._endHook();
 }
 
-/**
- * This is effectively a queue with only a single-item capacity, to support async event emission
- */
-export function useAsyncEventEmitter() {
+export function useEventEmitter() {
   const ctx = getTopUpdatingExecutionContext();
   const record = ctx._beginHook();
 
   // Initialize record data if necessary
   if (!record.data) {
-    const data = {
-      queuedEvent: undefined,
-    };
+    const subscribers = new Set();
 
-    data.emit = (value) => {
-      if (data.queuedEvent) {
-        throw new Error('Cannot emit another event since one is already enqueued');
+    const stream = {
+      subscribe: (onEvent) => {
+        subscribers.add(onEvent);
+        return () => { // unsubscribe
+          subscribers.delete(onEvent);
+        };
       }
-      data.queuedEvent = {value};
+    }
+
+    const emit = (value) => {
+      for (const sub of subscribers) {
+        sub(value);
+      }
     };
 
-    record.data = data;
-  }
-
-  let retval;
-  if (record.data.queuedEvent) {
-    // Pop queued event
-    retval = record.data.queuedEvent;
-    record.data.queuedEvent = undefined;
+    record.data = {
+      stream,
+      emit,
+    }
   }
 
   ctx._endHook();
 
-  return [retval, record.data.emit];
+  return [record.data.stream, record.data.emit];
 }
 
-export function useEventReceiver(evt) {
+export function useEventReceiver(stream) {
   const ctx = getTopUpdatingExecutionContext();
   const record = ctx._beginHook();
 
   // Initialize record data if necessary
   if (!record.data) {
-    record.data = {
-      seen: new WeakSet(), // event objects we have already seen
+    const queue = [];
+
+    const data = {
+      queue,
+      lastStream: undefined,
+      unsubscribe: undefined,
+      onValue: (value) => {
+        queue.push(value);
+      },
+    };
+
+    record.data = data;
+
+    record.cleanup = () => {
+      if (data.unsubscribe) {
+        data.unsubscribe();
+      }
     };
   }
 
   let retval;
-  if (evt) {
-    if (!record.data.seen.has(evt)) {
-      retval = evt;
-      record.data.seen.add(evt);
+  if (stream !== record.data.lastStream) {
+    // Stream changed identity
+
+    // I _think_ we want to disallow this, since semantics are unclear
+    if (record.data.queue.length) {
+      throw new Error('useEventReceiver stream changed, but value is in queue');
+    }
+
+    if (record.data.lastStream) {
+      record.data.unsubscribe();
+      record.data.lastStream = undefined;
+      record.data.unsubscribe = undefined;
+    }
+
+    // TODO: We could validate that it's either undefined or null or a valid stream object
+    record.data.lastStream = stream;
+    if (stream) {
+      record.data.unsubscribe = stream.subscribe(record.data.onValue);
+    }
+  } else {
+    // Stream did not change identity. Check if there is an value in the queue
+    if (record.data.queue.length) {
+      if (record.data.queue.length > 1) {
+        throw new Error('useEventReceiver found more than one enqueued value');
+      }
+
+      const eventValue = record.data.queue.pop();
+      retval = {value: eventValue};
     }
   }
 
@@ -338,14 +376,13 @@ export function useMachine(states, initialTransition) {
     record.data.activeContext._setStreamFunc(states[record.data.activeState]);
 
     // Update the active context
-    const [tmpRetval, transitionEvt] = record.data.activeContext.update(record.data.activeArgument);
+    const [tmpRetval, transition] = record.data.activeContext.update(record.data.activeArgument);
     retval = tmpRetval;
 
-    // Was there a transition event?
-    // NOTE: Because we transition upon first even on this stream, we can sort of special-case this check
-    if (transitionEvt) {
-      const transition = transitionEvt.value;
+    // Did the state function return a transition to take?
+    if (transition) {
       takeTransition(transition);
+      // And loop again
     } else {
       // There was no transition
       break;
