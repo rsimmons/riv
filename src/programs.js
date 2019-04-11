@@ -1,25 +1,19 @@
 import dom from './dom';
 // NOTE: Using require instead of import here makes the thing where we print program text work better.
 const { useVar, useRequestUpdate, useInitialize, useEventEmitter, useEventReceiver, useDynamic, useReducer, useMachine } = require('./riv');
-const { renderDOMIntoSelector, h } = require('./dom');
+const { renderDOMIntoSelector, renderDOMAppendedToBody, h } = require('./dom');
 const amen_break_url = require('./amen_break.mp3');
 
-
 function showString(v) {
-  const elem = useVar(null);
+  const vnode = h('div', {style: {
+    border: '1px solid red',
+    color: 'black',
+    fontSize: '24px',
+    padding: '5px',
+    marginTop: '20px',
+  }}, 'showString: ' + ((v === undefined) ? '(undefined)' : v.toString()));
 
-  useInitialize(() => {
-    elem.current = document.createElement('div');
-    elem.current.style.cssText = 'border: 1px solid red; color: black; font-size: 24px; padding: 5px; margin-top: 20px';
-    elem.current.textContent = '(undefined)';
-    document.body.appendChild(elem.current);
-
-    return () => { // cleanup
-      document.body.removeChild(elem.current);
-    }
-  })
-
-  elem.current.textContent = 'showString: ' + ((v === undefined) ? '(undefined)' : v.toString());
+  renderDOMAppendedToBody(vnode);
 }
 
 function animationTime() {
@@ -265,28 +259,25 @@ function expFollow(targetValue, speedConstant, time, initialValue) {
 }
 
 function redCircle(position, radius = 25) {
-  const elem = useVar(null);
-
-  useInitialize(() => {
-    elem.current = document.createElement('div');
-    elem.current.style.cssText = 'position: absolute; border-radius: 50%; background: red; pointer-events: none; user-select: none';
-    document.body.appendChild(elem.current);
-
-    return () => { // cleanup
-      document.body.removeChild(elem.current);
-    }
-  })
-
   const p = position || {x: 0, y: 0};
   if (radius < 0) {
     radius = 0;
   }
   const halfRadius = 0.5*radius;
 
-  elem.current.style.left = (p.x - halfRadius) + 'px';
-  elem.current.style.top = (p.y - halfRadius) + 'px';
-  elem.current.style.width = radius + 'px';
-  elem.current.style.height = radius + 'px';
+  const vnode = h('div', {style: {
+    position: 'absolute',
+    borderRadius: '50%',
+    background: 'red',
+    pointerEvents: 'none',
+    userSelect: 'none',
+    left: (p.x - halfRadius) + 'px',
+    top: (p.y - halfRadius) + 'px',
+    width: radius + 'px',
+    height: radius + 'px',
+  }});
+
+  renderDOMAppendedToBody(vnode);
 }
 
 function followAtSpeed2d(target, speed, time, initial) {

@@ -9,15 +9,15 @@ const patch = snabbdom.init([
 export const h = require('snabbdom/h').default; // helper function for creating vnodes
 
 /**
- * Note that selector is only read upon init
+ * Note that element is only read upon init
  */
-export function renderDOMIntoSelector(vnode, containerSelector) {
-  const container = useVar(document.querySelector(containerSelector));
+export function renderDOMIntoElement(vnode, containerElement) {
+  const savedContainerElement = useVar(containerElement);
   const previousVnode = useVar();
 
   useInitialize(() => {
     return () => { // cleanup
-      container.current.innerHTML = ''; // I think we want to do this
+      savedContainerElement.current.innerHTML = ''; // I think we want to do this
     };
   });
 
@@ -28,10 +28,32 @@ export function renderDOMIntoSelector(vnode, containerSelector) {
 
     // Insert a dummy element because snabbdom replaces it (rather than inserting under)
     const elem = document.createElement('div');
-    container.current.appendChild(elem);
+    savedContainerElement.current.appendChild(elem);
 
     patch(elem, vnode);
   }
   previousVnode.current = vnode;
 }
 
+/**
+ * Note that selector is only read upon init
+ */
+export function renderDOMIntoSelector(vnode, containerSelector) {
+  renderDOMIntoElement(vnode, document.querySelector(containerSelector)); // TODO: cache query
+}
+
+export function renderDOMAppendedToBody(vnode) {
+  const savedContainerElement = useVar();
+
+  useInitialize(() => {
+    const containerElement = document.createElement('div');
+    document.body.appendChild(containerElement);
+    savedContainerElement.current = containerElement;
+
+    return () => { // cleanup
+      document.body.removeChild(containerElement);
+    }
+  });
+
+  renderDOMIntoElement(vnode, savedContainerElement.current);
+}
