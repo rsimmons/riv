@@ -42,6 +42,33 @@ function latestValue(evts, initialValue) {
   return useReducer(evts, (value) => value, initialValue);
 }
 
+function mapEvts(inputEvts) {
+  const inputEvt = useEventReceiver(inputEvts);
+  const [outputEvts, emitOutput] = useEventEmitter();
+
+  if (inputEvt) {
+    emitOutput(inputEvt.value);
+  }
+
+  // TODO: We don't need to request update since we are already being updated
+
+  return outputEvts;
+}
+
+function mergeEvts(streams) {
+  const [outputEvts, emitOutput] = useEventEmitter();
+
+  // TODO: This is a hack that assumes array length never changes
+  const evts = [...streams].map(stream => useEventReceiver(stream)).filter(e => e);
+  if (evts.length > 1) {
+    throw new Error('Failed to merge events since more than one present');
+  } else if (evts.length === 1) {
+    emitOutput(evts[0].value);
+  }
+
+  return outputEvts;
+}
+
 function animationTime() {
   return latestValue(animationFrameEvts(), 0.001*performance.now()); // TODO: use thunk for iv
 }
@@ -51,72 +78,51 @@ function countEvents(evts) {
   return useReducer(evts, (action, previousCount) => previousCount+1, 0);
 }
 
-function mouseClickEvts() {
+function makeAsyncCallback() {
+  const [evts, emit] = useEventEmitter();
   const requestUpdate = useRequestUpdate();
-  const [clickEvts, emitClick] = useEventEmitter();
+
+  const callback = (...args) => {
+    emit(args);
+    requestUpdate();
+  };
+
+  return [callback, evts];
+}
+
+function domEvts(eventTarget, type, extra) {
+  // TODO: We should cache type/extra
+  const requestUpdate = useRequestUpdate();
+  const [evts, emit] = useEventEmitter();
 
   useInitialize(() => {
-    const onMouseDown = () => {
-      emitClick();
+    const onEvent = (e) => {
+      emit(e);
       requestUpdate();
     }
-    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener(type, onEvent, extra);
 
     return () => { // cleanup
-      document.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener(type, onEvent, extra);
     }
   });
 
-  return clickEvts;
+  return evts;
+}
+
+function mouseClickEvts() {
+  return domEvts(document, 'click');
 }
 
 function mouseDown() {
-  const requestUpdate = useRequestUpdate();
-  const isDown = useVar(false); // we can't poll down-ness, so we assume it's initially not down
-
-  useInitialize(() => {
-    const onMouseDown = () => {
-      isDown.current = true;
-      requestUpdate();
-    }
-    const onMouseUp = () => {
-      isDown.current = false;
-      requestUpdate();
-    }
-
-    document.addEventListener('mousedown', onMouseDown);
-    document.addEventListener('mouseup', onMouseUp);
-
-    return () => { // cleanup
-      document.removeEventListener('mousedown', onMouseDown);
-      document.removeEventListener('mouseup', onMouseUp);
-    }
-  });
-
-  return isDown.current;
+  const downEvts = domEvts(document, 'mousedown');
+  const upEvts = domEvts(document, 'mouseup');
+  // We can't poll down-ness, so we assume it's initially not down
+  return useReducer(mergeEvts([downEvts, upEvts]), e => (e.type === 'mousedown'), false);
 }
 
 function mousePosition() {
-  const requestUpdate = useRequestUpdate();
-  const position = useVar({x: 0, y: 0}); // we can't poll position, so start it at origin
-
-  useInitialize(() => {
-    const onMouseMove = (e) => {
-      position.current = {
-        x: e.clientX || e.pageX,
-        y: e.clientY || e.pageY,
-      };
-      requestUpdate();
-    }
-
-    document.addEventListener('mousemove', onMouseMove);
-
-    return () => { // cleanup
-      document.removeEventListener('mousemove', onMouseMove);
-    }
-  });
-
-  return position.current;
+  return latestValue(mapEvts(domEvts(document, 'mousemove'), e => ({x: e.clientX || e.pageX, y: e.clientY || e.pageY})), {x: 0, y: 0});
 }
 
 function random(repickEvts) {
@@ -322,18 +328,6 @@ function eventAfter(seconds, valueToEmit) {
   });
 
   return evts;
-}
-
-function makeAsyncCallback() {
-  const [evts, emit] = useEventEmitter();
-  const requestUpdate = useRequestUpdate();
-
-  const callback = (...args) => {
-    emit(args);
-    requestUpdate();
-  };
-
-  return [callback, evts];
 }
 
 function received(evts) {
