@@ -126,13 +126,17 @@ function getTopUpdatingExecutionContext() {
   return currentUpdateFrame.executionContext;
 }
 
+/**
+ * If initVal is a function, it will be called on first update to generate initial value.
+ */
 export function useVar(initVal) {
   const ctx = getTopUpdatingExecutionContext();
   const record = ctx._beginHook();
 
   // Create value box if necessary
   if (!record.data) {
-    record.data = {current: initVal};
+    const actualInitVal = (typeof initVal === 'function') ? initVal() : initVal;
+    record.data = {current: actualInitVal};
   }
 
   ctx._endHook();
@@ -326,6 +330,7 @@ export function useDynamic(streamFunc, onRequestUpdate) {
 
 /**
  * NOTE: reducerFunc should be pure-pointwise, NOT a stream func
+ * If initialState is a function, it will be called on first update to generate initial state.
  */
 export function useReducer(actionEvts, reducerFunc, initialState) {
   const state = useVar(initialState);

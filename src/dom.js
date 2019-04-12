@@ -39,7 +39,8 @@ export function renderDOMIntoElement(vnode, containerElement) {
  * Note that selector is only read upon init
  */
 export function renderDOMIntoSelector(vnode, containerSelector) {
-  renderDOMIntoElement(vnode, document.querySelector(containerSelector)); // TODO: cache query
+  const containerElement = useVar(() => document.querySelector(containerSelector)); // cache
+  renderDOMIntoElement(vnode, containerElement.current);
 }
 
 export function renderDOMAppendedToBody(vnode) {

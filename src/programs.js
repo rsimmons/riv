@@ -126,7 +126,7 @@ function mousePosition() {
 }
 
 function random(repickEvts) {
-  return useReducer(repickEvts, () => Math.random(), Math.random());
+  return useReducer(repickEvts, () => Math.random(), () => Math.random());
 }
 
 function audioDriver(generator) {
