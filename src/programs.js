@@ -39,7 +39,7 @@ function animationFrameEvts() {
 }
 
 function latestValue(evts, initialValue) {
-  return useReducer(evts, (value) => value, initialValue);
+  return useReducer(evts, (_, value) => value, initialValue);
 }
 
 function mapEvts(inputEvts) {
@@ -75,7 +75,7 @@ function animationTime() {
 
 
 function countEvents(evts) {
-  return useReducer(evts, (action, previousCount) => previousCount+1, 0);
+  return useReducer(evts, previousCount => previousCount+1, 0);
 }
 
 function makeAsyncCallback() {
@@ -334,7 +334,7 @@ function eventAfter(seconds, valueToEmit) {
 }
 
 function received(evts) {
-  return useReducer(evts, (action, previousState) => true, false);
+  return useReducer(evts, (previousState, event) => true, false);
 }
 
 /**
@@ -463,7 +463,7 @@ export default [
       const midpoint = (a, b) => ({x: 0.5*(a.x+b.x), y: 0.5*(a.y+b.y)});
       const mpos = mousePosition();
       const clickEvts = mouseClickEvts();
-      const cpos = useReducer(clickEvts, (_, prevState) => midpoint(prevState, mpos), {x: 0, y: 0});
+      const cpos = useReducer(clickEvts, prevState => midpoint(prevState, mpos), {x: 0, y: 0});
       redCircle(cpos);
     }
   },
@@ -527,7 +527,7 @@ export default [
       // Based off https://jsbin.com/seqehat/2/edit?js,output for comparison
       const LabeledSlider = (label, unit, min, initialValue, max) => {
         const [inputCallback, inputEvts] = makeAsyncCallback();
-        const value = useReducer(inputEvts, ([e], prevState) => e.target.value, initialValue);
+        const value = useReducer(inputEvts, (previousValue, [e]) => e.target.value, initialValue);
 
         const vnode = h('div', [
           h('span', label + ' ' + value + unit),
@@ -557,7 +557,7 @@ export default [
     main: () => {
       const slider = () => {
         const [inputCallback, inputEvts] = makeAsyncCallback();
-        const value = useReducer(inputEvts, ([e], prevState) => +e.target.value, 0);
+        const value = useReducer(inputEvts, (prevState, [e]) => +e.target.value, 0);
         const vnode = h('div', [
           h('input', {attrs: {type: 'range', min: 0, max: 10, value}, on: {input: inputCallback}}),
         ]);
@@ -567,8 +567,8 @@ export default [
       const [incClickCallback, incClicks] = makeAsyncCallback();
       const [decClickCallback, decClicks] = makeAsyncCallback();
       const count = useMultiReducer([
-        [incClicks, (_, n) => n+1],
-        [decClicks, (_, n) => n-1],
+        [incClicks, n => n+1],
+        [decClicks, n => n-1],
       ], 5);
 
       const sliders = streamMap(slider, Array(count));

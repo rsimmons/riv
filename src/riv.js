@@ -332,11 +332,11 @@ export function useDynamic(streamFunc, onRequestUpdate) {
  * NOTE: reducerFunc should be pure-pointwise, NOT a stream func
  * If initialState is a function, it will be called on first update to generate initial state.
  */
-export function useReducer(actionEvts, reducerFunc, initialState) {
+export function useReducer(evts, reducerFunc, initialState) {
   const state = useVar(initialState);
-  const action = useEventReceiver(actionEvts);
-  if (action) {
-    state.current = reducerFunc(action.value, state.current);
+  const evt = useEventReceiver(evts);
+  if (evt) {
+    state.current = reducerFunc(state.current, evt.value);
   }
   return state.current;
 }
@@ -362,7 +362,7 @@ export function useMultiReducer(streamReducerPairs, initialState) {
         // TODO: We _could_ handle these sequentially.. should we have a flag that says whether to allow or not?
         throw new Error('useMultiReducer got multiple events, cannot merge');
       }
-      state.current = reducer(evt.value, state.current);
+      state.current = reducer(state.current, evt.value);
       evtCount++;
     }
   }
