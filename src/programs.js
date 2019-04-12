@@ -1,6 +1,6 @@
 import dom from './dom';
 // NOTE: Using require instead of import here makes the thing where we print program text work better.
-const { useVar, useRequestUpdate, useInitialize, useEventEmitter, useEventReceiver, useDynamic, useReducer, useMachine } = require('./riv');
+const { useVar, useRequestUpdate, useInitialize, useEventEmitter, useEventReceiver, useDynamic, useReducer, useMultiReducer, useMachine } = require('./riv');
 const { renderDOMIntoSelector, renderDOMAppendedToBody, h } = require('./dom');
 const amen_break_url = require('./amen_break.mp3');
 
@@ -117,8 +117,11 @@ function mouseClickEvts() {
 function mouseDown() {
   const downEvts = domEvts(document, 'mousedown');
   const upEvts = domEvts(document, 'mouseup');
-  // We can't poll down-ness, so we assume it's initially not down
-  return useReducer(mergeEvts([downEvts, upEvts]), e => (e.type === 'mousedown'), false);
+
+  return useMultiReducer([
+    [upEvts, () => false],
+    [downEvts, () => true],
+  ], false); // We can't poll down-ness, so we assume it's initially not down
 }
 
 function mousePosition() {
@@ -561,12 +564,22 @@ export default [
         return [vnode, value];
       };
 
-      const count = 5; // TODO: this is not yet actually dynamic
+      const [incClickCallback, incClicks] = makeAsyncCallback();
+      const [decClickCallback, decClicks] = makeAsyncCallback();
+      const count = useMultiReducer([
+        [incClicks, (_, n) => n+1],
+        [decClicks, (_, n) => n-1],
+      ], 5);
+
       const sliders = streamMap(slider, Array(count));
       const total = sliders.map(s => s[1]).reduce((a,b) => a + b, 0);
       const uiNode = h('div', [
         h('div', sliders.map(s => s[0])),
         h('div', 'Total: ' + total),
+        h('div', [
+          h('button', {on: {click: incClickCallback}}, 'Add Slider'),
+          h('button', {on: {click: decClickCallback}}, 'Remove Slider'),
+        ]),
       ]);
 
       renderDOMIntoSelector(uiNode, '#output');

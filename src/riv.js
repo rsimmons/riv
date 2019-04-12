@@ -342,6 +342,35 @@ export function useReducer(actionEvts, reducerFunc, initialState) {
 }
 
 /**
+ * NOTE: streamReducerPairs must not change length.
+ */
+export function useMultiReducer(streamReducerPairs, initialState) {
+  const state = useVar(initialState);
+
+  const numStreams = useVar(streamReducerPairs.length);
+  if (streamReducerPairs.length !== numStreams.current) {
+    // NOTE: We could allow this with some extra work
+    throw new Error('The number of streams/reducers supplied to useMultiReducer cannot change');
+  }
+
+  // It's safe to call hook in this loop because we made sure that the length is the same
+  let evtCount = 0;
+  for (const [evts, reducer] of streamReducerPairs) {
+    const evt = useEventReceiver(evts);
+    if (evt) {
+      if (evtCount > 0) {
+        // TODO: We _could_ handle these sequentially.. should we have a flag that says whether to allow or not?
+        throw new Error('useMultiReducer got multiple events, cannot merge');
+      }
+      state.current = reducer(evt.value, state.current);
+      evtCount++;
+    }
+  }
+
+  return state.current;
+}
+
+/**
  * TODO: Could/should this take an optional onRequestUpdate parameter?
  */
 export function useMachine(states, initialTransition) {
