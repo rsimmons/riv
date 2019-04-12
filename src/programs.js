@@ -334,6 +334,27 @@ function received(evts) {
   return useReducer(evts, (action, previousState) => true, false);
 }
 
+/**
+ * F is a stream function that must stay hook-equivalent.
+ */
+function streamMap(f, arr) {
+  const createFContext = useDynamic(f);
+  const fContexts = useVar([]);
+
+  // Create or destrooy contexts as needed to match arr length
+  while (arr.length > fContexts.current.length) {
+    fContexts.current.push(createFContext());
+  }
+  while (arr.length < fContexts.current.length) {
+    const ctx = fContexts.current.pop();
+    ctx.terminate();
+  }
+
+  const outs = fContexts.current.map((ctx, i) => ctx.update(arr[i]));
+
+  return outs;
+}
+
 export default [
   {
     name: 'do nothing',
@@ -396,16 +417,9 @@ export default [
   {
     name: 'dynamic array of async clocks, click to add',
     main: () => {
-      const clickEvts = mouseClickEvts();
-      const click = useEventReceiver(clickEvts);
-      const createClock = useDynamic(() => countEvents(everySecond()));
-      const clockArray = useVar([]);
-
-      if (click) {
-        clockArray.current.push(createClock());
-      }
-
-      const nums = clockArray.current.map(clock => clock.update());
+      const count = countEvents(mouseClickEvts());
+      const clock = () => countEvents(everySecond());
+      const nums = streamMap(clock, Array(count));
       showString(nums.join(' '));
     }
   },
@@ -534,4 +548,28 @@ export default [
       renderDOMIntoSelector(uiNode, '#output');
     }
   },
+
+  {
+    name: 'sum of a dynamic list of sliders',
+    main: () => {
+      const slider = () => {
+        const [inputCallback, inputEvts] = makeAsyncCallback();
+        const value = useReducer(inputEvts, ([e], prevState) => +e.target.value, 0);
+        const vnode = h('div', [
+          h('input', {attrs: {type: 'range', min: 0, max: 10, value}, on: {input: inputCallback}}),
+        ]);
+        return [vnode, value];
+      };
+
+      const count = 5; // TODO: this is not yet actually dynamic
+      const sliders = streamMap(slider, Array(count));
+      const total = sliders.map(s => s[1]).reduce((a,b) => a + b, 0);
+      const uiNode = h('div', [
+        h('div', sliders.map(s => s[0])),
+        h('div', 'Total: ' + total),
+      ]);
+
+      renderDOMIntoSelector(uiNode, '#output');
+    }
+  }
 ]
