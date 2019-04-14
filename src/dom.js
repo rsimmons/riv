@@ -8,12 +8,27 @@ const patch = snabbdom.init([
 ]);
 export const h = require('snabbdom/h').default; // helper function for creating vnodes
 
+function cloneNode(vnode) {
+  return {
+    sel: vnode.sel,
+    data: vnode.data,
+    children: vnode.children && vnode.children.map(cloneNode),
+    text: vnode.text,
+    key: vnode.key,
+    elm: vnode.elm, // I think this should be unset in our usage, since we only clone before passing to patch
+  }
+}
+
 /**
  * Note that element is only read upon init
  */
 export function renderDOMIntoElement(vnode, containerElement) {
   const savedContainerElement = useVar(containerElement);
   const previousVnode = useVar();
+
+  // It's important that we clone the incoming vnode, because snabbdom will mutate it when we
+  // pass it to patch.
+  const clonedVnode = cloneNode(vnode);
 
   useInitialize(() => {
     return () => { // cleanup
@@ -22,7 +37,7 @@ export function renderDOMIntoElement(vnode, containerElement) {
   });
 
   if (previousVnode.current) {
-    patch(previousVnode.current, vnode);
+    patch(previousVnode.current, clonedVnode);
   } else {
     // First patch
 
@@ -30,9 +45,9 @@ export function renderDOMIntoElement(vnode, containerElement) {
     const elem = document.createElement('div');
     savedContainerElement.current.appendChild(elem);
 
-    patch(elem, vnode);
+    patch(elem, clonedVnode);
   }
-  previousVnode.current = vnode;
+  previousVnode.current = clonedVnode;
 }
 
 /**
