@@ -70,7 +70,7 @@ function mergeEvts(streams) {
 }
 
 function animationTime() {
-  return latestValue(animationFrameEvts(), 0.001*performance.now()); // TODO: use thunk for iv
+  return latestValue(animationFrameEvts(), () => 0.001*performance.now());
 }
 
 
