@@ -344,7 +344,7 @@ export function useReducer(evts, reducerFunc, initialState) {
 /**
  * NOTE: streamReducerPairs must not change length.
  */
-export function useMultiReducer(streamReducerPairs, initialState) {
+export function useReducers(streamReducerPairs, initialState) {
   const state = useVar(initialState);
 
   const numStreams = useVar(streamReducerPairs.length);
@@ -368,6 +368,31 @@ export function useMultiReducer(streamReducerPairs, initialState) {
   }
 
   return state.current;
+}
+
+/**
+ * NOTE: reducerFunc should be pure-pointwise, NOT a stream func
+ * If initialState is a function, it will be called on first update to generate initial state.
+ */
+export function useCallbackReducer(reducerFunc, initialState) {
+  const requestUpdate = useRequestUpdate();
+  const state = useVar(initialState);
+  // We cache the callback, though I don't think we really need to?
+  const callback = useVar(() => (action) => {
+    state.current = reducerFunc(state.current, action);
+    requestUpdate();
+  });
+  return [state.current, callback.current];
+}
+
+export function useCallbackReducers(reducerFuncs, initialState) {
+  const requestUpdate = useRequestUpdate();
+  const state = useVar(initialState);
+  const callbacks = reducerFuncs.map(reducerFunc => (action) => {
+    state.current = reducerFunc(state.current, action);
+    requestUpdate();
+  });
+  return [state.current, callbacks];
 }
 
 /**

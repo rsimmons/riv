@@ -1,6 +1,6 @@
 import dom from './dom';
 // NOTE: Using require instead of import here makes the thing where we print program text work better.
-const { useVar, useRequestUpdate, useInitialize, useEventEmitter, useEventReceiver, useDynamic, useReducer, useMultiReducer, useMachine } = require('./riv');
+const { useVar, useRequestUpdate, useInitialize, useEventEmitter, useEventReceiver, useDynamic, useReducer, useReducers, useCallbackReducer, useCallbackReducers, useMachine } = require('./riv');
 const { renderDOMIntoSelector, renderDOMAppendedToBody, h } = require('./dom');
 const amen_break_url = require('./amen_break.mp3');
 
@@ -118,7 +118,7 @@ function mouseDown() {
   const downEvts = domEvts(document, 'mousedown');
   const upEvts = domEvts(document, 'mouseup');
 
-  return useMultiReducer([
+  return useReducers([
     [upEvts, () => false],
     [downEvts, () => true],
   ], false); // We can't poll down-ness, so we assume it's initially not down
@@ -526,8 +526,7 @@ export default [
     main: () => {
       // Based off https://jsbin.com/seqehat/2/edit?js,output for comparison
       const LabeledSlider = (label, unit, min, initialValue, max) => {
-        const [inputCallback, inputEvts] = makeAsyncCallback();
-        const value = useReducer(inputEvts, (previousValue, [e]) => e.target.value, initialValue);
+        const [value, inputCallback] = useCallbackReducer((previousValue, e) => e.target.value, initialValue);
 
         const vnode = h('div', [
           h('span', label + ' ' + value + unit),
@@ -556,19 +555,16 @@ export default [
     name: 'sum of a dynamic list of sliders',
     main: () => {
       const slider = () => {
-        const [inputCallback, inputEvts] = makeAsyncCallback();
-        const value = useReducer(inputEvts, (prevState, [e]) => +e.target.value, 0);
+        const [value, inputCallback] = useCallbackReducer((prevState, e) => +e.target.value, 0);
         const vnode = h('div', [
           h('input', {attrs: {type: 'range', min: 0, max: 10, value}, on: {input: inputCallback}}),
         ]);
         return [vnode, value];
       };
 
-      const [incClickCallback, incClicks] = makeAsyncCallback();
-      const [decClickCallback, decClicks] = makeAsyncCallback();
-      const count = useMultiReducer([
-        [incClicks, n => n+1],
-        [decClicks, n => n-1],
+      const [count, [incCallback, decCallback]] = useCallbackReducers([
+        n => n+1,
+        n => (n > 0) ? n-1 : n,
       ], 5);
 
       const sliders = streamMap(slider, Array(count));
@@ -577,8 +573,8 @@ export default [
         h('div', sliders.map(s => s[0])),
         h('div', 'Total: ' + total),
         h('div', [
-          h('button', {on: {click: incClickCallback}}, 'Add Slider'),
-          h('button', {on: {click: decClickCallback}}, 'Remove Slider'),
+          h('button', {on: {click: incCallback}}, 'Add Slider'),
+          h('button', {on: {click: decCallback}}, 'Remove Slider'),
         ]),
       ]);
 
