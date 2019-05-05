@@ -1,0 +1,12 @@
+{
+  "name": "riv-snabbdom",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/index.js",
+  "dependencies": {
+    "snabbdom": "^0.7.3"
+  },
+  "peerDependencies": {
+    "riv-runtime": "^0.1.0"
+  }
+}

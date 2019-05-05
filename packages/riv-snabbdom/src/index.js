@@ -1,4 +1,4 @@
-import { useVar, useInitialize } from './riv';
+import { useVar, useInitialize } from 'riv-runtime';
 const snabbdom = require('snabbdom');
 const patch = snabbdom.init([
   require('snabbdom/modules/class').default,

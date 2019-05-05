@@ -1,7 +1,6 @@
-import dom from './dom';
 // NOTE: Using require instead of import here makes the thing where we print program text work better.
-const { useVar, useRequestUpdate, useInitialize, useEventEmitter, useEventReceiver, useDynamic, useReducer, useReducers, useCallbackReducer, useCallbackReducers, useMachine } = require('./riv');
-const { renderDOMIntoSelector, renderDOMAppendedToBody, h } = require('./dom');
+const { useVar, useRequestUpdate, useInitialize, useEventEmitter, useEventReceiver, useDynamic, useReducer, useReducers, useCallbackReducer, useCallbackReducers, useMachine } = require('riv-runtime');
+const { renderDOMIntoSelector, renderDOMAppendedToBody, h } = require('riv-snabbdom');
 const amen_break_url = require('./amen_break.mp3');
 
 function showString(v) {

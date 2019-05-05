@@ -1,4 +1,4 @@
-import { createNoInOutExecutionContext } from './riv';
+import { createNoInOutExecutionContext } from 'riv-runtime';
 import programs from './programs';
 
 const programListElem = document.getElementById('program-list');
