@@ -1,0 +1,54 @@
+.Editor {
+  /* border: 1px solid #aaa; */
+  font-size: 18px;
+  background: #333;
+  color: #eee;
+  padding: 1em;
+}
+
+.Editor:focus {
+  outline-style: none;
+  box-shadow: none;
+}
+
+.Editor:focus .Editor-selected, .Editor-text-edit-input:focus {
+  outline: rgb(0, 255, 0) solid 1px;
+  outline-offset: 0;
+}
+
+.Editor-text-edit-input {
+  border: 0;
+  padding: 0;
+  font-size: inherit;
+  font-family: inherit;
+  background: #eee;
+  color: #333;
+}
+
+.Editor-undefined-expression {
+  background: rgba(255, 0, 0, 0.75);
+  padding: 0 1em;
+}
+
+.Editor-program-expression {
+  padding: 0.2em 0;
+}
+
+.Editor-expression {
+  display: flex;
+}
+
+.Editor-expression-identifier {
+  margin-left: 1em;
+  padding-left: 0.3em;
+  border-left: 1px solid #555;
+  color: #aaa;
+}
+
+.Editor-array-items {
+  padding-left: 1em;
+}
+
+.Editor-program, .Editor-program-expression, .Editor-array-item, .Editor-expression-identifier {
+  width: fit-content;
+}
