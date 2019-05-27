@@ -19,7 +19,7 @@
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
-    "deploy": "react-scripts build && gh-pages -d build"
+    "deploy": "react-scripts build && gh-pages -d build --dest brim-demo"
   },
   "eslintConfig": {
     "extends": "react-app"

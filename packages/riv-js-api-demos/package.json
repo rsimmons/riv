@@ -1,11 +1,11 @@
 {
-  "name": "riv-site",
+  "name": "riv-js-api-demos",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "build": "webpack --progress --colors --mode=production",
     "watch": "webpack --watch --progress --colors --mode=development",
-    "deploy": "yarn build && gh-pages -d dist"
+    "deploy": "yarn build && gh-pages -d dist --dest js-api-demos"
   },
   "devDependencies": {
     "@babel/core": "^7.4.0",
