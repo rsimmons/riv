@@ -2,7 +2,7 @@
 
 Riv is a Javascript library for building reactive programs using declarative, composable stream-functions. It aims to be general purpose, suitable for any type of reactive program (e.g. audio/visual sketches) whether or not it involves a user interface.
 
-[Check out a demo](https://rsimmons.github.io/riv/) with a few live example programs.
+[Check out a demo](https://rsimmons.github.io/riv/js-api-demos/) with a few live example programs.
 
 Riv is not directly related to React, but if you’re familiar with React (especially function components and hooks), it can help to [understand Riv by comparison](#compared-to-react).
 
@@ -12,7 +12,7 @@ Riv was most directly inspired by:
 - [React](https://reactjs.org/) (especially function components and hooks) and [Redux](https://redux.js.org/)
 - Simplified graphics-oriented IDEs/languages like [Processing](https://processing.org/) and [NodeBox 1](https://www.nodebox.net/code/index.php/Home)
 - Visual and block-based programming environments like [Max/MSP](https://cycling74.com/products/max/), [Scratch](https://scratch.mit.edu/) and [modular synthesizers](https://en.wikipedia.org/wiki/Modular_synthesizer)
-- Good old spreadsheets, finite state machines and statecharts  
+- Good old spreadsheets, finite state machines and statecharts
 
 ## Compared to React
 
