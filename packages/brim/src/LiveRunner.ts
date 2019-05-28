@@ -1,10 +1,18 @@
+import genuid from './uid';
+const { useVar, useInitialize } = require('riv-runtime');
 
 // NOTE: This is just a stub for now
 class ExecutionContext {
   constructor(updateFunc: Function, onRequestUpdate: () => void) {
   }
 
-  terminate() {
+  update(...args: any[]): any {
+  }
+
+  _setStreamFunc(func: Function): void {
+  }
+
+  terminate(): void {
   }
 }
 
@@ -70,12 +78,16 @@ class ActivationStreamContexts {
     });
   }
 
-  getContext(activationId: string, streamId: string) {
+  getContext(activationId: string, streamId: string): ExecutionContext {
     const info = this.streamInfo.get(streamId);
     if (!info) {
       throw new Error();
     }
-    return info.activationContexts.get(activationId);
+    const context = info.activationContexts.get(activationId);
+    if (!context) {
+      throw new Error();
+    }
+    return context;
   }
 
   terminateAll() {
@@ -85,7 +97,7 @@ class ActivationStreamContexts {
 }
 
 interface CompiledDefinition {
-  constantStreamValues: Map<string, any>;
+  constantStreamValues: [string, any][];
   updates: [string, Function, string[]][]; // streamId, updateFunc, argStreamIds
 }
 
@@ -93,7 +105,9 @@ interface CompiledDefinition {
 Say we have the expression "display(add(time(), 10))". The call to display is an expression node, with streamId 'S1'. The call to add is an expression node with streamId 'S2'. The call to time is an expression node with streamId 'S3'. The literal 10 is a node with streamId 'S4'.
 
 const compiledDefinition = {
-  constantStreamValues: Map(['S4', 10]),
+  constantStreamValues: [
+    ['S4', 10],
+  ],
   updates: [
     ['S3', time, []],
     ['S2', add, ['S3', 'S4']],
@@ -102,7 +116,6 @@ const compiledDefinition = {
 };
 */
 
-/*
 function createLiveUpdateFunc(compiledDefinition: CompiledDefinition, activationStreamContexts: ActivationStreamContexts) {
   return () => {
     // compiledDefinition: CompiledDefinition is referenced via closure
@@ -116,16 +129,15 @@ function createLiveUpdateFunc(compiledDefinition: CompiledDefinition, activation
         activationStreamContexts.removeActivation(actId);
       };
     });
-    const getUpdate = useContextMap(functionId);
     const streamValues = new Map(constantStreamValues); // clone
-    for (const [sid, argIds] of updates) {
+    for (const [sid, func, argIds] of updates) {
       const argVals = argIds.map(id => streamValues.get(id));
       const context = activationStreamContexts.getContext(activationId.current, sid);
+      context._setStreamFunc(func);
       streamValues.set(sid, context.update(...argVals));
     }
   }
 }
-*/
 
 interface FunctionDefinitionRecord {
   compiledDefinition: CompiledDefinition;

@@ -12,7 +12,8 @@
     "react-dom": "^16.8.6",
     "react-hotkeys": "^2.0.0-pre5",
     "react-scripts": "3.0.0",
-    "typescript": "3.4.4"
+    "typescript": "3.4.4",
+    "riv-runtime": "^0.1.0"
   },
   "scripts": {
     "start": "react-scripts start",
