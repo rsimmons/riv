@@ -1,12 +1,35 @@
-let currentUpdateFrame = null;
+interface UpdateFrame {
+  executionContext: ExecutionContext;
+  previousFrame: UpdateFrame | null;
+}
+
+interface HookRecord {
+  data: any;
+  cleanup: (() => void) | null;
+  next: HookRecord | null;
+}
+
+let currentUpdateFrame: UpdateFrame | null = null;
 
 class ExecutionContext {
-  constructor(streamFunc, onRequestUpdate, afterTerminate) {
+  private hookRecordChain: HookRecord;
+  private updateCount: number;
+  private recordCursor: HookRecord | null;
+  private openRecord: HookRecord | null;
+  private streamFunc: Function;
+  private onRequestUpdate: () => void;
+  private afterTerminate: (() => void) | null;
+
+  constructor(streamFunc: Function, onRequestUpdate: () => void, afterTerminate: (() => void) | null = null) {
     this.streamFunc = streamFunc;
     this.onRequestUpdate = onRequestUpdate;
     this.afterTerminate = afterTerminate;
 
-    this.hookRecordChain = {next: null}; // dummy
+    this.hookRecordChain = {
+      data: null,
+      cleanup: null,
+      next: null,
+    }; // dummy
     this.recordCursor = null; // only set when this context is updating
     this.openRecord = null;
     this.updateCount = 0;
@@ -61,9 +84,12 @@ class ExecutionContext {
     }
   }
 
-  _beginHook() {
+  _beginHook(): HookRecord {
     if (this.openRecord) {
       throw new Error('This is already an open hook when beginning another');
+    }
+    if (!this.recordCursor) {
+      throw new Error();
     }
 
     if (this.updateCount === 0) {
@@ -72,8 +98,8 @@ class ExecutionContext {
       }
       // Create new record
       this.recordCursor.next = {
-        data: undefined,
-        cleanup: undefined,
+        data: null,
+        cleanup: null,
         next: null,
       }
     }
@@ -88,6 +114,9 @@ class ExecutionContext {
   }
 
   _endHook() {
+    if (!this.recordCursor) {
+      throw new Error();
+    }
     if (this.openRecord !== this.recordCursor.next) {
       throw new Error('Hook close does not match open');
     }
@@ -105,12 +134,12 @@ class ExecutionContext {
    * It's currently used to provide a function that is lexically the same but bound to different outer-scope
    * variables.
    */
-  _setStreamFunc(newStreamFunc) {
+  _setStreamFunc(newStreamFunc: Function) {
     this.streamFunc = newStreamFunc;
   }
 }
 
-export function createNoInOutExecutionContext(streamFunc) {
+export function createNoInOutExecutionContext<F extends Function>(streamFunc: F): ExecutionContext {
   const onRequestUpdate = () => { ctx.update() };
   const ctx = new ExecutionContext(streamFunc, onRequestUpdate)
   return ctx;
@@ -119,7 +148,7 @@ export function createNoInOutExecutionContext(streamFunc) {
 /**
  * This is used by hooks to get the currently updating context (after verifying it is set)
  */
-function getTopUpdatingExecutionContext() {
+function getTopUpdatingExecutionContext(): ExecutionContext {
   if (!currentUpdateFrame) {
     throw new Error('Cannot get currently updating execution context because update stack is empty. Was a hook called outside of an execution context update?');
   }
@@ -129,13 +158,13 @@ function getTopUpdatingExecutionContext() {
 /**
  * If initVal is a function, it will be called on first update to generate initial value.
  */
-export function useVar(initVal) {
+export function useVar<T>(initVal: T | (() => T)): {current: T} {
   const ctx = getTopUpdatingExecutionContext();
   const record = ctx._beginHook();
 
   // Create value box if necessary
   if (!record.data) {
-    const actualInitVal = (typeof initVal === 'function') ? initVal() : initVal;
+    const actualInitVal: T = (initVal instanceof Function) ? initVal() : initVal;
     record.data = {current: actualInitVal};
   }
 
@@ -149,7 +178,7 @@ export function useVar(initVal) {
  * function that we return will often be called without there being any updating execution context
  * (e.g. from an event handler). So it has to be bound to the correct context.
  */
-export function useRequestUpdate() {
+export function useRequestUpdate(): () => void {
   const ctx = getTopUpdatingExecutionContext();
   const record = ctx._beginHook();
 
@@ -165,7 +194,7 @@ export function useRequestUpdate() {
   return record.data.requestUpdate;
 }
 
-export function useInitialize(initializer) {
+export function useInitialize(initializer: () => (void | (() => void))): void {
   const ctx = getTopUpdatingExecutionContext();
   const record = ctx._beginHook();
 
@@ -173,7 +202,7 @@ export function useInitialize(initializer) {
   if (!record.data) {
     // data being undefined means this is the first call
 
-    record.cleanup = initializer();
+    record.cleanup = initializer() || null;
 
     record.data = {}; // no data to store yet, just needs to be truthy to indicate that initialization ran
   }
@@ -181,27 +210,31 @@ export function useInitialize(initializer) {
   ctx._endHook();
 }
 
-export function useEventEmitter() {
+export interface EventStream<T> {
+  subscribe: (onValue: (v: T) => void) => (() => void);
+}
+
+export function useEventEmitter<T>() : [EventStream<T>, (v: T) => void] {
   const ctx = getTopUpdatingExecutionContext();
   const record = ctx._beginHook();
 
   // Initialize record data if necessary
   if (!record.data) {
-    const subscribers = new Set();
+    const subscribers = new Set<(v: T) => void>();
 
-    const stream = {
-      subscribe: (onEvent) => {
-        subscribers.add(onEvent);
+    const stream: EventStream<T> = {
+      subscribe: (onValue) => {
+        subscribers.add(onValue);
         return () => { // unsubscribe
-          subscribers.delete(onEvent);
+          subscribers.delete(onValue);
         };
       }
     }
 
-    const emit = (value) => {
-      for (const sub of subscribers) {
+    const emit = (value: T) => {
+      subscribers.forEach(sub => {
         sub(value);
-      }
+      });
     };
 
     record.data = {
@@ -215,19 +248,26 @@ export function useEventEmitter() {
   return [record.data.stream, record.data.emit];
 }
 
-export function useEventReceiver(stream) {
+export function useEventReceiver<T>(stream: EventStream<T>): {value: T} | undefined {
+  interface RecordData {
+    queue: T[],
+    lastStream: EventStream<T> | null,
+    unsubscribe: (() => void) | null,
+    onValue: (value: T) => void,
+  };
+
   const ctx = getTopUpdatingExecutionContext();
   const record = ctx._beginHook();
 
   // Initialize record data if necessary
   if (!record.data) {
-    const queue = [];
+    const queue: T[] = [];
 
-    const data = {
+    const data: RecordData = {
       queue,
-      lastStream: undefined,
-      unsubscribe: undefined,
-      onValue: (value) => {
+      lastStream: null,
+      unsubscribe: null,
+      onValue: (value: T) => {
         queue.push(value);
       },
     };
@@ -242,33 +282,37 @@ export function useEventReceiver(stream) {
   }
 
   let retval;
-  if (stream !== record.data.lastStream) {
+  const recordData = <RecordData> record.data;
+  if (stream !== recordData.lastStream) {
     // Stream changed identity
 
     // I _think_ we want to disallow this, since semantics are unclear
-    if (record.data.queue.length) {
+    if (recordData.queue.length) {
       throw new Error('useEventReceiver stream changed, but value is in queue');
     }
 
-    if (record.data.lastStream) {
-      record.data.unsubscribe();
-      record.data.lastStream = undefined;
-      record.data.unsubscribe = undefined;
+    if (recordData.lastStream) {
+      if (!recordData.unsubscribe) {
+        throw new Error('should not be possible');
+      }
+      recordData.unsubscribe();
+      recordData.lastStream = null;
+      recordData.unsubscribe = null;
     }
 
     // TODO: We could validate that it's either undefined or null or a valid stream object
-    record.data.lastStream = stream;
+    recordData.lastStream = stream;
     if (stream) {
-      record.data.unsubscribe = stream.subscribe(record.data.onValue);
+      recordData.unsubscribe = stream.subscribe(recordData.onValue);
     }
   } else {
     // Stream did not change identity. Check if there is an value in the queue
-    if (record.data.queue.length) {
-      if (record.data.queue.length > 1) {
+    if (recordData.queue.length) {
+      if (recordData.queue.length > 1) {
         throw new Error('useEventReceiver found more than one enqueued value');
       }
 
-      const eventValue = record.data.queue.pop();
+      const eventValue = <T> recordData.queue.pop(); // assertion is OK because we verified length is 1
       retval = {value: eventValue};
     }
   }
@@ -286,34 +330,35 @@ export function useEventReceiver(stream) {
  *
  * onRequestUpdate is currently only read on the first call, so changes to it will have no effect.
  */
-export function useDynamic(streamFunc, onRequestUpdate) {
+export function useDynamic(streamFunc: Function, onRequestUpdate: () => void) {
   const ctx = getTopUpdatingExecutionContext();
   const record = ctx._beginHook();
 
   // Initialize record data if necessary
   if (!record.data) {
-    const data = {};
-
     // If no onRequestUpdate is provided, default to requesting update on the current context
     const oru = onRequestUpdate || (() => {
       ctx._requestUpdate();
     });
 
-    // Track ExecutionContexts created (and not yet terminated) so we can terminate them upon cleanup
-    data.activeContexts = new Set();
+    const data = {
+      // Track ExecutionContexts created (and not yet terminated) so we can terminate them upon cleanup
+      activeContexts: new Set<ExecutionContext>(),
 
-    // Create "factory" function to instantiate new contexts
-    data.createContext = () => {
-      const ctx = new ExecutionContext(data.streamFunc, oru, () => { data.activeContexts.delete(ctx); });
-      data.activeContexts.add(ctx);
-      return ctx;
+      // Create "factory" function to instantiate new contexts
+      createContext: (): ExecutionContext => {
+        const ctx = new ExecutionContext(data.streamFunc, oru, () => { data.activeContexts.delete(ctx); });
+        data.activeContexts.add(ctx);
+        return ctx;
+      },
+
+      streamFunc: () => { throw new Error('should be unreachable') }, // initialize with dummy to satisfy TS, gets set properly below
     };
+
 
     record.data = data;
     record.cleanup = () => {
-      for (const ctx of data.activeContexts) {
-        ctx.terminate();
-      }
+      data.activeContexts.forEach(ctx => ctx.terminate());
     };
   }
 
@@ -332,7 +377,7 @@ export function useDynamic(streamFunc, onRequestUpdate) {
  * NOTE: reducerFunc should be pure-pointwise, NOT a stream func
  * If initialState is a function, it will be called on first update to generate initial state.
  */
-export function useReducer(evts, reducerFunc, initialState) {
+export function useReducer<S, A>(evts: EventStream<A>, reducerFunc: (state: S, action: A) => S, initialState: S | (() => S)): S {
   const state = useVar(initialState);
   const evt = useEventReceiver(evts);
   if (evt) {
@@ -344,7 +389,7 @@ export function useReducer(evts, reducerFunc, initialState) {
 /**
  * NOTE: streamReducerPairs must not change length.
  */
-export function useReducers(streamReducerPairs, initialState) {
+export function useReducers<S, A>(streamReducerPairs: Array<[EventStream<A>, (state: S, action: A) => S]>, initialState: S | (() => S)): S {
   const state = useVar(initialState);
 
   const numStreams = useVar(streamReducerPairs.length);
@@ -374,21 +419,21 @@ export function useReducers(streamReducerPairs, initialState) {
  * NOTE: reducerFunc should be pure-pointwise, NOT a stream func
  * If initialState is a function, it will be called on first update to generate initial state.
  */
-export function useCallbackReducer(reducerFunc, initialState) {
+export function useCallbackReducer<S, A>(reducerFunc: (state: S, action: A) => S, initialState: S | (() => S)): [S, (action: A) => void] {
   const requestUpdate = useRequestUpdate();
   const state = useVar(initialState);
   // We cache the callback, though I don't think we really need to?
-  const callback = useVar(() => (action) => {
+  const callback = useVar(() => (action: A) => {
     state.current = reducerFunc(state.current, action);
     requestUpdate();
   });
   return [state.current, callback.current];
 }
 
-export function useCallbackReducers(reducerFuncs, initialState) {
+export function useCallbackReducers<S, A>(reducerFuncs: Array<(state: S, action: A) => S>, initialState: S | (() => S)): [S, Array<(action: A) => void>] {
   const requestUpdate = useRequestUpdate();
   const state = useVar(initialState);
-  const callbacks = reducerFuncs.map(reducerFunc => (action) => {
+  const callbacks = reducerFuncs.map(reducerFunc => (action: A) => {
     state.current = reducerFunc(state.current, action);
     requestUpdate();
   });
@@ -398,11 +443,11 @@ export function useCallbackReducers(reducerFuncs, initialState) {
 /**
  * TODO: Could/should this take an optional onRequestUpdate parameter?
  */
-export function useMachine(states, initialTransition) {
+export function useMachine(states: {[index: string]: (arg: any) => [string, any]}, initialTransition: [string, any]) {
   const ctx = getTopUpdatingExecutionContext();
   const record = ctx._beginHook();
 
-  const takeTransition = (trans) => {
+  const takeTransition = (trans: [string, any]) => {
     // If there's an old context, terminate it
     if (record.data.activeContext) {
       record.data.activeContext.terminate();
@@ -419,12 +464,17 @@ export function useMachine(states, initialTransition) {
   };
 
   if (!record.data) {
-    const data = {};
+    const data: {
+      activeContext: ExecutionContext | null,
+    } = {
+      activeContext: null,
+    };
     record.data = data;
 
     takeTransition(initialTransition); // this will set stuff in record.data
 
     record.cleanup = () => {
+      if (!data.activeContext) { throw new Error('should have been initialized'); }
       data.activeContext.terminate();
     };
   }

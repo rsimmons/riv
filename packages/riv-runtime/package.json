@@ -2,5 +2,12 @@
   "name": "riv-runtime",
   "version": "0.1.0",
   "private": true,
-  "main": "src/index.js"
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "devDependencies": {
+    "typescript": "^3.4.5"
+  },
+  "scripts": {
+    "build": "tsc"
+  }
 }
