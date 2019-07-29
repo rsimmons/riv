@@ -1,5 +1,5 @@
 import genuid from './uid';
-const { useVar, useInitialize } = require('riv-runtime');
+import { useVar, useInitialize } from 'riv-runtime';
 
 // NOTE: This is just a stub for now
 class ExecutionContext {
@@ -120,7 +120,7 @@ function createLiveUpdateFunc(compiledDefinition: CompiledDefinition, activation
   return () => {
     // compiledDefinition: CompiledDefinition is referenced via closure
     const {constantStreamValues, updates} = compiledDefinition;
-    const activationId = useVar();
+    const activationId = useVar('');
     useInitialize(() => {
       const actId = genuid();
       activationId.current = actId;
