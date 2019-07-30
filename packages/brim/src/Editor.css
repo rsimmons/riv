@@ -45,10 +45,10 @@
   color: #aaa;
 }
 
-.Editor-array-items {
+.Editor-array-items, .Editor-application-arguments {
   padding-left: 1em;
 }
 
-.Editor-program, .Editor-program-expression, .Editor-array-item, .Editor-expression-identifier {
+.Editor-program, .Editor-program-expression, .Editor-array-item, .Editor-application-argument, .Editor-expression-identifier {
   width: fit-content;
 }

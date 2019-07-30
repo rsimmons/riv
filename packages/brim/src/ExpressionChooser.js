@@ -2,56 +2,6 @@ import React, { useState } from 'react';
 import './ExpressionChooser.css';
 import { fuzzy_match } from './vendor/fts_fuzzy_match';
 
-/*
-export default class NodePool {
-  constructor() {
-    // Build pool
-    this.pool = [];
-    for (const k in nodeDefs) {
-      this.pool.push({
-        id: k,
-        def: nodeDefs[k],
-      });
-    }
-
-    // Sort alphabetically for now since we have no other relevance signals
-    this.pool.sort((a, b) => {
-      const sa = a.id.toUpperCase();
-      const sb = b.id.toUpperCase();
-      if (sa < sb) {
-        return -1;
-      }
-      if (sa > sb) {
-        return 1;
-      }
-      return 0;
-    });
-  }
-
-  lookup(id) {
-    return nodeDefs[id];
-  }
-
-  search(query) {
-    const results = [];
-    for (const node of this.pool) {
-      const [hit, score, formattedStr] = fuzzy_match(query, node.id);
-      if (hit) {
-        results.push({
-          score,
-          formattedStr,
-          node,
-        });
-      }
-    }
-    if (query !== '') { // TOOD: this is a hack, is query is empty, scoring is dumb
-      results.sort((a, b) => (b.score - a.score));
-    }
-    return results;
-  }
-}
-*/
-
 function fuzzySearchNames(query, names) {
   const results = [];
 
@@ -65,7 +15,7 @@ function fuzzySearchNames(query, names) {
       });
     }
   }
-  if (query !== '') { // TOOD: this is a hack, is query is empty, scoring is dumb
+  if (query !== '') { // TODO: this is a hack, is query is empty, scoring is dumb
     results.sort((a, b) => (b.score - a.score));
   }
   return results;
@@ -84,7 +34,19 @@ function generateChoices(text, mainState) {
       choices.push({
         type: 'streamref',
         node,
-      })
+      });
+    }
+  }
+
+  const funcNames = mainState.nameToFunctions.keys();
+  const funcSearchResults = fuzzySearchNames(text, funcNames);
+  for (const result of funcSearchResults) {
+    const nodes = mainState.nameToFunctions.get(result.name);
+    for (const node of nodes) {
+      choices.push({
+        type: 'function',
+        node,
+      });
     }
   }
 
@@ -113,7 +75,10 @@ function Choice({ choice }) {
       return <span>{choice.value}</span>
 
     case 'streamref':
-      return <span>{choice.node.identifier.name} ({choice.node.streamId})</span>
+      return <span><em>S</em> {choice.node.identifier.name} ({choice.node.streamId})</span>
+
+    case 'function':
+      return <span><em>F</em> {choice.node.identifier.name} ({choice.node.functionId})</span>
 
     default:
       throw new Error();
@@ -133,6 +98,11 @@ export default function ExpressionChooser({ node, mainState, dispatch }) {
       case 'StreamReference': {
         const targetExpressionNode = mainState.streamIdToNode.get(node.targetStreamId);
         return targetExpressionNode.identifier ? targetExpressionNode.identifier.name : '';
+      }
+
+      case 'Application': {
+        const functionNode = mainState.functionIdToNode.get(node.functionId);
+        return functionNode.identifier ? functionNode.identifier.name : '';
       }
 
       default:
@@ -163,6 +133,13 @@ export default function ExpressionChooser({ node, mainState, dispatch }) {
         newNode = {
           type: 'StreamReference',
           targetStreamId: choice.node.streamId,
+        };
+        break;
+
+      case 'function':
+        newNode = {
+          type: 'Application',
+          functionId: choice.node.functionId,
         };
         break;
 

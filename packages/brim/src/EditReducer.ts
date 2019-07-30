@@ -1,4 +1,5 @@
 import genuid from './uid';
+import { identifier } from '@babel/types';
 
 // We don't make a discriminated union of specific actions, but maybe we could
 interface Action {
@@ -8,6 +9,7 @@ interface Action {
 }
 
 type StreamID = string;
+type FunctionID = string;
 
 interface ProgramNode {
   type: 'Program';
@@ -23,11 +25,6 @@ interface IdentifierNode {
 }
 function isIdentifierNode(node: Node): node is IdentifierNode {
   return node.type === 'Identifier';
-}
-
-type ExpressionNode = UndefinedExpressionNode | IntegerLiteralNode | ArrayLiteralNode | StreamReferenceNode;
-function isExpressionNode(node: Node): node is ExpressionNode {
-  return isUndefinedExpressionNode(node) || isIntegerLiteralNode(node) || isArrayLiteralNode(node)|| isStreamReferenceNode(node);
 }
 
 interface UndefinedExpressionNode {
@@ -69,9 +66,38 @@ function isStreamReferenceNode(node: Node): node is StreamReferenceNode {
   return node.type === 'StreamReference';
 }
 
-type Node = ProgramNode | IdentifierNode | ExpressionNode;
+interface ApplicationNode {
+  type: 'Application',
+  streamId: StreamID, // stream of the function "output"
+  identifier: IdentifierNode | null;
+  functionId: FunctionID, // the function we are applying (calling), could be user-defined or external
+}
+function isApplicationNode(node: Node): node is ApplicationNode {
+  return node.type === 'Application';
+}
+
+type ExpressionNode = UndefinedExpressionNode | IntegerLiteralNode | ArrayLiteralNode | StreamReferenceNode | ApplicationNode;
+function isExpressionNode(node: Node): node is ExpressionNode {
+  return isUndefinedExpressionNode(node)
+    || isIntegerLiteralNode(node)
+    || isArrayLiteralNode(node)
+    || isStreamReferenceNode(node)
+    || isApplicationNode(node);
+}
+
+interface ExternalFunctionNode {
+  type: 'ExternalFunction',
+  functionId: FunctionID,
+  identifier: IdentifierNode | null;
+  jsFunction: Function; // the actual callable JS function
+}
+function isExternalFunctionNode(node: Node): node is ExternalFunctionNode {
+  return node.type === 'ExternalFunction';
+}
+
+type Node = ProgramNode | IdentifierNode | ExpressionNode | ExternalFunctionNode;
 function isNode(node: any): node is Node {
-  return isProgramNode(node) || isIdentifierNode(node) || isExpressionNode(node);
+  return isProgramNode(node) || isIdentifierNode(node) || isExpressionNode(node) || isExternalFunctionNode(node);
 }
 
 type Path = (string | number)[];
@@ -89,6 +115,7 @@ interface State {
   root: ProgramNode;
   selectionPath: Path;
   editingSelected: boolean;
+  externalFunctions: Array<ExternalFunctionNode>;
 }
 
 const SCHEMA_NODES = {
@@ -130,15 +157,32 @@ const SCHEMA_NODES = {
   StreamReference: {
     fields: {
       streamId: {type: 'uid'},
+      identifier: {type: 'node'},
       targetStreamId: {type: 'uid'},
+    }
+  },
+
+  Application: {
+    fields: {
+      streamId: {type: 'uid'},
+      identifier: {type: 'node'},
+      functionId: {type: 'uid'},
+    }
+  },
+
+  ExternalFunction: {
+    fields: {
+      functionId: {type: 'uid'},
+      identifier: {type: 'node'},
+      jsFunc: {type: 'value'},
     }
   },
 };
 
 // TODO: If we want to include other classes in the lists, generate an expansion over the closure
 const SCHEMA_CLASSES: {[nodeType: string]: string[]} = {
-  Expression: ['UndefinedExpression', 'IntegerLiteral', 'ArrayLiteral', 'StreamReference'],
-  Any: ['Program', 'Identifier', 'UndefinedExpression', 'IntegerLiteral', 'ArrayLiteral', 'StreamReference'],
+  Expression: ['UndefinedExpression', 'IntegerLiteral', 'ArrayLiteral', 'StreamReference', 'Application'],
+  Any: ['Program', 'Identifier', 'UndefinedExpression', 'IntegerLiteral', 'ArrayLiteral', 'StreamReference', 'Application'],
 }
 
 export function nodeFromPath(root: Node, path: Path): Node {
@@ -255,6 +299,7 @@ const HANDLERS: Handler[] = [
       case 'IntegerLiteral':
       case 'UndefinedExpression':
       case 'StreamReference':
+      case 'Application':
         return [node, subpath, true];
 
       case 'ArrayLiteral':
@@ -604,7 +649,7 @@ function recursiveBuildStreamMaps(node: Node, streamIdToNode: Map<StreamID, Node
 
     if (node.identifier) {
       const name = node.identifier.name;
-      let nodes = nameToNodes.get(name);
+      const nodes = nameToNodes.get(name);
       if (nodes) {
         nodes.push(node);
       } else {
@@ -633,10 +678,28 @@ export function addDerivedState(state: State) {
 
   recursiveBuildStreamMaps(state.root, streamIdToNode, nameToNodes);
 
+  const functionIdToNode: Map<FunctionID, Node> = new Map();
+  const nameToFunctions: Map<string, Node[]> = new Map();
+  for (const extFunc of state.externalFunctions) {
+    functionIdToNode.set(extFunc.functionId, extFunc);
+
+    if (extFunc.identifier) {
+      const name = extFunc.identifier.name;
+      const funcs = nameToFunctions.get(name);
+      if (funcs) {
+        funcs.push(extFunc);
+      } else {
+        nameToFunctions.set(name, [extFunc]);
+      }
+    }
+  }
+
   return {
     ...state,
     streamIdToNode,
     nameToNodes,
+    functionIdToNode,
+    nameToFunctions,
   }
 }
 
@@ -657,12 +720,19 @@ export function reducer(state: State, action: Action): State {
       root: newRoot,
       selectionPath: newSelectionPath,
       editingSelected: newEditingSelected,
+      externalFunctions: state.externalFunctions,
     };
   } else {
     console.log('not handled');
     return state;
   }
 }
+
+const externalFunctions = {
+  showString: () => {},
+  animationTime: () => {},
+  mouseDown: () => {},
+};
 
 const fooId = genuid();
 export const initialState: State = {
@@ -751,8 +821,23 @@ export const initialState: State = {
         identifier: null,
         targetStreamId: fooId,
       },
+      {
+        type: 'Application',
+        streamId: genuid(),
+        identifier: null,
+        functionId: 'showString',
+      },
     ]
   },
   selectionPath: ['expressions', 0],
   editingSelected: false,
+  externalFunctions: Object.entries(externalFunctions).map(([name, jsFunction]) => ({
+    type: 'ExternalFunction',
+    functionId: name,
+    identifier: {
+      type: 'Identifier',
+      name: name,
+    },
+    jsFunction,
+  })),
 };

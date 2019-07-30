@@ -141,7 +141,26 @@ function StreamReferenceView({ streamReference }) {
   if (!targetExpressionNode) {
     throw new Error();
   }
-  return <div>{(targetExpressionNode.identifier && targetExpressionNode.identifier.name) ? targetExpressionNode.identifier.name : '<stream>'}</div>
+  return <div>{(targetExpressionNode.identifier && targetExpressionNode.identifier.name) ? targetExpressionNode.identifier.name : '<stream ' + streamReference.targetStreamId + '>'}</div>
+}
+
+function ApplicationView({ application }) {
+  const {functionIdToNode} = useContext(FullStateContext);
+  const targetFunctionNode = functionIdToNode.get(application.functionId);
+  if (!targetFunctionNode) {
+    throw new Error();
+  }
+  return (
+    <div>
+      <div>{(targetFunctionNode.identifier && targetFunctionNode.identifier.name) ? targetFunctionNode.identifier.name : '<function ' + application.functionId + '>'}(</div>
+      <div className="Editor-application-arguments">
+        {/* {arrayLiteral.items.map(item => (
+          <div className="Editor-application-argument" key={item.streamId}><ExpressionView expression={item} /></div>
+        ))} */}
+      </div>
+      <div>)</div>
+    </div>
+  );
 }
 
 function NotEditingExpressionView({ expression }) {
@@ -157,6 +176,9 @@ function NotEditingExpressionView({ expression }) {
 
     case 'StreamReference':
       return <StreamReferenceView streamReference={expression} />
+
+    case 'Application':
+      return <ApplicationView application={expression} />
 
     default:
       throw new Error();
