@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './ExpressionChooser.css';
 import { fuzzy_match } from './vendor/fts_fuzzy_match';
+import genuid from './uid';
 
 function fuzzySearchNames(query, names) {
   const results = [];
@@ -75,10 +76,10 @@ function Choice({ choice }) {
       return <span>{choice.value}</span>
 
     case 'streamref':
-      return <span><em>S</em> {choice.node.identifier.name} ({choice.node.streamId})</span>
+      return <span><em>S</em> {choice.node.identifier.name} <small>(id {choice.node.streamId})</small></span>
 
     case 'function':
-      return <span><em>F</em> {choice.node.identifier.name} ({choice.node.functionId})</span>
+      return <span><em>F</em> {choice.node.identifier.name}({choice.node.parameters.join(', ')}) <small>(id {choice.node.functionId})</small></span>
 
     default:
       throw new Error();
@@ -86,6 +87,13 @@ function Choice({ choice }) {
 }
 
 export default function ExpressionChooser({ node, mainState, dispatch }) {
+  const selectedListElem = useRef();
+  useEffect(() => {
+    if (selectedListElem.current) {
+      selectedListElem.current.scrollIntoView({block: 'nearest', inline: 'nearest'});
+    }
+  });
+
   const [text, setText] = useState(() => {
     // Initialize text based on existing node
     switch (node.type) {
@@ -140,6 +148,11 @@ export default function ExpressionChooser({ node, mainState, dispatch }) {
         newNode = {
           type: 'Application',
           functionId: choice.node.functionId,
+          arguments: choice.node.parameters.map(paramName => ({
+            type: 'UndefinedExpression',
+            streamId: genuid(),
+            identifier: null,
+          })),
         };
         break;
 
@@ -225,7 +238,7 @@ export default function ExpressionChooser({ node, mainState, dispatch }) {
       <input className="Editor-text-edit-input" value={text} onChange={onChange} onKeyDown={onKeyDown} autoFocus />
       <ul className="ExpressionChooser-dropdown">
         {dropdownState.choices.map((choice, idx) =>
-          <li key={idx} className={(idx === dropdownState.index) ? 'ExpressionChooser-dropdown-selected' : ''}><Choice choice={choice} /></li>
+          <li key={idx} className={(idx === dropdownState.index) ? 'ExpressionChooser-dropdown-selected' : ''} ref={(idx === dropdownState.index) ? selectedListElem : undefined}><Choice choice={choice} /></li>
         )}
       </ul>
     </div>

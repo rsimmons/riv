@@ -1,5 +1,4 @@
 import genuid from './uid';
-import { identifier } from '@babel/types';
 
 // We don't make a discriminated union of specific actions, but maybe we could
 interface Action {
@@ -57,20 +56,21 @@ function isArrayLiteralNode(node: Node): node is ArrayLiteralNode {
 }
 
 interface StreamReferenceNode {
-  type: 'StreamReference',
-  streamId: StreamID,
+  type: 'StreamReference';
+  streamId: StreamID;
   identifier: IdentifierNode | null;
-  targetStreamId: StreamID,
+  targetStreamId: StreamID;
 }
 function isStreamReferenceNode(node: Node): node is StreamReferenceNode {
   return node.type === 'StreamReference';
 }
 
 interface ApplicationNode {
-  type: 'Application',
+  type: 'Application';
   streamId: StreamID, // stream of the function "output"
   identifier: IdentifierNode | null;
-  functionId: FunctionID, // the function we are applying (calling), could be user-defined or external
+  functionId: FunctionID; // the function we are applying (calling), could be user-defined or external
+  arguments: ExpressionNode[];
 }
 function isApplicationNode(node: Node): node is ApplicationNode {
   return node.type === 'Application';
@@ -89,6 +89,7 @@ interface ExternalFunctionNode {
   type: 'ExternalFunction',
   functionId: FunctionID,
   identifier: IdentifierNode | null;
+  parameters: Array<string>; // just the names for now
   jsFunction: Function; // the actual callable JS function
 }
 function isExternalFunctionNode(node: Node): node is ExternalFunctionNode {
@@ -167,6 +168,7 @@ const SCHEMA_NODES = {
       streamId: {type: 'uid'},
       identifier: {type: 'node'},
       functionId: {type: 'uid'},
+      arguments: {type: 'nodes'},
     }
   },
 
@@ -174,6 +176,7 @@ const SCHEMA_NODES = {
     fields: {
       functionId: {type: 'uid'},
       identifier: {type: 'node'},
+      parameters: {type: 'value'},
       jsFunc: {type: 'value'},
     }
   },
@@ -728,11 +731,12 @@ export function reducer(state: State, action: Action): State {
   }
 }
 
-const externalFunctions = {
-  showString: () => {},
-  animationTime: () => {},
-  mouseDown: () => {},
-};
+const externalFunctions: Array<[string, Array<string>, Function]> = [
+  ['add', ['a', 'b'], (a: number, b: number) => a + b],
+  ['showString', ['s'], (s: string) => { console.log(s); }],
+  ['animationTime', [], () => {}],
+  ['mouseDown', [], () => {}],
+];
 
 const fooId = genuid();
 export const initialState: State = {
@@ -826,18 +830,26 @@ export const initialState: State = {
         streamId: genuid(),
         identifier: null,
         functionId: 'showString',
+        arguments: [
+          {
+            type: 'UndefinedExpression',
+            streamId: genuid(),
+            identifier: null,
+          },
+        ],
       },
     ]
   },
   selectionPath: ['expressions', 0],
   editingSelected: false,
-  externalFunctions: Object.entries(externalFunctions).map(([name, jsFunction]) => ({
+  externalFunctions: externalFunctions.map(([name, paramNames, jsFunction]) => ({
     type: 'ExternalFunction',
     functionId: name,
     identifier: {
       type: 'Identifier',
       name: name,
     },
+    parameters: paramNames,
     jsFunction,
   })),
 };

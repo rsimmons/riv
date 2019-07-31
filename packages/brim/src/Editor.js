@@ -146,17 +146,22 @@ function StreamReferenceView({ streamReference }) {
 
 function ApplicationView({ application }) {
   const {functionIdToNode} = useContext(FullStateContext);
-  const targetFunctionNode = functionIdToNode.get(application.functionId);
-  if (!targetFunctionNode) {
+  const functionNode = functionIdToNode.get(application.functionId);
+  if (!functionNode) {
     throw new Error();
   }
+
+  if (functionNode.parameters.length !== application.arguments.length) {
+    throw new Error('params and args length mismatch');
+  }
+
   return (
     <div>
-      <div>{(targetFunctionNode.identifier && targetFunctionNode.identifier.name) ? targetFunctionNode.identifier.name : '<function ' + application.functionId + '>'}(</div>
+      <div>{(functionNode.identifier && functionNode.identifier.name) ? functionNode.identifier.name : '<function ' + application.functionId + '>'}(</div>
       <div className="Editor-application-arguments">
-        {/* {arrayLiteral.items.map(item => (
-          <div className="Editor-application-argument" key={item.streamId}><ExpressionView expression={item} /></div>
-        ))} */}
+        {functionNode.parameters.map((paramName, idx) => (
+          <div className="Editor-application-argument" key={paramName}><span className="Editor-application-argument-name">{paramName}:</span><span className="Editor-application-argument-expression"><ExpressionView expression={application.arguments[idx]} /></span></div>
+        ))}
       </div>
       <div>)</div>
     </div>

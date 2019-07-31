@@ -49,6 +49,19 @@
   padding-left: 1em;
 }
 
+.Editor-array-item, .Editor-application-argument {
+  padding: 0.05em 0;
+}
+
 .Editor-program, .Editor-program-expression, .Editor-array-item, .Editor-application-argument, .Editor-expression-identifier {
   width: fit-content;
+}
+
+.Editor-application-argument-name {
+  display: inline-block;
+  margin-right: 0.2em;
+}
+
+.Editor-application-argument-expression {
+  display: inline-block;
 }
