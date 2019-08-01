@@ -1,3 +1,4 @@
+import { State, Path, StreamID, FunctionID, Node, isNode, ProgramNode, isProgramNode, isExpressionNode, ArrayLiteralNode, isArrayLiteralNode, isApplicationNode } from './State';
 import genuid from './uid';
 
 // We don't make a discriminated union of specific actions, but maybe we could
@@ -6,102 +7,6 @@ interface Action {
   char?: string;
   newNode?: Node;
 }
-
-type StreamID = string;
-type FunctionID = string;
-
-interface ProgramNode {
-  type: 'Program';
-  expressions: ExpressionNode[];
-}
-function isProgramNode(node: Node): node is ProgramNode {
-  return node.type === 'Program';
-}
-
-interface IdentifierNode {
-  type: 'Identifier';
-  name: string;
-}
-function isIdentifierNode(node: Node): node is IdentifierNode {
-  return node.type === 'Identifier';
-}
-
-interface UndefinedExpressionNode {
-  type: 'UndefinedExpression';
-  streamId: StreamID;
-  identifier: IdentifierNode | null;
-}
-function isUndefinedExpressionNode(node: Node): node is UndefinedExpressionNode {
-  return node.type === 'UndefinedExpression';
-}
-
-interface IntegerLiteralNode {
-  type: 'IntegerLiteral';
-  streamId: StreamID;
-  identifier: IdentifierNode | null;
-  value: number;
-}
-function isIntegerLiteralNode(node: Node): node is IntegerLiteralNode {
-  return node.type === 'IntegerLiteral';
-}
-
-interface ArrayLiteralNode {
-  type: 'ArrayLiteral';
-  streamId: StreamID;
-  identifier: IdentifierNode | null;
-  items: ExpressionNode[];
-}
-function isArrayLiteralNode(node: Node): node is ArrayLiteralNode {
-  return node.type === 'ArrayLiteral';
-}
-
-interface StreamReferenceNode {
-  type: 'StreamReference';
-  streamId: StreamID;
-  identifier: IdentifierNode | null;
-  targetStreamId: StreamID;
-}
-function isStreamReferenceNode(node: Node): node is StreamReferenceNode {
-  return node.type === 'StreamReference';
-}
-
-interface ApplicationNode {
-  type: 'Application';
-  streamId: StreamID, // stream of the function "output"
-  identifier: IdentifierNode | null;
-  functionId: FunctionID; // the function we are applying (calling), could be user-defined or external
-  arguments: ExpressionNode[];
-}
-function isApplicationNode(node: Node): node is ApplicationNode {
-  return node.type === 'Application';
-}
-
-type ExpressionNode = UndefinedExpressionNode | IntegerLiteralNode | ArrayLiteralNode | StreamReferenceNode | ApplicationNode;
-function isExpressionNode(node: Node): node is ExpressionNode {
-  return isUndefinedExpressionNode(node)
-    || isIntegerLiteralNode(node)
-    || isArrayLiteralNode(node)
-    || isStreamReferenceNode(node)
-    || isApplicationNode(node);
-}
-
-interface ExternalFunctionNode {
-  type: 'ExternalFunction',
-  functionId: FunctionID,
-  identifier: IdentifierNode | null;
-  parameters: Array<string>; // just the names for now
-  jsFunction: Function; // the actual callable JS function
-}
-function isExternalFunctionNode(node: Node): node is ExternalFunctionNode {
-  return node.type === 'ExternalFunction';
-}
-
-type Node = ProgramNode | IdentifierNode | ExpressionNode | ExternalFunctionNode;
-function isNode(node: any): node is Node {
-  return isProgramNode(node) || isIdentifierNode(node) || isExpressionNode(node) || isExternalFunctionNode(node);
-}
-
-type Path = (string | number)[];
 
 interface HandlerArgs {
   node: Node,
@@ -112,12 +17,6 @@ interface HandlerArgs {
 type HandlerResult = (undefined | [Node, Path, boolean]);
 type Handler = [string, string[], (args: HandlerArgs) => HandlerResult];
 
-interface State {
-  root: ProgramNode;
-  selectionPath: Path;
-  editingSelected: boolean;
-  externalFunctions: Array<ExternalFunctionNode>;
-}
 
 const SCHEMA_NODES = {
   Program: {
