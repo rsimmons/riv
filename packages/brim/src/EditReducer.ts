@@ -1,5 +1,6 @@
-import { State, Path, StreamID, FunctionID, Node, isNode, ProgramNode, isProgramNode, isExpressionNode, ArrayLiteralNode, isArrayLiteralNode, isApplicationNode } from './State';
+import { StateCore, StateWithLookups, State, Path, StreamID, FunctionID, Node, isNode, ProgramNode, isProgramNode, ExpressionNode, isExpressionNode, ArrayLiteralNode, isArrayLiteralNode, FunctionNode, isApplicationNode } from './State';
 import genuid from './uid';
+import { compileExpressions } from './Compiler';
 
 // We don't make a discriminated union of specific actions, but maybe we could
 interface Action {
@@ -477,7 +478,7 @@ const HANDLERS: Handler[] = [
 /**
  * Returns null or [newNode, newSelectionPath, newTextEdit]
  */
-function recursiveReducer(state: State, node: Node, action: Action): (null | [Node, Path, boolean]) {
+function recursiveReducer(state: StateCore, node: Node, action: Action): (null | [Node, Path, boolean]) {
   // If this node is not on the selection path, we can short circuit
   if (!nodeOnPath(node, state.root, state.selectionPath)) {
     return null;
@@ -617,14 +618,14 @@ function recursiveBuildStreamMaps(node: Node, streamIdToNode: Map<StreamID, Node
   }
 }
 
-export function addDerivedState(state: State) {
-  const streamIdToNode: Map<StreamID, Node> = new Map();
-  const nameToNodes: Map<string, Node[]> = new Map();
+function addStateLookups(state: StateCore) {
+  const streamIdToNode: Map<StreamID, ExpressionNode> = new Map();
+  const nameToNodes: Map<string, ExpressionNode[]> = new Map();
 
   recursiveBuildStreamMaps(state.root, streamIdToNode, nameToNodes);
 
-  const functionIdToNode: Map<FunctionID, Node> = new Map();
-  const nameToFunctions: Map<string, Node[]> = new Map();
+  const functionIdToNode: Map<FunctionID, FunctionNode> = new Map();
+  const nameToFunctions: Map<string, FunctionNode[]> = new Map();
   for (const extFunc of state.externalFunctions) {
     functionIdToNode.set(extFunc.functionId, extFunc);
 
@@ -648,6 +649,14 @@ export function addDerivedState(state: State) {
   }
 }
 
+function addDerivedState(state: StateCore): StateWithLookups {
+  const stateWithLookups = addStateLookups(state);
+
+  console.log('compiled', compileExpressions(stateWithLookups.root.expressions, stateWithLookups));
+
+  return stateWithLookups;
+}
+
 export function reducer(state: State, action: Action): State {
   console.log('action', action.type);
 
@@ -661,12 +670,12 @@ export function reducer(state: State, action: Action): State {
       throw new Error();
     }
 
-    return {
+    return addDerivedState({
       root: newRoot,
       selectionPath: newSelectionPath,
       editingSelected: newEditingSelected,
       externalFunctions: state.externalFunctions,
-    };
+    });
   } else {
     console.log('not handled');
     return state;
@@ -681,7 +690,7 @@ const externalFunctions: Array<[string, Array<string>, Function]> = [
 ];
 
 const fooId = genuid();
-export const initialState: State = {
+export const initialState: State = addDerivedState({
   root: {
     type: 'Program',
     expressions: [
@@ -794,4 +803,4 @@ export const initialState: State = {
     parameters: paramNames,
     jsFunction,
   })),
-};
+});

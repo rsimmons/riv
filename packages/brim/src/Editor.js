@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useReducer, useRef, useEffect, useState } from 'react';
 import { HotKeys, ObserveKeys } from "react-hotkeys";
-import { initialState, reducer, addDerivedState, nodeFromPath } from './EditReducer';
+import { initialState, reducer, nodeFromPath } from './EditReducer';
 import ExpressionChooser from './ExpressionChooser';
 import './Editor.css';
 
@@ -212,8 +212,7 @@ function ExpressionView({ expression }) {
 }
 
 export default function Editor({ autoFocus }) {
-  const [plainState, dispatch] = useReducer(reducer, initialState);
-  const state = addDerivedState(plainState);
+  const [state, dispatch] = useReducer(reducer, initialState);
 
   const editorElem = useRef();
 

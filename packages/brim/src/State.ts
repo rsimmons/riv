@@ -87,6 +87,11 @@ export function isExternalFunctionNode(node: Node): node is ExternalFunctionNode
   return node.type === 'ExternalFunction';
 }
 
+export type FunctionNode = ExternalFunctionNode;
+export function isFunctionNode(node: Node): node is FunctionNode {
+  return isExternalFunctionNode(node);
+}
+
 export type Node = ProgramNode | IdentifierNode | ExpressionNode | ExternalFunctionNode;
 export function isNode(node: any): node is Node {
   return isProgramNode(node) || isIdentifierNode(node) || isExpressionNode(node) || isExternalFunctionNode(node);
@@ -94,9 +99,18 @@ export function isNode(node: any): node is Node {
 
 export type Path = (string | number)[];
 
-export interface State {
+export interface StateCore {
   root: ProgramNode;
   selectionPath: Path;
   editingSelected: boolean;
   externalFunctions: Array<ExternalFunctionNode>;
 }
+
+export interface StateWithLookups extends StateCore {
+  streamIdToNode: Map<StreamID, ExpressionNode>;
+  nameToNodes: Map<string, Node[]>;
+  functionIdToNode: Map<FunctionID, ExternalFunctionNode>;
+  nameToFunctions: Map<string, Node[]>;
+};
+
+export type State = StateWithLookups;
