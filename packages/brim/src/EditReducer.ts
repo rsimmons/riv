@@ -530,6 +530,49 @@ const HANDLERS: Handler[] = [
       }, ['items', 0], true];
     }
   }],
+
+  // NOTE: We only allow MOVE_LEFT to act as ZOOM_OUT here because we know arguments are displayed vertically for now
+  ['Application', ['ZOOM_OUT', 'MOVE_LEFT'], ({node, subpath}) => {
+    if (!isApplicationNode(node)) {
+      throw new Error();
+    }
+    if (subpath.length === 2) {
+      if ((subpath[0] !== 'arguments') || (typeof(subpath[1]) !== 'number')) {
+        throw Error();
+      }
+      return [node, [], false];
+    }
+  }],
+
+  // NOTE: We only allow MOVE_RIGHT to act as ZOOM_IN here because we know arguments are displayed vertically for now
+  ['Application', ['ZOOM_IN', 'MOVE_RIGHT'], ({node, subpath}) => {
+    if (!isApplicationNode(node)) {
+      throw new Error();
+    }
+    if (subpath.length === 0) {
+      return [node, ['arguments', 0], false];
+    }
+  }],
+
+  ['Application', ['MOVE_UP', 'MOVE_DOWN'], ({node, subpath, action}) => {
+    if (!isApplicationNode(node)) {
+      throw new Error();
+    }
+
+    if ((subpath.length === 2) && (subpath[0] === 'arguments')) {
+      const idx = subpath[1];
+      if (typeof idx !== 'number') {
+        throw new Error();
+      }
+      const newIdx = idx + ((action.type === 'MOVE_UP') ? -1 : 1);
+
+      if ((newIdx < 0) || (newIdx >= node.arguments.length)) {
+        return [node, [], false];
+      } else {
+        return [node, ['arguments', newIdx], false];
+      }
+    }
+  }],
 ];
 
 /**
