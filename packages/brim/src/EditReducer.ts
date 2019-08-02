@@ -1,6 +1,6 @@
 import { StateCore, StateWithLookups, State, Path, StreamID, FunctionID, Node, isNode, ProgramNode, isProgramNode, ExpressionNode, isExpressionNode, ArrayLiteralNode, isArrayLiteralNode, FunctionNode, isApplicationNode } from './State';
 import genuid from './uid';
-import { compileExpressions } from './Compiler';
+import { compileExpressions, CompilationError } from './Compiler';
 
 // We don't make a discriminated union of specific actions, but maybe we could
 interface Action {
@@ -652,7 +652,13 @@ function addStateLookups(state: StateCore) {
 function addDerivedState(state: StateCore): StateWithLookups {
   const stateWithLookups = addStateLookups(state);
 
-  console.log('compiled', compileExpressions(stateWithLookups.root.expressions, stateWithLookups));
+  try {
+    console.log('compiled', compileExpressions(stateWithLookups.root.expressions, stateWithLookups));
+  } catch (e) {
+    if (e instanceof CompilationError) {
+      console.log('COMPILATION ERROR', e.message);
+    }
+  }
 
   return stateWithLookups;
 }

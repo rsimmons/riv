@@ -20,13 +20,16 @@ interface CompiledDefinition {
   applications: Array<[StreamID, Function, Array<StreamID>]>;
 }
 
+export class CompilationError extends Error {
+};
+
 function traverseFromExpression(expression: ExpressionNode, state: StateWithLookups, temporaryMarkedStreamIds: Set<StreamID>, permanentMarkedStreamIds: Set<StreamID>, compiledDefinition: CompiledDefinition) {
   if (permanentMarkedStreamIds.has(expression.streamId)) {
     return;
   }
 
   if (temporaryMarkedStreamIds.has(expression.streamId)) {
-    throw new Error('graph cycle');
+    throw new CompilationError('graph cycle');
   }
 
 
