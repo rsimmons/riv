@@ -15,7 +15,7 @@ const compiledDefinition = {
 };
 */
 
-interface CompiledDefinition {
+export interface CompiledDefinition {
   literalStreamValues: Array<[StreamID, any]>;
   applications: Array<[StreamID, Function, Array<StreamID>]>;
 }

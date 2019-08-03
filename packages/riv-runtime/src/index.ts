@@ -11,7 +11,7 @@ interface HookRecord {
 
 let currentUpdateFrame: UpdateFrame | null = null;
 
-class ExecutionContext {
+export class ExecutionContext {
   private hookRecordChain: HookRecord;
   private updateCount: number;
   private recordCursor: HookRecord | null;
@@ -35,7 +35,7 @@ class ExecutionContext {
     this.updateCount = 0;
   }
 
-  update() {
+  update(...args: Array<any>): any {
     // Push a new update frame onto the update stack for this context
     const newFrame = {
       executionContext: this,
@@ -139,7 +139,7 @@ class ExecutionContext {
   }
 }
 
-export function createNoInOutExecutionContext<F extends Function>(streamFunc: F): ExecutionContext {
+export function createNoInOutExecutionContext(streamFunc: Function): ExecutionContext {
   const onRequestUpdate = () => { ctx.update() };
   const ctx = new ExecutionContext(streamFunc, onRequestUpdate)
   return ctx;
