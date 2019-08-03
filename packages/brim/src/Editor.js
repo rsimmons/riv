@@ -136,7 +136,7 @@ function UndefinedExpressionView({ undefinedExpression }) {
 }
 
 function StreamReferenceView({ streamReference }) {
-  const {streamIdToNode} = useContext(FullStateContext);
+  const {streamIdToNode} = useContext(FullStateContext).derivedLookups;
   const targetExpressionNode = streamIdToNode.get(streamReference.targetStreamId);
   if (!targetExpressionNode) {
     throw new Error();
@@ -145,7 +145,7 @@ function StreamReferenceView({ streamReference }) {
 }
 
 function ApplicationView({ application }) {
-  const {functionIdToNode} = useContext(FullStateContext);
+  const {functionIdToNode} = useContext(FullStateContext).derivedLookups;
   const functionNode = functionIdToNode.get(application.functionId);
   if (!functionNode) {
     throw new Error();

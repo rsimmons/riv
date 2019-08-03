@@ -33,7 +33,7 @@ export function createLiveFunction(initialDefinition: CompiledDefinition): [Func
 
     const streamValues = new Map(compiledDefinition.literalStreamValues); // clone
     const appCtx = activation.current.applicationContext;
-    for (const [sid, func, argIds] of this.compiledDefinition.applications) {
+    for (const [sid, func, argIds] of compiledDefinition.applications) {
       const argVals = argIds.map(id => streamValues.get(id));
       const context = appCtx.get(sid);
       if (!context) { throw new Error(); }

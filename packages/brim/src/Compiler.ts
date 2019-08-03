@@ -1,4 +1,4 @@
-import { StateWithLookups, StreamID, ExpressionNode } from './State';
+import { State, StreamID, ExpressionNode } from './State';
 
 /*
 Say we have the expression "display(add(time(), 10))". The call to display is an expression node, with streamId 'S1'. The call to add is an expression node with streamId 'S2'. The call to time is an expression node with streamId 'S3'. The literal 10 is a node with streamId 'S4'.
@@ -23,7 +23,7 @@ export interface CompiledDefinition {
 export class CompilationError extends Error {
 };
 
-function traverseFromExpression(expression: ExpressionNode, state: StateWithLookups, temporaryMarkedStreamIds: Set<StreamID>, permanentMarkedStreamIds: Set<StreamID>, compiledDefinition: CompiledDefinition) {
+function traverseFromExpression(expression: ExpressionNode, state: State, temporaryMarkedStreamIds: Set<StreamID>, permanentMarkedStreamIds: Set<StreamID>, compiledDefinition: CompiledDefinition) {
   if (permanentMarkedStreamIds.has(expression.streamId)) {
     return;
   }
@@ -54,7 +54,7 @@ function traverseFromExpression(expression: ExpressionNode, state: StateWithLook
       break;
 
     case 'StreamReference':
-      const targetExpressionNode = state.streamIdToNode.get(expression.targetStreamId);
+      const targetExpressionNode = state.derivedLookups!.streamIdToNode.get(expression.targetStreamId);
       if (!targetExpressionNode) {
         throw Error();
       }
@@ -65,7 +65,7 @@ function traverseFromExpression(expression: ExpressionNode, state: StateWithLook
       break;
 
     case 'Application':
-      const functionNode = state.functionIdToNode.get(expression.functionId);
+      const functionNode = state.derivedLookups!.functionIdToNode.get(expression.functionId);
       if (!functionNode) {
         throw Error();
       }
@@ -86,7 +86,7 @@ function traverseFromExpression(expression: ExpressionNode, state: StateWithLook
   permanentMarkedStreamIds.add(expression.streamId);
 }
 
-export function compileExpressions(expressions: Array<ExpressionNode>, state: StateWithLookups): CompiledDefinition {
+export function compileExpressions(expressions: Array<ExpressionNode>, state: State): CompiledDefinition {
   // Using terminology from https://en.wikipedia.org/wiki/Topological_sorting#Depth-first_search
   const temporaryMarkedStreamIds: Set<StreamID> = new Set();
   const permanentMarkedStreamIds: Set<StreamID> = new Set();

@@ -1,4 +1,4 @@
-import { StateCore, StateWithLookups, State, Path, StreamID, FunctionID, Node, isNode, ProgramNode, isProgramNode, ExpressionNode, isExpressionNode, ArrayLiteralNode, isArrayLiteralNode, FunctionNode, isApplicationNode } from './State';
+import { State, Path, StreamID, FunctionID, Node, isNode, ProgramNode, isProgramNode, ExpressionNode, isExpressionNode, ArrayLiteralNode, isArrayLiteralNode, FunctionNode, isApplicationNode } from './State';
 import genuid from './uid';
 import { compileExpressions, CompilationError } from './Compiler';
 
@@ -478,7 +478,7 @@ const HANDLERS: Handler[] = [
 /**
  * Returns null or [newNode, newSelectionPath, newTextEdit]
  */
-function recursiveReducer(state: StateCore, node: Node, action: Action): (null | [Node, Path, boolean]) {
+function recursiveReducer(state: State, node: Node, action: Action): (null | [Node, Path, boolean]) {
   // If this node is not on the selection path, we can short circuit
   if (!nodeOnPath(node, state.root, state.selectionPath)) {
     return null;
@@ -618,7 +618,7 @@ function recursiveBuildStreamMaps(node: Node, streamIdToNode: Map<StreamID, Node
   }
 }
 
-function addStateLookups(state: StateCore) {
+function addStateLookups(state: State): State {
   const streamIdToNode: Map<StreamID, ExpressionNode> = new Map();
   const nameToNodes: Map<string, ExpressionNode[]> = new Map();
 
@@ -642,14 +642,16 @@ function addStateLookups(state: StateCore) {
 
   return {
     ...state,
-    streamIdToNode,
-    nameToNodes,
-    functionIdToNode,
-    nameToFunctions,
+    derivedLookups: {
+      streamIdToNode,
+      nameToNodes,
+      functionIdToNode,
+      nameToFunctions,
+    },
   }
 }
 
-function addDerivedState(state: StateCore): StateWithLookups {
+function addDerivedState(state: State): State {
   const stateWithLookups = addStateLookups(state);
 
   try {
@@ -681,6 +683,7 @@ export function reducer(state: State, action: Action): State {
       selectionPath: newSelectionPath,
       editingSelected: newEditingSelected,
       externalFunctions: state.externalFunctions,
+      derivedLookups: undefined,
     });
   } else {
     console.log('not handled');
@@ -809,4 +812,5 @@ export const initialState: State = addDerivedState({
     parameters: paramNames,
     jsFunction,
   })),
+  derivedLookups: undefined,
 });

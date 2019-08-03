@@ -99,18 +99,15 @@ export function isNode(node: any): node is Node {
 
 export type Path = (string | number)[];
 
-export interface StateCore {
+export interface State {
   root: ProgramNode;
   selectionPath: Path;
   editingSelected: boolean;
   externalFunctions: Array<ExternalFunctionNode>;
+  derivedLookups: {
+    streamIdToNode: Map<StreamID, ExpressionNode>;
+    nameToNodes: Map<string, Node[]>;
+    functionIdToNode: Map<FunctionID, ExternalFunctionNode>;
+    nameToFunctions: Map<string, Node[]>;
+  } | undefined;
 }
-
-export interface StateWithLookups extends StateCore {
-  streamIdToNode: Map<StreamID, ExpressionNode>;
-  nameToNodes: Map<string, Node[]>;
-  functionIdToNode: Map<FunctionID, ExternalFunctionNode>;
-  nameToFunctions: Map<string, Node[]>;
-};
-
-export type State = StateWithLookups;

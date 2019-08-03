@@ -27,10 +27,10 @@ const FLOAT_REGEX = /^[-+]?(?:\d*\.?\d+|\d+\.?\d*)(?:[eE][-+]?\d+)?$/;
 function generateChoices(text, mainState) {
   const choices = [];
 
-  const envNames = mainState.nameToNodes.keys();
+  const envNames = mainState.derivedLookups.nameToNodes.keys();
   const envSearchResults = fuzzySearchNames(text, envNames);
   for (const result of envSearchResults) {
-    const nodes = mainState.nameToNodes.get(result.name);
+    const nodes = mainState.derivedLookups.nameToNodes.get(result.name);
     for (const node of nodes) {
       choices.push({
         type: 'streamref',
@@ -39,10 +39,10 @@ function generateChoices(text, mainState) {
     }
   }
 
-  const funcNames = mainState.nameToFunctions.keys();
+  const funcNames = mainState.derivedLookups.nameToFunctions.keys();
   const funcSearchResults = fuzzySearchNames(text, funcNames);
   for (const result of funcSearchResults) {
-    const nodes = mainState.nameToFunctions.get(result.name);
+    const nodes = mainState.derivedLookups.nameToFunctions.get(result.name);
     for (const node of nodes) {
       choices.push({
         type: 'function',
@@ -104,12 +104,12 @@ export default function ExpressionChooser({ node, mainState, dispatch }) {
         return node.value.toString();
 
       case 'StreamReference': {
-        const targetExpressionNode = mainState.streamIdToNode.get(node.targetStreamId);
+        const targetExpressionNode = mainState.derivedLookups.streamIdToNode.get(node.targetStreamId);
         return targetExpressionNode.identifier ? targetExpressionNode.identifier.name : '';
       }
 
       case 'Application': {
-        const functionNode = mainState.functionIdToNode.get(node.functionId);
+        const functionNode = mainState.derivedLookups.functionIdToNode.get(node.functionId);
         return functionNode.identifier ? functionNode.identifier.name : '';
       }
 
