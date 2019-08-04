@@ -62,6 +62,9 @@ function traverseFromExpression(expression: ExpressionNode, state: State, tempor
       temporaryMarkedStreamIds.add(expression.streamId);
       traverseFromExpression(targetExpressionNode, state, temporaryMarkedStreamIds, permanentMarkedStreamIds, compiledDefinition);
       temporaryMarkedStreamIds.delete(expression.streamId);
+
+      // For now, we do an inefficient copy rather than being smart
+      compiledDefinition.applications.push([expression.streamId, (x: any) => x, [expression.targetStreamId]]);
       break;
 
     case 'Application':
