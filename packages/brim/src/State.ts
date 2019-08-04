@@ -1,3 +1,6 @@
+import { ExecutionContext } from 'riv-runtime';
+import { CompiledDefinition } from "./Compiler";
+
 export type StreamID = string;
 export type FunctionID = string;
 
@@ -109,5 +112,9 @@ export interface State {
     nameToNodes: Map<string, Node[]>;
     functionIdToNode: Map<FunctionID, ExternalFunctionNode>;
     nameToFunctions: Map<string, Node[]>;
+  } | undefined;
+  liveMain: {
+    context: ExecutionContext;
+    compiledDefinition: CompiledDefinition;
   } | undefined;
 }

@@ -1,6 +1,9 @@
 import { State, Path, StreamID, FunctionID, Node, isNode, ProgramNode, isProgramNode, ExpressionNode, isExpressionNode, ArrayLiteralNode, isArrayLiteralNode, FunctionNode, isApplicationNode } from './State';
 import genuid from './uid';
-import { compileExpressions, CompilationError } from './Compiler';
+import { compileExpressions, CompilationError, CompiledDefinition } from './Compiler';
+import { createNoInOutExecutionContext } from 'riv-runtime';
+import { createLiveFunction } from './LiveFunction';
+const { showString, animationTime, mouseDown } = require('riv-demo-lib');
 
 // We don't make a discriminated union of specific actions, but maybe we could
 interface Action {
@@ -651,18 +654,73 @@ function addStateLookups(state: State): State {
   }
 }
 
-function addDerivedState(state: State): State {
-  const stateWithLookups = addStateLookups(state);
+function addStateCompiled(oldState: State | undefined, newState: State): State {
+  let newCompiledDefinition: CompiledDefinition | undefined;
 
   try {
-    console.log('compiled', compileExpressions(stateWithLookups.root.expressions, stateWithLookups));
+    newCompiledDefinition = compileExpressions(newState.root.expressions, newState);
+    console.log('compiled to', newCompiledDefinition);
   } catch (e) {
     if (e instanceof CompilationError) {
       console.log('COMPILATION ERROR', e.message);
+    } else {
+      throw e;
     }
   }
 
-  return stateWithLookups;
+  const oldLiveMain = oldState && oldState.liveMain;
+
+  let newLiveMain;
+  const copy = () => {
+    newLiveMain = oldLiveMain;
+  };
+  const cleanupOld = () => {
+    console.log('cleanupOld');
+    oldLiveMain!.context.terminate();
+  }
+  const makeNew = () => {
+    const [liveStreamFunc, ] = createLiveFunction(newCompiledDefinition!);
+    const context = createNoInOutExecutionContext(liveStreamFunc);
+
+    setTimeout(() => { context.update(); }, 0);
+
+    newLiveMain = {
+      compiledDefinition: newCompiledDefinition,
+      context,
+    };
+  }
+  const makeEmpty = () => {
+    newLiveMain = undefined;
+  }
+
+  if (oldLiveMain) {
+    if (newCompiledDefinition) {
+      if (JSON.stringify(newCompiledDefinition) === JSON.stringify(oldLiveMain.compiledDefinition)) {
+        copy();
+      } else {
+        cleanupOld();
+        makeNew();
+      }
+    } else {
+      cleanupOld();
+      makeEmpty();
+    }
+  } else {
+    if (newCompiledDefinition) {
+      makeNew();
+    } else {
+      makeEmpty();
+    }
+  }
+
+  return {
+    ...newState,
+    liveMain: newLiveMain,
+  };
+}
+
+function addDerivedState(oldState: State | undefined, newState: State): State {
+  return addStateCompiled(oldState, addStateLookups(newState));
 }
 
 export function reducer(state: State, action: Action): State {
@@ -678,12 +736,13 @@ export function reducer(state: State, action: Action): State {
       throw new Error();
     }
 
-    return addDerivedState({
+    return addDerivedState(state, {
       root: newRoot,
       selectionPath: newSelectionPath,
       editingSelected: newEditingSelected,
       externalFunctions: state.externalFunctions,
       derivedLookups: undefined,
+      liveMain: undefined,
     });
   } else {
     console.log('not handled');
@@ -693,13 +752,13 @@ export function reducer(state: State, action: Action): State {
 
 const externalFunctions: Array<[string, Array<string>, Function]> = [
   ['add', ['a', 'b'], (a: number, b: number) => a + b],
-  ['showString', ['s'], (s: string) => { console.log(s); }],
-  ['animationTime', [], () => {}],
-  ['mouseDown', [], () => {}],
+  ['showString', ['s'], showString],
+  ['animationTime', [], animationTime],
+  ['mouseDown', [], mouseDown],
 ];
 
 const fooId = genuid();
-export const initialState: State = addDerivedState({
+export const initialState: State = addDerivedState(undefined, {
   root: {
     type: 'Program',
     expressions: [
@@ -813,4 +872,5 @@ export const initialState: State = addDerivedState({
     jsFunction,
   })),
   derivedLookups: undefined,
+  liveMain: undefined,
 });
