@@ -10,12 +10,13 @@ export function createLiveFunction(initialDefinition: CompiledDefinition): [Func
   let compiledDefinition = initialDefinition;
 
   const streamFunc = () => {
+    /* eslint-disable react-hooks/rules-of-hooks */
     const requestUpdate = useRequestUpdate();
 
     const activation = useVar<Activation>(() => {
       const applicationContext: Map<string, ExecutionContext> = new Map();
 
-      for (const [sid, func, argIds] of compiledDefinition.applications) {
+      for (const [sid, func, ] of compiledDefinition.applications) {
         applicationContext.set(sid, new ExecutionContext(func, requestUpdate));
       }
 
@@ -27,13 +28,16 @@ export function createLiveFunction(initialDefinition: CompiledDefinition): [Func
     useInitialize(() => {
       activations.add(activation.current);
       return () => {
+        activation.current.applicationContext.forEach((ctx) => {
+          ctx.terminate();
+        });
         activations.delete(activation.current);
       };
     });
 
     const streamValues = new Map(compiledDefinition.literalStreamValues); // clone
     const appCtx = activation.current.applicationContext;
-    for (const [sid, func, argIds] of compiledDefinition.applications) {
+    for (const [sid, , argIds] of compiledDefinition.applications) {
       const argVals = argIds.map(id => streamValues.get(id));
       const context = appCtx.get(sid);
       if (!context) { throw new Error(); }
