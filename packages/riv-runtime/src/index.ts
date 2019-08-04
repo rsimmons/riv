@@ -364,9 +364,9 @@ export function useDynamic(streamFunc: Function, onRequestUpdate: () => void) {
 
   // Update the stream function in record and all active contexts.
   record.data.streamFunc = streamFunc;
-  for (const ctx of record.data.activeContexts) {
+  record.data.activeContexts.forEach((ctx: ExecutionContext) => {
     ctx._setStreamFunc(streamFunc);
-  }
+  });
 
   ctx._endHook();
 
