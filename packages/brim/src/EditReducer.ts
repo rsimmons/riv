@@ -675,7 +675,6 @@ function addStateCompiled(oldState: State | undefined, newState: State): State {
     newLiveMain = oldLiveMain;
   };
   const cleanupOld = () => {
-    console.log('cleanupOld');
     oldLiveMain!.context.terminate();
   }
   const makeNew = () => {
