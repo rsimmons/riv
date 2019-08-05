@@ -681,7 +681,7 @@ function addStateCompiled(oldState: State | undefined, newState: State): State {
     const [liveStreamFunc, ] = createLiveFunction(newCompiledDefinition!);
     const context = createNoInOutExecutionContext(liveStreamFunc);
 
-    setTimeout(() => { context.update(); }, 0);
+    context.update(); // first update that kicks off further async updates
 
     newLiveMain = {
       compiledDefinition: newCompiledDefinition,
