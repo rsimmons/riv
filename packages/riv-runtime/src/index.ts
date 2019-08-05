@@ -139,8 +139,65 @@ export class ExecutionContext {
   }
 }
 
+/**
+ * Batches solve the problem of having multiple async/external updates that we want to happen
+ * simultaneously.
+ *
+ * For example, say we coalesce event handlers, so that we can have e.g. mouseDown() called in
+ * various places in the program, but all the calls hook in to a single shared event handler.
+ * Then when the mouse state changes, there may be many different activations in the program
+ * calling requestUpdate() when the shared event handler "broadcasts" out to them. But we want
+ * the program to re-evaluate in one batch, not successively for each requestUpdate() call.
+ * So in that situation, the shared handler should first beginBatch(), then broadcast out to
+ * each activation (each of which calls requestUpdate), and then call endBatch(). When endBatch()
+ * is called, a single update will happen that treats all of the mouse changes as synchronous.
+ *
+ * Another example is when we are live-editing a function definition and that function has many
+ * activations (e.g. it is an argument to a streamMap). When we make a change to the function
+ * definition, we can do it in a batch so that there is only one update.
+ */
+
+interface Batch {
+  callbacks: Set<() => void>;
+}
+let currentBatch: Batch | null = null;
+
+export function beginBatch(): void {
+  if (currentBatch) {
+    throw new Error('cannot begin batch when one is already active');
+  }
+
+  currentBatch = {
+    callbacks: new Set(),
+  };
+}
+
+export function endBatch(): void {
+  if (!currentBatch) {
+    throw new Error('cannot end batch when none is active');
+  }
+
+  currentBatch.callbacks.forEach(cb => { cb() });
+
+  currentBatch = null;
+}
+
+export function enqueueBatchedUpdate(callback: () => void) {
+  if (currentBatch) {
+    currentBatch.callbacks.add(callback);
+  } else {
+    // NOTE: If there is no current batch, we just call the callback immediately
+    callback();
+  }
+}
+
 export function createNoInOutExecutionContext(streamFunc: Function): ExecutionContext {
-  const onRequestUpdate = () => { ctx.update() };
+  const onRequestUpdate = () => {
+    enqueueBatchedUpdate(() => {
+      ctx.update();
+    });
+  };
+
   const ctx = new ExecutionContext(streamFunc, onRequestUpdate)
   return ctx;
 }
