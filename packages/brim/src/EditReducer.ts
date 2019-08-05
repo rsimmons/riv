@@ -1,7 +1,7 @@
 import { State, Path, StreamID, FunctionID, Node, isNode, ProgramNode, isProgramNode, ExpressionNode, isExpressionNode, ArrayLiteralNode, isArrayLiteralNode, FunctionNode, isApplicationNode } from './State';
 import genuid from './uid';
 import { compileExpressions, CompilationError, CompiledDefinition } from './Compiler';
-import { createNoInOutExecutionContext } from 'riv-runtime';
+import { createNullaryVoidRootExecutionContext } from 'riv-runtime';
 import { createLiveFunction } from './LiveFunction';
 const { showString, animationTime, mouseDown } = require('riv-demo-lib');
 
@@ -679,7 +679,7 @@ function addStateCompiled(oldState: State | undefined, newState: State): State {
   }
   const makeNew = () => {
     const [liveStreamFunc, ] = createLiveFunction(newCompiledDefinition!);
-    const context = createNoInOutExecutionContext(liveStreamFunc);
+    const context = createNullaryVoidRootExecutionContext(liveStreamFunc);
 
     context.update(); // first update that kicks off further async updates
 

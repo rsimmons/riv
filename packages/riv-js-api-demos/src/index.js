@@ -1,4 +1,4 @@
-import { createNoInOutExecutionContext } from 'riv-runtime';
+import { createNullaryVoidRootExecutionContext } from 'riv-runtime';
 import programs from './programs';
 
 const programListElem = document.getElementById('program-list');
@@ -18,7 +18,7 @@ const startProgram = (program) => {
   }
 
   programSourceElem.textContent = fixIndent(program.main.toString()); // hacky but works for now
-  currentContext = createNoInOutExecutionContext(program.main);
+  currentContext = createNullaryVoidRootExecutionContext(program.main);
   currentContext.update(); // do initial update. any further updates will be async
 }
 

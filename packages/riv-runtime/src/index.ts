@@ -191,7 +191,7 @@ export function enqueueBatchedUpdate(callback: () => void) {
   }
 }
 
-export function createNoInOutExecutionContext(streamFunc: Function): ExecutionContext {
+export function createNullaryVoidRootExecutionContext(streamFunc: Function): ExecutionContext {
   const onRequestUpdate = () => {
     enqueueBatchedUpdate(() => {
       ctx.update();
