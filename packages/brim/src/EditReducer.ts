@@ -1,9 +1,9 @@
 import { State, Path, StreamID, FunctionID, Node, isNode, ProgramNode, isProgramNode, ExpressionNode, isExpressionNode, ArrayLiteralNode, isArrayLiteralNode, FunctionNode, isApplicationNode } from './State';
 import genuid from './uid';
 import { compileExpressions, CompilationError, CompiledDefinition } from './Compiler';
-import { createNullaryVoidRootExecutionContext } from 'riv-runtime';
+import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
 import { createLiveFunction } from './LiveFunction';
-const { showString, animationTime, mouseDown } = require('riv-demo-lib');
+const { showString, animationTime, mouseDown, changeCount } = require('riv-demo-lib');
 
 // We don't make a discriminated union of specific actions, but maybe we could
 interface Action {
@@ -578,7 +578,7 @@ function recursiveReducer(state: State, node: Node, action: Action): (null | [No
         action,
       });
       if (handlerResult) {
-        console.log('handlerResult', handlerResult);
+        // console.log('handlerResult', handlerResult);
         const [handlerNewNode, handlerNewSubpath, handlerNewEditingSelected] = handlerResult;
         return [handlerNewNode, pathBefore.concat(handlerNewSubpath), handlerNewEditingSelected];
       }
@@ -655,11 +655,15 @@ function addStateLookups(state: State): State {
 }
 
 function addStateCompiled(oldState: State | undefined, newState: State): State {
-  let newCompiledDefinition: CompiledDefinition | undefined;
+  // We initialize with an "empty" definition, which we fall back on if compilation fails
+  let newCompiledDefinition: CompiledDefinition = {
+    literalStreamValues: [],
+    applications: [],
+  };
 
   try {
     newCompiledDefinition = compileExpressions(newState.root.expressions, newState);
-    console.log('compiled to', newCompiledDefinition);
+    // console.log('compiled to', newCompiledDefinition);
   } catch (e) {
     if (e instanceof CompilationError) {
       console.log('COMPILATION ERROR', e.message);
@@ -668,48 +672,36 @@ function addStateCompiled(oldState: State | undefined, newState: State): State {
     }
   }
 
-  const oldLiveMain = oldState && oldState.liveMain;
-
   let newLiveMain;
-  const copy = () => {
-    newLiveMain = oldLiveMain;
-  };
-  const cleanupOld = () => {
-    oldLiveMain!.context.terminate();
-  }
-  const makeNew = () => {
-    const [liveStreamFunc, ] = createLiveFunction(newCompiledDefinition!);
-    const context = createNullaryVoidRootExecutionContext(liveStreamFunc);
 
-    context.update(); // first update that kicks off further async updates
+  if (oldState) {
+    const { context, updateCompiledDefinition, compiledDefinition: oldCompiledDefinition } = oldState.liveMain!;
+
+    if (JSON.stringify(newCompiledDefinition) !== JSON.stringify(oldCompiledDefinition)) {
+      console.log('updating compiled definition to', newCompiledDefinition);
+      beginBatch(); // batch thing is not necessary yet, but will be in the future
+      updateCompiledDefinition(newCompiledDefinition);
+      endBatch();
+    }
 
     newLiveMain = {
-      compiledDefinition: newCompiledDefinition,
       context,
+      updateCompiledDefinition,
+      compiledDefinition: newCompiledDefinition,
     };
-  }
-  const makeEmpty = () => {
-    newLiveMain = undefined;
-  }
-
-  if (oldLiveMain) {
-    if (newCompiledDefinition) {
-      if (JSON.stringify(newCompiledDefinition) === JSON.stringify(oldLiveMain.compiledDefinition)) {
-        copy();
-      } else {
-        cleanupOld();
-        makeNew();
-      }
-    } else {
-      cleanupOld();
-      makeEmpty();
-    }
   } else {
-    if (newCompiledDefinition) {
-      makeNew();
-    } else {
-      makeEmpty();
-    }
+    // There is no old state, so we need to create the long-lived stuff
+    console.log('initializing compiled definition to', newCompiledDefinition);
+    const [liveStreamFunc, updateCompiledDefinition] = createLiveFunction(newCompiledDefinition);
+    const context = createNullaryVoidRootExecutionContext(liveStreamFunc);
+
+    context.update(); // first update that generally kicks off further async updates
+
+    newLiveMain = {
+      context,
+      updateCompiledDefinition,
+      compiledDefinition: newCompiledDefinition,
+    };
   }
 
   return {
@@ -727,9 +719,9 @@ export function reducer(state: State, action: Action): State {
 
   const recResult = recursiveReducer(state, state.root, action);
   if (recResult) {
-    console.log('handled');
+    // console.log('handled');
     const [newRoot, newSelectionPath, newEditingSelected] = recResult;
-    console.log('new selectionPath is', newSelectionPath, 'newEditingSelected is', newEditingSelected);
+    // console.log('new selectionPath is', newSelectionPath, 'newEditingSelected is', newEditingSelected);
 
     if (!isProgramNode(newRoot)) {
       throw new Error();
@@ -744,7 +736,7 @@ export function reducer(state: State, action: Action): State {
       liveMain: undefined,
     });
   } else {
-    console.log('not handled');
+    // console.log('not handled');
     return state;
   }
 }
@@ -754,6 +746,7 @@ const externalFunctions: Array<[string, Array<string>, Function]> = [
   ['showString', ['s'], showString],
   ['animationTime', [], animationTime],
   ['mouseDown', [], mouseDown],
+  ['changeCount', ['stream'], changeCount],
 ];
 
 const fooId = genuid();
@@ -770,6 +763,7 @@ export const initialState: State = addDerivedState(undefined, {
         },
         value: 123,
       },
+/*
       {
         type: 'IntegerLiteral',
         streamId: genuid(),
@@ -843,6 +837,7 @@ export const initialState: State = addDerivedState(undefined, {
         identifier: null,
         targetStreamId: fooId,
       },
+*/
       {
         type: 'Application',
         streamId: genuid(),
@@ -850,9 +845,10 @@ export const initialState: State = addDerivedState(undefined, {
         functionId: 'showString',
         arguments: [
           {
-            type: 'UndefinedExpression',
+            type: 'StreamReference',
             streamId: genuid(),
             identifier: null,
+            targetStreamId: fooId,
           },
         ],
       },

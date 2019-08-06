@@ -115,6 +115,7 @@ export interface State {
   } | undefined;
   liveMain: {
     context: ExecutionContext;
-    compiledDefinition: CompiledDefinition;
+    compiledDefinition: CompiledDefinition | null;
+    updateCompiledDefinition: (newDefinition: CompiledDefinition) => void;
   } | undefined;
 }
