@@ -355,3 +355,22 @@ export function streamMap(f, arr) {
   return outs;
 }
 
+function robustEquals(a, b) {
+  if (Number.isNaN(a) && Number.isNaN(b)) {
+    return true;
+  }
+
+  return a === b;
+}
+
+export function changeCount(s) {
+  const count = useVar(0);
+  const previous = useVar(s);
+
+  if (!robustEquals(s, previous.current)) {
+    count.current++;
+  }
+  previous.current = s;
+
+  return count.current;
+}
