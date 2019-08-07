@@ -13,20 +13,29 @@ const keyMap = {
   ZOOM_IN: 'shift+right',
   ZOOM_OUT: 'shift+left',
 
-  BEGIN_EDIT: 'enter',
+  TOGGLE_EDIT: 'enter',
 
-  INSERT_AFTER: [';', ','],
+  EDIT_AFTER: ['shift+enter', ','],
 
   DELETE: 'backspace',
   NAME: '=',
 };
 
-// "Regular" (printable, basically) characters that are used as commands.
-// We want to handle them as commands even if they happen in an input element,
-// and we don't want them to trigger an edit to begin.
-const COMMAND_CHARS = [
+// These are "normal" character keys that we use as commands. We identify them because we don't want
+// them to begin a "overwrite edit".
+const COMMAND_CHARS = new Set([
   '=',
-  ';',
+  ',',
+]);
+
+// By default, if an input element is focused, keys will be ignored. But we want some
+// of them to be processed even when an input is focused, and those ones are listed here.
+// Note that react-hotkeys only lets us list the individual keys here not "combinations"
+// as we would want.
+const CATCH_IN_INPUTS = [
+  'Enter',
+  'Shift',
+  '=',
   ',',
 ];
 
@@ -247,15 +256,15 @@ export default function Editor({ autoFocus }) {
   const onKeyDown = e => {
     // TODO: This is not a robust check, but the spec is complicated
     // (https://www.w3.org/TR/uievents-key/#keys-whitespace)
-    if ((e.target.tagName.toLowerCase() !== 'input') && ([...e.key].length === 1) && !e.altkey && !e.ctrlKey && !e.metaKey && !COMMAND_CHARS.includes(e.key)) {
+    if ((e.target.tagName.toLowerCase() !== 'input') && ([...e.key].length === 1) && !e.altkey && !e.ctrlKey && !e.metaKey && !COMMAND_CHARS.has(e.key)) {
       // Interestingly, the key here will still end up going into the input element, which is what we want.
-      dispatch({type: 'BEGIN_EDIT_FRESH'});
+      dispatch({type: 'BEGIN_OVERWRITE_EDIT'});
     }
   };
 
   return (
     <HotKeys keyMap={keyMap} handlers={handlers}>
-      <ObserveKeys only={COMMAND_CHARS}>
+      <ObserveKeys only={CATCH_IN_INPUTS}>
         <div className="Editor" onKeyDown={onKeyDown} tabIndex="0" ref={editorElem}>
           <DispatchContext.Provider value={dispatch}>
             <SelectedNodeContext.Provider value={nodeFromPath(state.root, state.selectionPath)}>

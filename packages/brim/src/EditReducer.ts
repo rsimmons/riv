@@ -200,36 +200,25 @@ const HANDLERS: Handler[] = [
     }
   }],
 
-  ['Expression', ['BEGIN_EDIT'], ({node, subpath}) => {
-    switch (node.type) {
-      case 'IntegerLiteral':
-      case 'UndefinedExpression':
-      case 'StreamReference':
-      case 'Application':
-        return [node, subpath, true];
+  ['Expression', ['TOGGLE_EDIT'], ({node, subpath, editingSelected}) => {
+    if (editingSelected) {
+      return [node, subpath, false];
+    } else {
+      switch (node.type) {
+        case 'IntegerLiteral':
+        case 'UndefinedExpression':
+        case 'StreamReference':
+        case 'Application':
+          return [node, subpath, true];
 
-      case 'ArrayLiteral':
-        // Can't directly edit
-        break;
+        case 'ArrayLiteral':
+          // Can't directly edit
+          break;
 
-      default:
-        throw new Error();
+        default:
+          throw new Error();
+      }
     }
-  }],
-
-  ['Expression', ['BEGIN_EDIT_FRESH'], ({node, subpath}) => {
-    if (!isExpressionNode(node)) {
-      throw new Error();
-    }
-    return [{
-      type: 'UndefinedExpression',
-      streamId: node.streamId,
-      identifier: node.identifier,
-    }, subpath, true];
-  }],
-
-  ['Expression', ['END_EXPRESSION_EDIT'], ({node, subpath}) => {
-    return [node, subpath, false];
   }],
 
   ['Expression', ['END_EXPRESSION_IDENTIFIER_EDIT'], ({node, subpath}) => {
@@ -252,16 +241,28 @@ const HANDLERS: Handler[] = [
     }, [], false];
   }],
 
+  ['Expression', ['BEGIN_OVERWRITE_EDIT'], ({node, subpath}) => {
+    if (!isExpressionNode(node)) {
+      throw new Error();
+    }
+    return [{
+      type: 'UndefinedExpression',
+      streamId: node.streamId,
+      identifier: node.identifier,
+    }, subpath, true];
+  }],
+
   ['Any', ['UPDATE_NODE'], ({subpath, action, editingSelected}) => {
     if (!action.newNode) {
       throw new Error();
     }
+    console.log('UPDATE_NODE newNode', action.newNode);
     if (subpath.length === 0) {
       return [action.newNode, subpath, editingSelected];
     }
   }],
 
-  ['Program', ['INSERT_AFTER'], ({node, subpath}) => {
+  ['Program', ['EDIT_AFTER'], ({node, subpath}) => {
     if (!isProgramNode(node)) {
       throw new Error();
     }
@@ -356,7 +357,7 @@ const HANDLERS: Handler[] = [
     }
   }],
 
-  ['ArrayLiteral', ['INSERT_AFTER'], ({node, subpath}) => {
+  ['ArrayLiteral', ['EDIT_AFTER'], ({node, subpath}) => {
     if (!isArrayLiteralNode(node)) {
       throw new Error();
     }

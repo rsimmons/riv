@@ -203,26 +203,12 @@ export default function ExpressionChooser({ node, mainState, dispatch }) {
 
   const onKeyDown = e => {
     switch (e.key) {
-      case 'Enter':
-        e.stopPropagation();
-        dispatch({type: 'END_EXPRESSION_EDIT'});
-        break;
-
-      case 'Backspace':
-        if (!e.target.value) {
-          dispatch({type: 'END_EXPRESSION_EDIT'});
-          dispatch({type: 'DELETE'});
-        }
-        break;
-
       case 'ArrowUp':
-        e.stopPropagation();
         e.preventDefault(); // we don't want the default behavior of moving the cursor
         adjustDropdownIndex(-1);
         break;
 
       case 'ArrowDown':
-        e.stopPropagation();
         e.preventDefault(); // we don't want the default behavior of moving the cursor
         adjustDropdownIndex(1);
         break;
