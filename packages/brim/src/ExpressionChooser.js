@@ -27,6 +27,13 @@ const FLOAT_REGEX = /^[-+]?(?:\d*\.?\d+|\d+\.?\d*)(?:[eE][-+]?\d+)?$/;
 function generateChoices(text, mainState) {
   const choices = [];
 
+  // If there is no text, put this first as a sort of default
+  if (text === '') {
+    choices.push({
+      type: 'undefined',
+    });
+  }
+
   const envNames = mainState.derivedLookups.nameToNodes.keys();
   const envSearchResults = fuzzySearchNames(text, envNames);
   for (const result of envSearchResults) {
