@@ -290,7 +290,7 @@ const HANDLERS: Handler[] = [
   /**
    * NAME on an expression will move to editing identifer.
    */
-  ['Expression', ['NAME'], ({node, subpath}) => {
+  ['Expression', ['BEGIN_EXPRESSION_IDENTIFIER_EDIT'], ({node, subpath}) => {
     if (!isExpressionNode(node)) {
       throw new Error();
     }

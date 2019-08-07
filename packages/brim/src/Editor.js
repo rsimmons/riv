@@ -18,7 +18,8 @@ const keyMap = {
   EDIT_AFTER: ['shift+enter', ','],
 
   DELETE: 'backspace',
-  NAME: '=',
+
+  BEGIN_EXPRESSION_IDENTIFIER_EDIT: '=',
 };
 
 // These are "normal" character keys that we use as commands. We identify them because we don't want
