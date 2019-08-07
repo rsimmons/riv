@@ -10,10 +10,10 @@
     "@types/react-dom": "16.8.4",
     "react": "^16.8.6",
     "react-dom": "^16.8.6",
-    "react-hotkeys": "^2.0.0-pre5",
+    "react-hotkeys": "^2.0.0",
     "react-scripts": "3.0.0",
-    "typescript": "3.4.4",
-    "riv-runtime": "^0.1.0"
+    "riv-runtime": "^0.1.0",
+    "typescript": "3.4.4"
   },
   "scripts": {
     "start": "react-scripts start",
