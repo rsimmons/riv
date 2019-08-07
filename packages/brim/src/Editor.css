@@ -65,3 +65,11 @@
 .Editor-application-argument-expression {
   display: inline-block;
 }
+
+.Editor-stream-name {
+  font-style: italic;
+}
+
+.Editor-application-function-name {
+  font-weight: bold;
+}

@@ -743,11 +743,11 @@ export function reducer(state: State, action: Action): State {
 }
 
 const externalFunctions: Array<[string, Array<string>, Function]> = [
-  ['add', ['a', 'b'], (a: number, b: number) => a + b],
-  ['showString', ['s'], showString],
+  ['add', ['_a', '_b'], (a: number, b: number) => a + b],
+  ['showValue', ['_v'], showString],
   ['animationTime', [], animationTime],
   ['mouseDown', [], mouseDown],
-  ['changeCount', ['stream'], changeCount],
+  ['changeCount', ['_stream'], changeCount],
 ];
 
 const fooId = genuid();
@@ -843,7 +843,7 @@ export const initialState: State = addDerivedState(undefined, {
         type: 'Application',
         streamId: genuid(),
         identifier: null,
-        functionId: 'showString',
+        functionId: 'showValue',
         arguments: [
           {
             type: 'StreamReference',

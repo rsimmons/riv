@@ -92,7 +92,7 @@ function IdentifierChooser({ initialName, onUpdateName, onEndEdit }) {
 }
 
 function NotEditingIdentifierView({ identifier }) {
-  return identifier.name;
+  return <span className="Editor-stream-name">{identifier.name}</span>;
 }
 
 function ExpressionIdentifierView({ expression }) {
@@ -151,7 +151,7 @@ function StreamReferenceView({ streamReference }) {
   if (!targetExpressionNode) {
     throw new Error();
   }
-  return <div>{(targetExpressionNode.identifier && targetExpressionNode.identifier.name) ? targetExpressionNode.identifier.name : '<stream ' + streamReference.targetStreamId + '>'}</div>
+  return <div><span className="Editor-stream-name">{(targetExpressionNode.identifier && targetExpressionNode.identifier.name) ? targetExpressionNode.identifier.name : '<stream ' + streamReference.targetStreamId + '>'}</span></div>
 }
 
 function ApplicationView({ application }) {
@@ -167,13 +167,12 @@ function ApplicationView({ application }) {
 
   return (
     <div>
-      <div>{(functionNode.identifier && functionNode.identifier.name) ? functionNode.identifier.name : '<function ' + application.functionId + '>'}(</div>
+      <div><span className="Editor-application-function-name">{(functionNode.identifier && functionNode.identifier.name) ? functionNode.identifier.name : '<function ' + application.functionId + '>'}</span></div>
       <div className="Editor-application-arguments">
         {functionNode.parameters.map((paramName, idx) => (
-          <div className="Editor-application-argument" key={paramName}><span className="Editor-application-argument-name">{paramName}:</span><span className="Editor-application-argument-expression"><ExpressionView expression={application.arguments[idx]} /></span></div>
+          <div className="Editor-application-argument" key={paramName}>{paramName.startsWith('_') ? null : <span className="Editor-application-argument-name">{paramName}:</span>}<span className="Editor-application-argument-expression"><ExpressionView expression={application.arguments[idx]} /></span></div>
         ))}
       </div>
-      <div>)</div>
     </div>
   );
 }
