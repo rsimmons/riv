@@ -217,13 +217,13 @@ export default function ExpressionChooser({ node, mainState, dispatch }) {
 
       case 'ArrowUp':
         e.stopPropagation();
-        e.preventDefault();
+        e.preventDefault(); // we don't want the default behavior of moving the cursor
         adjustDropdownIndex(-1);
         break;
 
       case 'ArrowDown':
         e.stopPropagation();
-        e.preventDefault();
+        e.preventDefault(); // we don't want the default behavior of moving the cursor
         adjustDropdownIndex(1);
         break;
 
