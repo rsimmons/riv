@@ -477,6 +477,31 @@ const HANDLERS: Handler[] = [
       }
     }
   }],
+
+  ['Application', ['DELETE'], ({node, subpath, action}) => {
+    if (!isApplicationNode(node)) {
+      throw new Error();
+    }
+
+    if ((subpath.length === 2) && (subpath[0] === 'arguments')) {
+      const idx = subpath[1];
+      if (typeof idx !== 'number') {
+        throw new Error();
+      }
+
+      const newArguments = node.arguments.slice();
+      newArguments[idx] = {
+        type: 'UndefinedExpression',
+        streamId: node.arguments[idx].streamId,
+        identifier: node.arguments[idx].identifier,
+      };
+
+      return [{
+        ...node,
+        arguments: newArguments,
+      }, ['arguments', idx], false];
+    }
+  }],
 ];
 
 /**
