@@ -75,7 +75,7 @@ const SCHEMA_NODES = {
     }
   },
 
-  ExternalFunction: {
+  Function: {
     fields: {
       functionId: {type: 'uid'},
       identifier: {type: 'node'},
@@ -88,7 +88,7 @@ const SCHEMA_NODES = {
 // TODO: If we want to include other classes in the lists, generate an expansion over the closure
 const SCHEMA_CLASSES: {[nodeType: string]: string[]} = {
   Expression: ['UndefinedExpression', 'IntegerLiteral', 'ArrayLiteral', 'StreamReference', 'Application'],
-  Any: ['Program', 'Identifier', 'UndefinedExpression', 'IntegerLiteral', 'ArrayLiteral', 'StreamReference', 'Application'],
+  Any: ['Program', 'Identifier', 'UndefinedExpression', 'IntegerLiteral', 'ArrayLiteral', 'StreamReference', 'Application', 'UserFunction'],
 }
 
 export function nodeFromPath(root: Node, path: Path): Node {
@@ -883,7 +883,7 @@ export const initialState: State = addDerivedState(undefined, {
   selectionPath: ['expressions', 0],
   editingSelected: false,
   externalFunctions: externalFunctions.map(([name, paramNames, jsFunction]) => ({
-    type: 'ExternalFunction',
+    type: 'Function',
     functionId: name,
     identifier: {
       type: 'Identifier',

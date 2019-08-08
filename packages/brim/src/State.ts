@@ -79,25 +79,20 @@ export function isExpressionNode(node: Node): node is ExpressionNode {
     || isApplicationNode(node);
 }
 
-export interface ExternalFunctionNode {
-  type: 'ExternalFunction',
-  functionId: FunctionID,
+export interface FunctionNode {
+  type: 'Function';
+  functionId: FunctionID;
   identifier: IdentifierNode | null;
   parameters: Array<string>; // just the names for now
   jsFunction: Function; // the actual callable JS function
 }
-export function isExternalFunctionNode(node: Node): node is ExternalFunctionNode {
-  return node.type === 'ExternalFunction';
-}
-
-export type FunctionNode = ExternalFunctionNode;
 export function isFunctionNode(node: Node): node is FunctionNode {
-  return isExternalFunctionNode(node);
+  return node.type === 'Function';
 }
 
-export type Node = ProgramNode | IdentifierNode | ExpressionNode | ExternalFunctionNode;
+export type Node = ProgramNode | IdentifierNode | ExpressionNode | FunctionNode;
 export function isNode(node: any): node is Node {
-  return isProgramNode(node) || isIdentifierNode(node) || isExpressionNode(node) || isExternalFunctionNode(node);
+  return isProgramNode(node) || isIdentifierNode(node) || isExpressionNode(node) || isFunctionNode(node);
 }
 
 export type Path = (string | number)[];
@@ -106,11 +101,11 @@ export interface State {
   root: ProgramNode;
   selectionPath: Path;
   editingSelected: boolean;
-  externalFunctions: Array<ExternalFunctionNode>;
+  externalFunctions: Array<FunctionNode>;
   derivedLookups: {
     streamIdToNode: Map<StreamID, ExpressionNode>;
     nameToNodes: Map<string, Node[]>;
-    functionIdToNode: Map<FunctionID, ExternalFunctionNode>;
+    functionIdToNode: Map<FunctionID, FunctionNode>;
     nameToFunctions: Map<string, Node[]>;
   } | undefined;
   liveMain: {
