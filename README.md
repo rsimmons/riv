@@ -1,8 +1,8 @@
 # Riv
 
-## NOTE: Riv is currently a proof of concept, and not ready for proper use
-
 ## Overview
+
+#### NOTE: Riv is currently a proof of concept, and not ready for proper use
 
 Riv is a programming language focused on building reactive programs out of cleanly composable "stream functions". It's declarative, functional (with some twists), and most directly inspired by dataflow programming, functional reactive programming, spreadsheets, and [React](https://reactjs.org/). It's particularly aimed at lightweight interactive/exploratory programming, ala [notebook environments](https://en.wikipedia.org/wiki/Notebook_interface), [Max](https://cycling74.com/products/max/)/[PD](https://puredata.info), [Processing](https://processing.org), [Scratch](https://scratch.mit.edu), etc.
 
