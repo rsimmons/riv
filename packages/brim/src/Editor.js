@@ -161,7 +161,7 @@ function ApplicationView({ application }) {
     throw new Error();
   }
 
-  if (functionNode.parameters.length !== application.arguments.length) {
+  if (functionNode.signature.parameters.length !== application.arguments.length) {
     throw new Error('params and args length mismatch');
   }
 
@@ -169,7 +169,7 @@ function ApplicationView({ application }) {
     <div>
       <div><span className="Editor-application-function-name">{(functionNode.identifier && functionNode.identifier.name) ? functionNode.identifier.name : '<function ' + application.functionId + '>'}</span></div>
       <div className="Editor-application-arguments">
-        {functionNode.parameters.map((paramName, idx) => (
+        {functionNode.signature.parameters.map((paramName, idx) => (
           <div className="Editor-application-argument" key={paramName}>{paramName.startsWith('_') ? null : <span className="Editor-application-argument-name">{paramName}:</span>}<span className="Editor-application-argument-expression"><ExpressionView expression={application.arguments[idx]} /></span></div>
         ))}
       </div>

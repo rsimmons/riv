@@ -1,8 +1,8 @@
-import { State, Path, StreamID, FunctionID, Node, isNode, ProgramNode, isProgramNode, ExpressionNode, isExpressionNode, ArrayLiteralNode, isArrayLiteralNode, FunctionNode, isApplicationNode } from './State';
+import { State, Path, StreamID, FunctionID, Node, isNode, ProgramNode, isProgramNode, ExpressionNode, isExpressionNode, ArrayLiteralNode, isArrayLiteralNode, FunctionSignature, FunctionNode, isApplicationNode } from './State';
 import genuid from './uid';
 import { compileExpressions, CompilationError, CompiledDefinition } from './Compiler';
 import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
-import { createLiveFunction } from './LiveFunction';
+import { createLiveFunction, Environment } from './LiveFunction';
 const { showString, animationTime, mouseDown, changeCount } = require('riv-demo-lib');
 
 // We don't make a discriminated union of specific actions, but maybe we could
@@ -72,15 +72,26 @@ const SCHEMA_NODES = {
       identifier: {type: 'node'},
       functionId: {type: 'uid'},
       arguments: {type: 'nodes'},
+      functionArguments: {type: 'nodes'},
     }
   },
 
-  Function: {
+  NativeFunction: {
     fields: {
       functionId: {type: 'uid'},
       identifier: {type: 'node'},
-      parameters: {type: 'value'},
-      jsFunc: {type: 'value'},
+      signature: {type: 'value'},
+      jsFunction: {type: 'value'},
+    }
+  },
+
+  UserFunction: {
+    fields: {
+      functionId: {type: 'uid'},
+      identifier: {type: 'node'},
+      signature: {type: 'value'},
+      jsFunction: {type: 'value'},
+      expressions: {type: 'nodes'},
     }
   },
 };
@@ -655,7 +666,7 @@ function addStateLookups(state: State): State {
 
   const functionIdToNode: Map<FunctionID, FunctionNode> = new Map();
   const nameToFunctions: Map<string, FunctionNode[]> = new Map();
-  for (const extFunc of state.externalFunctions) {
+  for (const extFunc of state.nativeFunctions) {
     functionIdToNode.set(extFunc.functionId, extFunc);
 
     if (extFunc.identifier) {
@@ -685,6 +696,7 @@ function addStateCompiled(oldState: State | undefined, newState: State): State {
   let newCompiledDefinition: CompiledDefinition = {
     literalStreamValues: [],
     applications: [],
+    containedDefinitions: [],
   };
 
   try {
@@ -718,7 +730,7 @@ function addStateCompiled(oldState: State | undefined, newState: State): State {
   } else {
     // There is no old state, so we need to create the long-lived stuff
     console.log('initializing compiled definition to', newCompiledDefinition);
-    const [liveStreamFunc, updateCompiledDefinition] = createLiveFunction(newCompiledDefinition);
+    const [liveStreamFunc, updateCompiledDefinition] = createLiveFunction(newCompiledDefinition, new Environment(), nativeFunctionEnvironment);
     const context = createNullaryVoidRootExecutionContext(liveStreamFunc);
 
     context.update(); // first update that generally kicks off further async updates
@@ -757,7 +769,7 @@ export function reducer(state: State, action: Action): State {
       root: newRoot,
       selectionPath: newSelectionPath,
       editingSelected: newEditingSelected,
-      externalFunctions: state.externalFunctions,
+      nativeFunctions: state.nativeFunctions,
       derivedLookups: undefined,
       liveMain: undefined,
     });
@@ -767,13 +779,20 @@ export function reducer(state: State, action: Action): State {
   }
 }
 
-const externalFunctions: Array<[string, Array<string>, Function]> = [
-  ['add', ['_a', '_b'], (a: number, b: number) => a + b],
-  ['showValue', ['_v'], showString],
-  ['animationTime', [], animationTime],
-  ['mouseDown', [], mouseDown],
-  ['changeCount', ['_stream'], changeCount],
+const nativeFunctions: Array<[string, Array<string>, Array<[string, FunctionSignature]>, Function]> = [
+  ['add', ['_a', '_b'], [], (a: number, b: number) => a + b],
+  ['showValue', ['_v'], [], showString],
+  ['animationTime', [], [], animationTime],
+  ['mouseDown', [], [], mouseDown],
+  ['changeCount', ['_stream'], [], changeCount],
 ];
+
+const nativeFunctionEnvironment: Environment<Function> = new Environment();
+nativeFunctionEnvironment.set('id', (x: any) => x);
+nativeFunctionEnvironment.set('Array_of', Array.of);
+nativeFunctions.forEach(([name, , , jsFunc]) => {
+  nativeFunctionEnvironment.set(name, jsFunc);
+});
 
 const fooId = genuid();
 export const initialState: State = addDerivedState(undefined, {
@@ -877,20 +896,23 @@ export const initialState: State = addDerivedState(undefined, {
             targetStreamId: fooId,
           },
         ],
+        functionArguments: [],
       },
     ]
   },
   selectionPath: ['expressions', 0],
   editingSelected: false,
-  externalFunctions: externalFunctions.map(([name, paramNames, jsFunction]) => ({
-    type: 'Function',
+  nativeFunctions: nativeFunctions.map(([name, paramNames, funcParams, ]) => ({
+    type: 'NativeFunction',
     functionId: name,
     identifier: {
       type: 'Identifier',
       name: name,
     },
-    parameters: paramNames,
-    jsFunction,
+    signature: {
+      parameters: paramNames,
+      functionParameters: funcParams,
+    },
   })),
   derivedLookups: undefined,
   liveMain: undefined,

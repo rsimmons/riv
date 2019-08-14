@@ -1,4 +1,4 @@
-import { State, StreamID, ExpressionNode } from './State';
+import { State, StreamID, FunctionID, ExpressionNode } from './State';
 
 /*
 Say we have the expression "display(add(time(), 10))". The call to display is an expression node, with streamId 'S1'. The call to add is an expression node with streamId 'S2'. The call to time is an expression node with streamId 'S3'. The literal 10 is a node with streamId 'S4'.
@@ -8,16 +8,18 @@ const compiledDefinition = {
     ['S4', 10],
   ],
   applications: [
-    ['S3', time, []],
-    ['S2', add, ['S3', 'S4']],
-    ['S1', display, ['S2']],
-  ]
+    ['S3', 'time', [], []],
+    ['S2', 'add', ['S3', 'S4'], []],
+    ['S1', 'display', ['S2'], []],
+  ],
+  containedDefinitions: [],
 };
 */
 
 export interface CompiledDefinition {
   literalStreamValues: Array<[StreamID, any]>;
-  applications: Array<[StreamID, Function, Array<StreamID>]>;
+  applications: Array<[StreamID, FunctionID, Array<StreamID>, Array<FunctionID>]>;
+  containedDefinitions: Array<[FunctionID, CompiledDefinition]>;
 }
 
 export class CompilationError extends Error {
@@ -50,7 +52,7 @@ function traverseFromExpression(expression: ExpressionNode, state: State, tempor
       temporaryMarkedStreamIds.delete(expression.streamId);
 
       // An array literal is handled as a function application, where the function is Array.of() which builds an array from its arguments.
-      compiledDefinition.applications.push([expression.streamId, Array.of, expression.items.map((item: ExpressionNode) => item.streamId)]);
+      compiledDefinition.applications.push([expression.streamId, 'Array_of', expression.items.map(item => item.streamId), []]);
       break;
 
     case 'StreamReference':
@@ -64,7 +66,7 @@ function traverseFromExpression(expression: ExpressionNode, state: State, tempor
       temporaryMarkedStreamIds.delete(expression.streamId);
 
       // For now, we do an inefficient copy rather than being smart
-      compiledDefinition.applications.push([expression.streamId, (x: any) => x, [expression.targetStreamId]]);
+      compiledDefinition.applications.push([expression.streamId, 'id', [expression.targetStreamId], []]);
       break;
 
     case 'Application':
@@ -79,7 +81,12 @@ function traverseFromExpression(expression: ExpressionNode, state: State, tempor
       }
       temporaryMarkedStreamIds.delete(expression.streamId);
 
-      compiledDefinition.applications.push([expression.streamId, functionNode.jsFunction, expression.arguments.map((item: ExpressionNode) => item.streamId)]);
+      for (const functionArgument of expression.functionArguments) {
+        // TODO: We will eventually want to traverse to any local streams that are used by this function definition
+        compiledDefinition.containedDefinitions.push([functionArgument.functionId, compileExpressions(functionArgument.expressions, state)]);
+      }
+
+      compiledDefinition.applications.push([expression.streamId, functionNode.functionId, expression.arguments.map(item => item.streamId), expression.functionArguments.map(item => item.functionId)]);
       break;
 
     default:
@@ -96,6 +103,7 @@ export function compileExpressions(expressions: Array<ExpressionNode>, state: St
   const compiledDefinition = {
     literalStreamValues: [],
     applications: [],
+    containedDefinitions: [],
   };
 
   for (const expression of expressions) {

@@ -64,7 +64,8 @@ export interface ApplicationNode {
   streamId: StreamID, // stream of the function "output"
   identifier: IdentifierNode | null;
   functionId: FunctionID; // the function we are applying (calling), could be user-defined or external
-  arguments: ExpressionNode[];
+  arguments: Array<ExpressionNode>;
+  functionArguments: Array<UserFunctionNode>;
 }
 export function isApplicationNode(node: Node): node is ApplicationNode {
   return node.type === 'Application';
@@ -79,15 +80,35 @@ export function isExpressionNode(node: Node): node is ExpressionNode {
     || isApplicationNode(node);
 }
 
-export interface FunctionNode {
-  type: 'Function';
+export interface FunctionSignature {
+  parameters: Array<string>; // just the names for now
+  functionParameters: Array<[string, FunctionSignature]>; // names and signatures
+}
+
+export interface NativeFunctionNode {
+  type: 'NativeFunction';
   functionId: FunctionID;
   identifier: IdentifierNode | null;
-  parameters: Array<string>; // just the names for now
-  jsFunction: Function; // the actual callable JS function
+  signature: FunctionSignature;
 }
+export function isNativeFunctionNode(node: Node): node is NativeFunctionNode {
+  return node.type === 'NativeFunction';
+}
+
+export interface UserFunctionNode {
+  type: 'UserFunction';
+  functionId: FunctionID;
+  identifier: IdentifierNode | null;
+  signature: FunctionSignature;
+  expressions: ExpressionNode[]; // the "body" of the function
+}
+export function isUserFunctionNode(node: Node): node is UserFunctionNode {
+  return node.type === 'UserFunction';
+}
+
+export type FunctionNode = NativeFunctionNode | UserFunctionNode;
 export function isFunctionNode(node: Node): node is FunctionNode {
-  return node.type === 'Function';
+  return isNativeFunctionNode(node) || isUserFunctionNode(node);
 }
 
 export type Node = ProgramNode | IdentifierNode | ExpressionNode | FunctionNode;
@@ -101,7 +122,7 @@ export interface State {
   root: ProgramNode;
   selectionPath: Path;
   editingSelected: boolean;
-  externalFunctions: Array<FunctionNode>;
+  nativeFunctions: Array<NativeFunctionNode>;
   derivedLookups: {
     streamIdToNode: Map<StreamID, ExpressionNode>;
     nameToNodes: Map<string, Node[]>;

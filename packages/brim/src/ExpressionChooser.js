@@ -86,7 +86,7 @@ function Choice({ choice }) {
       return <span><em>S</em> {choice.node.identifier.name} <small>(id {choice.node.streamId})</small></span>
 
     case 'function':
-      return <span><em>F</em> {choice.node.identifier.name}({choice.node.parameters.map(n => (n.startsWith('_') ? '\u25A1' : n)).join(', ')}) <small>(id {choice.node.functionId})</small></span>
+      return <span><em>F</em> {choice.node.identifier.name}({choice.node.signature.parameters.map(n => (n.startsWith('_') ? '\u25A1' : n)).join(', ')}) <small>(id {choice.node.functionId})</small></span>
 
     default:
       throw new Error();
@@ -155,11 +155,12 @@ export default function ExpressionChooser({ node, mainState, dispatch }) {
         newNode = {
           type: 'Application',
           functionId: choice.node.functionId,
-          arguments: choice.node.parameters.map(paramName => ({
+          arguments: choice.node.signature.parameters.map(paramName => ({
             type: 'UndefinedExpression',
             streamId: genuid(),
             identifier: null,
           })),
+          functionArguments: [], // TODO: create these as necessary
         };
         break;
 
