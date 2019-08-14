@@ -82,7 +82,10 @@ function traverseFromExpression(expression: ExpressionNode, state: State, tempor
       temporaryMarkedStreamIds.delete(expression.streamId);
 
       for (const functionArgument of expression.functionArguments) {
-        // TODO: We will eventually want to traverse to any local streams that are used by this function definition
+        // TODO: An application needs to traverse from its function-arguments out to any streams (in this exact scope)
+        // that it refers to (outer-scope references), because these are dependencies. So this would be an invalid cycle:
+        // x = map(v => x, [1,2,3])
+
         compiledDefinition.containedDefinitions.push([functionArgument.functionId, compileExpressions(functionArgument.expressions, state)]);
       }
 
