@@ -104,7 +104,6 @@ const SCHEMA_CLASSES: {[nodeType: string]: string[]} = {
 }
 
 export function nodeFromPath(root: Node, path: Path): Node {
-  console.log('nodeFromPath', root, path);
   let cur: any = root;
   for (const seg of path) {
     cur = cur[seg];
