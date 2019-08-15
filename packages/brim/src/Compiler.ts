@@ -1,4 +1,4 @@
-import { State, StreamID, FunctionID, ExpressionNode } from './State';
+import { State, StreamID, FunctionID, ExpressionNode, UserFunctionNode } from './State';
 
 /*
 Say we have the expression "display(add(time(), 10))". The call to display is an expression node, with streamId 'S1'. The call to add is an expression node with streamId 'S2'. The call to time is an expression node with streamId 'S3'. The literal 10 is a node with streamId 'S4'.
@@ -13,6 +13,7 @@ const compiledDefinition = {
     ['S1', 'display', ['S2'], []],
   ],
   containedDefinitions: [],
+  yieldStream: null,
 };
 */
 
@@ -20,6 +21,7 @@ export interface CompiledDefinition {
   literalStreamValues: Array<[StreamID, any]>;
   applications: Array<[StreamID, FunctionID, Array<StreamID>, Array<FunctionID>]>;
   containedDefinitions: Array<[FunctionID, CompiledDefinition]>;
+  yieldStream: StreamID | null;
 }
 
 export class CompilationError extends Error {
@@ -86,7 +88,7 @@ function traverseFromExpression(expression: ExpressionNode, state: State, tempor
         // that it refers to (outer-scope references), because these are dependencies. So this would be an invalid cycle:
         // x = map(v => x, [1,2,3])
 
-        compiledDefinition.containedDefinitions.push([functionArgument.functionId, compileExpressions(functionArgument.expressions, state)]);
+        compiledDefinition.containedDefinitions.push([functionArgument.functionId, compileUserDefinition(functionArgument, state)]);
       }
 
       compiledDefinition.applications.push([expression.streamId, functionNode.functionId, expression.arguments.map(item => item.streamId), expression.functionArguments.map(item => item.functionId)]);
@@ -99,18 +101,20 @@ function traverseFromExpression(expression: ExpressionNode, state: State, tempor
   permanentMarkedStreamIds.add(expression.streamId);
 }
 
-export function compileExpressions(expressions: Array<ExpressionNode>, state: State): CompiledDefinition {
+export function compileUserDefinition(definition: UserFunctionNode, state: State): CompiledDefinition {
   // Using terminology from https://en.wikipedia.org/wiki/Topological_sorting#Depth-first_search
   const temporaryMarkedStreamIds: Set<StreamID> = new Set();
   const permanentMarkedStreamIds: Set<StreamID> = new Set();
-  const compiledDefinition = {
+  const compiledDefinition: CompiledDefinition = {
     literalStreamValues: [],
     applications: [],
     containedDefinitions: [],
+    yieldStream: null,
   };
 
-  for (const expression of expressions) {
+  for (const expression of definition.expressions) {
     traverseFromExpression(expression, state, temporaryMarkedStreamIds, permanentMarkedStreamIds, compiledDefinition);
+    compiledDefinition.yieldStream = expression.streamId; // yield the last expression
   }
 
   return compiledDefinition;

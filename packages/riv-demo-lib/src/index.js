@@ -337,7 +337,7 @@ export function received(evts) {
 /**
  * F is a stream function that must stay hook-equivalent.
  */
-export function streamMap(f, arr) {
+export function streamMap(f, arr = []) {
   const createFContext = useDynamic(f);
   const fContexts = useVar([]);
 

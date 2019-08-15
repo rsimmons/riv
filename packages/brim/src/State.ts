@@ -6,7 +6,7 @@ export type FunctionID = string;
 
 export interface ProgramNode {
   type: 'Program';
-  expressions: ExpressionNode[];
+  mainDefinition: UserFunctionNode;
 }
 export function isProgramNode(node: Node): node is ProgramNode {
   return node.type === 'Program';
@@ -100,6 +100,8 @@ export interface UserFunctionNode {
   functionId: FunctionID;
   identifier: IdentifierNode | null;
   signature: FunctionSignature;
+  parameterStreamIds: Array<StreamID>;
+  functionParameterFunctionIds: Array<FunctionID>;
   expressions: ExpressionNode[]; // the "body" of the function
 }
 export function isUserFunctionNode(node: Node): node is UserFunctionNode {
@@ -119,7 +121,7 @@ export function isNode(node: any): node is Node {
 export type Path = (string | number)[];
 
 export interface State {
-  root: ProgramNode;
+  program: ProgramNode;
   selectionPath: Path;
   editingSelected: boolean;
   nativeFunctions: Array<NativeFunctionNode>;

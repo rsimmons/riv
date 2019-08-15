@@ -30,7 +30,7 @@
   padding: 0 1em;
 }
 
-.Editor-program-expression {
+.Editor-definition-expression {
   padding: 0.2em 0;
 }
 
@@ -45,7 +45,7 @@
   color: #aaa;
 }
 
-.Editor-array-items, .Editor-application-arguments {
+.Editor-array-items, .Editor-application-arguments, .Editor-user-function-expressions {
   padding-left: 1em;
 }
 
@@ -53,7 +53,7 @@
   padding: 0.05em 0;
 }
 
-.Editor-program, .Editor-program-expression, .Editor-array-item, .Editor-application-argument, .Editor-expression-identifier {
+.Editor-program, .Editor-definition-expression, .Editor-array-item, .Editor-application-argument, .Editor-expression-identifier {
   width: fit-content;
 }
 

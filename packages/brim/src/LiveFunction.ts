@@ -106,6 +106,12 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerS
       if (!context) { throw new Error(); }
       streamEnv.set(sid, context.update(...argVals));
     }
+
+    if (compiledDefinition.yieldStream) {
+      return streamEnv.get(compiledDefinition.yieldStream);
+    } else {
+      return undefined;
+    }
   };
 
   const updateCompiledDefinition = (newDefinition: CompiledDefinition): void => {

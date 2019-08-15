@@ -1,9 +1,9 @@
-import { State, Path, StreamID, FunctionID, Node, isNode, ProgramNode, isProgramNode, ExpressionNode, isExpressionNode, ArrayLiteralNode, isArrayLiteralNode, FunctionSignature, FunctionNode, isApplicationNode } from './State';
+import { State, Path, StreamID, FunctionID, Node, isNode, isProgramNode, ExpressionNode, isExpressionNode, ArrayLiteralNode, isArrayLiteralNode, FunctionSignature, FunctionNode, isApplicationNode, UserFunctionNode, isUserFunctionNode } from './State';
 import genuid from './uid';
-import { compileExpressions, CompilationError, CompiledDefinition } from './Compiler';
+import { compileUserDefinition, CompilationError, CompiledDefinition } from './Compiler';
 import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
 import { createLiveFunction, Environment } from './LiveFunction';
-const { showString, animationTime, mouseDown, changeCount } = require('riv-demo-lib');
+const { showString, animationTime, mouseDown, changeCount, streamMap } = require('riv-demo-lib');
 
 // We don't make a discriminated union of specific actions, but maybe we could
 interface Action {
@@ -25,7 +25,7 @@ type Handler = [string, string[], (args: HandlerArgs) => HandlerResult];
 const SCHEMA_NODES = {
   Program: {
     fields: {
-      expressions: {type: 'nodes'},
+      mainDefinition: {type: 'node'},
     }
   },
 
@@ -90,7 +90,8 @@ const SCHEMA_NODES = {
       functionId: {type: 'uid'},
       identifier: {type: 'node'},
       signature: {type: 'value'},
-      jsFunction: {type: 'value'},
+      parameterStreamIds: {type: 'value'},
+      functionParameterFunctionIds: {type: 'value'},
       expressions: {type: 'nodes'},
     }
   },
@@ -103,6 +104,7 @@ const SCHEMA_CLASSES: {[nodeType: string]: string[]} = {
 }
 
 export function nodeFromPath(root: Node, path: Path): Node {
+  console.log('nodeFromPath', root, path);
   let cur: any = root;
   for (const seg of path) {
     cur = cur[seg];
@@ -146,7 +148,7 @@ export function nodeSplitPath(node: Node, root: Node, path: Path): [Path, Path] 
 
 const equiv = (a: any, b: any): boolean => JSON.stringify(a) === JSON.stringify(b);
 
-function deleteExpression(node: ProgramNode, removeIdx: number): [ProgramNode, Path, boolean] {
+function deleteDefinitionExpression(node: UserFunctionNode, removeIdx: number): [UserFunctionNode, Path, boolean] {
   // TODO: Handle case where we delete all expressions
   if (typeof(removeIdx) !== 'number') {
     throw new Error();
@@ -176,8 +178,8 @@ function deleteExpression(node: ProgramNode, removeIdx: number): [ProgramNode, P
 }
 
 const HANDLERS: Handler[] = [
-  ['Program', ['MOVE_UP', 'MOVE_DOWN'], ({node, subpath, action}) => {
-    if (!isProgramNode(node)) {
+  ['UserFunction', ['MOVE_UP', 'MOVE_DOWN'], ({node, subpath, action}) => {
+    if (!isUserFunctionNode(node)) {
       throw new Error();
     }
 
@@ -198,8 +200,8 @@ const HANDLERS: Handler[] = [
     }
   }],
 
-  ['Program', ['DELETE'], ({node, subpath}) => {
-    if (!isProgramNode(node)) {
+  ['UserFunction', ['DELETE'], ({node, subpath}) => {
+    if (!isUserFunctionNode(node)) {
       throw new Error();
     }
     if ((subpath.length === 2) && (subpath[0] === 'expressions')) {
@@ -207,7 +209,7 @@ const HANDLERS: Handler[] = [
       if (typeof(removeIdx) !== 'number') {
         throw new Error();
       }
-      return deleteExpression(node, removeIdx);
+      return deleteDefinitionExpression(node, removeIdx);
     }
   }],
 
@@ -273,8 +275,8 @@ const HANDLERS: Handler[] = [
     }
   }],
 
-  ['Program', ['EDIT_AFTER'], ({node, subpath}) => {
-    if (!isProgramNode(node)) {
+  ['UserFunction', ['EDIT_AFTER'], ({node, subpath}) => {
+    if (!isUserFunctionNode(node)) {
       throw new Error();
     }
     if ((subpath.length >= 2) && (subpath[0] === 'expressions')) {
@@ -282,7 +284,7 @@ const HANDLERS: Handler[] = [
       if (typeof(afterIdx) !== 'number') {
         throw new Error();
       }
-      const newNode: ProgramNode = {
+      const newNode: UserFunctionNode = {
         ...node,
         expressions: [
           ...node.expressions.slice(0, afterIdx+1),
@@ -520,7 +522,7 @@ const HANDLERS: Handler[] = [
  */
 function recursiveReducer(state: State, node: Node, action: Action): (null | [Node, Path, boolean]) {
   // If this node is not on the selection path, we can short circuit
-  if (!nodeOnPath(node, state.root, state.selectionPath)) {
+  if (!nodeOnPath(node, state.program, state.selectionPath)) {
     return null;
   }
 
@@ -607,7 +609,7 @@ function recursiveReducer(state: State, node: Node, action: Action): (null | [No
   for (const [nt, acts, hfunc] of HANDLERS) {
     const matchingTypes = SCHEMA_CLASSES[nt] ? SCHEMA_CLASSES[nt] : [nt];
     if (matchingTypes.includes(node.type) && acts.includes(action.type)) {
-      const [pathBefore, pathAfter] = nodeSplitPath(node, state.root, state.selectionPath);
+      const [pathBefore, pathAfter] = nodeSplitPath(node, state.program, state.selectionPath);
       const handlerResult = hfunc({
         node,
         subpath: pathAfter,
@@ -631,6 +633,9 @@ function recursiveBuildStreamMaps(node: Node, streamIdToNode: Map<StreamID, Node
       throw new Error();
     }
 
+    if (streamIdToNode.has(node.streamId)) {
+      throw new Error('stream ids must be unique');
+    }
     streamIdToNode.set(node.streamId, node);
 
     if (node.identifier) {
@@ -642,19 +647,21 @@ function recursiveBuildStreamMaps(node: Node, streamIdToNode: Map<StreamID, Node
         nameToNodes.set(name, [node]);
       }
     }
+  } else {
+    switch (node.type) {
+      case 'Program':
+        recursiveBuildStreamMaps(node.mainDefinition, streamIdToNode, nameToNodes);
+        break;
 
-    return;
-  }
+      case 'UserFunction':
+        for (const expression of node.expressions) {
+          recursiveBuildStreamMaps(expression, streamIdToNode, nameToNodes);
+        }
+        break;
 
-  switch (node.type) {
-    case 'Program':
-      for (const expression of node.expressions) {
-        recursiveBuildStreamMaps(expression, streamIdToNode, nameToNodes);
-      }
-      break;
-
-    default:
-      throw new Error();
+      default:
+        throw new Error();
+    }
   }
 }
 
@@ -662,7 +669,7 @@ function addStateLookups(state: State): State {
   const streamIdToNode: Map<StreamID, ExpressionNode> = new Map();
   const nameToNodes: Map<string, ExpressionNode[]> = new Map();
 
-  recursiveBuildStreamMaps(state.root, streamIdToNode, nameToNodes);
+  recursiveBuildStreamMaps(state.program, streamIdToNode, nameToNodes);
 
   const functionIdToNode: Map<FunctionID, FunctionNode> = new Map();
   const nameToFunctions: Map<string, FunctionNode[]> = new Map();
@@ -697,10 +704,11 @@ function addStateCompiled(oldState: State | undefined, newState: State): State {
     literalStreamValues: [],
     applications: [],
     containedDefinitions: [],
+    yieldStream: null,
   };
 
   try {
-    newCompiledDefinition = compileExpressions(newState.root.expressions, newState);
+    newCompiledDefinition = compileUserDefinition(newState.program.mainDefinition, newState);
     // console.log('compiled to', newCompiledDefinition);
   } catch (e) {
     if (e instanceof CompilationError) {
@@ -755,18 +763,18 @@ function addDerivedState(oldState: State | undefined, newState: State): State {
 export function reducer(state: State, action: Action): State {
   console.log('action', action.type);
 
-  const recResult = recursiveReducer(state, state.root, action);
+  const recResult = recursiveReducer(state, state.program, action);
   if (recResult) {
     // console.log('handled');
-    const [newRoot, newSelectionPath, newEditingSelected] = recResult;
+    const [newProgram, newSelectionPath, newEditingSelected] = recResult;
     // console.log('new selectionPath is', newSelectionPath, 'newEditingSelected is', newEditingSelected);
 
-    if (!isProgramNode(newRoot)) {
+    if (!isProgramNode(newProgram)) {
       throw new Error();
     }
 
     return addDerivedState(state, {
-      root: newRoot,
+      program: newProgram,
       selectionPath: newSelectionPath,
       editingSelected: newEditingSelected,
       nativeFunctions: state.nativeFunctions,
@@ -785,6 +793,7 @@ const nativeFunctions: Array<[string, Array<string>, Array<[string, FunctionSign
   ['animationTime', [], [], animationTime],
   ['mouseDown', [], [], mouseDown],
   ['changeCount', ['_stream'], [], changeCount],
+  ['streamMap', ['_array'], [['_func', {parameters: ['_v'], functionParameters: []}]], streamMap],
 ];
 
 const nativeFunctionEnvironment: Environment<Function> = new Environment();
@@ -796,111 +805,47 @@ nativeFunctions.forEach(([name, , , jsFunc]) => {
 
 const fooId = genuid();
 export const initialState: State = addDerivedState(undefined, {
-  root: {
+  program: {
     type: 'Program',
-    expressions: [
-      {
-        type: 'IntegerLiteral',
-        streamId: fooId,
-        identifier: {
-          type: 'Identifier',
-          name: 'foo',
-        },
-        value: 123,
+    mainDefinition: {
+      type: 'UserFunction',
+      functionId: genuid(),
+      identifier: null,
+      signature: {
+        parameters: [],
+        functionParameters: [],
       },
-/*
-      {
-        type: 'IntegerLiteral',
-        streamId: genuid(),
-        identifier: null,
-        value: 456,
-      },
-      {
-        type: 'IntegerLiteral',
-        streamId: genuid(),
-        identifier: {
-          type: 'Identifier',
-          name: 'bar',
-        },
-        value: 789,
-      },
-      {
-        type: 'ArrayLiteral',
-        streamId: genuid(),
-        identifier: {
-          type: 'Identifier',
-          name: 'an array literal',
-        },
-        items: [
-          {
-            type: 'IntegerLiteral',
-            streamId: genuid(),
-            identifier: null,
-            value: 123,
+      parameterStreamIds: [],
+      functionParameterFunctionIds: [],
+      expressions: [
+        {
+          type: 'IntegerLiteral',
+          streamId: fooId,
+          identifier: {
+            type: 'Identifier',
+            name: 'foo',
           },
-          {
-            type: 'ArrayLiteral',
-            streamId: genuid(),
-            identifier: {
-              type: 'Identifier',
-              name: 'nice subarray',
+          value: 123,
+        },
+        {
+          type: 'Application',
+          streamId: genuid(),
+          identifier: null,
+          functionId: 'showValue',
+          arguments: [
+            {
+              type: 'StreamReference',
+              streamId: genuid(),
+              identifier: null,
+              targetStreamId: fooId,
             },
-                items: [
-              {
-                type: 'IntegerLiteral',
-                streamId: genuid(),
-                identifier: null,
-                value: 345,
-              },
-              {
-                type: 'IntegerLiteral',
-                streamId: genuid(),
-                identifier: null,
-                value: 456,
-              },
-            ],
-          },
-          {
-            type: 'IntegerLiteral',
-            streamId: genuid(),
-            identifier: null,
-            value: 234,
-          },
-        ],
-      },
-      {
-        type: 'UndefinedExpression',
-        streamId: genuid(),
-        identifier: {
-          type: 'Identifier',
-          name: 'quux',
+          ],
+          functionArguments: [],
         },
-      },
-      {
-        type: 'StreamReference',
-        streamId: genuid(),
-        identifier: null,
-        targetStreamId: fooId,
-      },
-*/
-      {
-        type: 'Application',
-        streamId: genuid(),
-        identifier: null,
-        functionId: 'showValue',
-        arguments: [
-          {
-            type: 'StreamReference',
-            streamId: genuid(),
-            identifier: null,
-            targetStreamId: fooId,
-          },
-        ],
-        functionArguments: [],
-      },
-    ]
+      ],
+    },
   },
-  selectionPath: ['expressions', 0],
+  selectionPath: ['mainDefinition', 'expressions', 0],
   editingSelected: false,
   nativeFunctions: nativeFunctions.map(([name, paramNames, funcParams, ]) => ({
     type: 'NativeFunction',

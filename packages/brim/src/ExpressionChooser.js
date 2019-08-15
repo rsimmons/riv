@@ -86,7 +86,10 @@ function Choice({ choice }) {
       return <span><em>S</em> {choice.node.identifier.name} <small>(id {choice.node.streamId})</small></span>
 
     case 'function':
-      return <span><em>F</em> {choice.node.identifier.name}({choice.node.signature.parameters.map(n => (n.startsWith('_') ? '\u25A1' : n)).join(', ')}) <small>(id {choice.node.functionId})</small></span>
+      return <span><em>F</em> {choice.node.identifier.name}({[].concat([
+        choice.node.signature.parameters.map(n => (n.startsWith('_') ? '\u25A1' : n)), // parameters
+        choice.node.signature.functionParameters.map(([n, ]) => 'F ' + ((n.startsWith('_') ? '\u25A1' : n))), // function parameters
+      ]).join(', ')})</span>
 
     default:
       throw new Error();
@@ -160,7 +163,21 @@ export default function ExpressionChooser({ node, mainState, dispatch }) {
             streamId: genuid(),
             identifier: null,
           })),
-          functionArguments: [], // TODO: create these as necessary
+          functionArguments: choice.node.signature.functionParameters.map(([, signature]) => ({
+            type: 'UserFunction',
+            functionId: genuid(),
+            identifier: null,
+            signature, // TODO: do we need to defensively copy this?
+            parameterStreamIds: signature.parameters.map(pn => genuid()),
+            functionParameterFunctionIds: signature.functionParameters.map(([pn, sig]) => genuid()),
+            expressions: [
+              {
+                type: 'UndefinedExpression',
+                streamId: genuid(),
+                identifier: null,
+              },
+            ],
+          })),
         };
         break;
 

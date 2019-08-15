@@ -53,13 +53,21 @@ const FullStateContext = createContext();
 function ProgramView({ program }) {
   return (
     <div className="Editor-program">
-      {program.expressions.map((expression) => (
-        <div className="Editor-program-expression" key={expression.streamId}>
+      <DefinitionExpressions expressions={program.mainDefinition.expressions} />
+    </div>
+  );
+}
+
+function DefinitionExpressions({ expressions }) {
+  return (
+    <>
+      {expressions.map((expression) => (
+        <div className="Editor-definition-expression" key={expression.streamId}>
           <ExpressionView expression={expression} />
         </div>
       ))}
-    </div>
-  );
+    </>
+  )
 }
 
 function IdentifierChooser({ initialName, onUpdateName, onEndEdit }) {
@@ -172,6 +180,12 @@ function ApplicationView({ application }) {
         {functionNode.signature.parameters.map((paramName, idx) => (
           <div className="Editor-application-argument" key={paramName}>{paramName.startsWith('_') ? null : <span className="Editor-application-argument-name">{paramName}:</span>}<span className="Editor-application-argument-expression"><ExpressionView expression={application.arguments[idx]} /></span></div>
         ))}
+        {functionNode.signature.functionParameters.map(([paramName, signature], idx) => (
+          <div className="Editor-application-argument" key={paramName}>
+            <div>F {paramName.startsWith('_') ? null : <span className="Editor-application-argument-name">{paramName}:</span>}</div>
+            <div className="Editor-user-function-expressions"><DefinitionExpressions expressions={application.functionArguments[idx].expressions} /></div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -267,9 +281,9 @@ export default function Editor({ autoFocus }) {
       <ObserveKeys only={CATCH_IN_INPUTS}>
         <div className="Editor" onKeyDown={onKeyDown} tabIndex="0" ref={editorElem}>
           <DispatchContext.Provider value={dispatch}>
-            <SelectedNodeContext.Provider value={nodeFromPath(state.root, state.selectionPath)}>
+            <SelectedNodeContext.Provider value={nodeFromPath(state.program, state.selectionPath)}>
               <FullStateContext.Provider value={state}>
-                <ProgramView program={state.root} />
+                <ProgramView program={state.program} />
               </FullStateContext.Provider>
             </SelectedNodeContext.Provider>
           </DispatchContext.Provider>
