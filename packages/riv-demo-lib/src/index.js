@@ -146,7 +146,15 @@ export function audioDriver(generator) {
       const buffer = e.outputBuffer.getChannelData(0);
       for (let i = 0; i < buffer.length; i++) {
         emitAdvanceFrameEvt();
-        buffer[i] = generatorCtx.current.update(frameCount.current/sampleRate.current, advanceFrameEvts, sampleRate.current);
+        let frameVal = generatorCtx.current.update(frameCount.current/sampleRate.current, advanceFrameEvts, sampleRate.current);
+        if (!frameVal ||  Number.isNaN(frameVal)) {
+          frameVal = 0;
+        } else if (frameVal > 1) {
+          frameVal = 1;
+        } else if (frameVal < -1) {
+          frameVal = -1;
+        }
+        buffer[i] = frameVal;
         frameCount.current++;
       }
     };
