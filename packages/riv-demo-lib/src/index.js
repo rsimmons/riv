@@ -108,7 +108,7 @@ function domEvts(eventTarget, type, extra) {
 }
 
 export function mouseClickEvts() {
-  return domEvts(document, 'click');
+  return domEvts(document, 'mousedown');
 }
 
 export function mouseDown() {
