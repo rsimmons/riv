@@ -46,22 +46,25 @@ export class ExecutionContext {
     // Move hook record cursor to start of chain
     this.recordCursor = this.hookRecordChain;
 
-    const retval = this.streamFunc.apply(null, arguments);
+    let retval;
+    try {
+      retval = this.streamFunc.apply(null, arguments);
 
-    // This should be null, otherwise there are hook records we didn't get to, and something is amiss
-    if (this.recordCursor.next) {
-      throw new Error('Did not reach all hook records in update');
+      // This should be null, otherwise there are hook records we didn't get to, and something is amiss
+      if (this.recordCursor.next) {
+        throw new Error('Did not reach all hook records in update');
+      }
+    } finally {
+      // Pop the top frame from the update stack
+      const poppedFrame = currentUpdateFrame;
+      if (!poppedFrame) {
+        throw new Error('Cannot pop update frame because current is null');
+      }
+      if (poppedFrame.executionContext !== this) {
+        throw new Error("Popped frame from update stack but context did not match");
+      }
+      currentUpdateFrame = poppedFrame.previousFrame;
     }
-
-    // Pop the top frame from the update stack
-    const poppedFrame = currentUpdateFrame;
-    if (!poppedFrame) {
-      throw new Error('Cannot pop update frame because current is null');
-    }
-    if (poppedFrame.executionContext !== this) {
-      throw new Error("Popped frame from update stack but context did not match");
-    }
-    currentUpdateFrame = poppedFrame.previousFrame;
 
     this.updateCount++;
 
