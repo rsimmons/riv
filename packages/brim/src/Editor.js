@@ -162,6 +162,17 @@ function StreamReferenceView({ streamReference }) {
   return <div><span className="Editor-stream-name">{(targetExpressionNode.identifier && targetExpressionNode.identifier.name) ? targetExpressionNode.identifier.name : '<stream ' + streamReference.targetStreamId + '>'}</span></div>
 }
 
+function UserFunctionView({ userFunction }) {
+  // <span>{paramName.startsWith('_') ? null : <span className="Editor-application-argument-name">{paramName}:</span>}</span>
+
+  return (
+    <div className={useWithSelectedClass(userFunction, 'Editor-user-function')}>
+      <div>F {userFunction.parameters.map(param => param.identifier.name).join(', ')}</div>
+      <div className="Editor-user-function-expressions"><DefinitionExpressions expressions={userFunction.expressions} /></div>
+    </div>
+  );
+}
+
 function ApplicationView({ application }) {
   const {functionIdToNode} = useContext(FullStateContext).derivedLookups;
   const functionNode = functionIdToNode.get(application.functionId);
@@ -173,6 +184,10 @@ function ApplicationView({ application }) {
     throw new Error('params and args length mismatch');
   }
 
+  if (functionNode.signature.functionParameters.length !== application.functionArguments.length) {
+    throw new Error('function params and args length mismatch');
+  }
+
   return (
     <div>
       <div><span className="Editor-application-function-name">{(functionNode.identifier && functionNode.identifier.name) ? functionNode.identifier.name : '<function ' + application.functionId + '>'}</span></div>
@@ -181,10 +196,7 @@ function ApplicationView({ application }) {
           <div className="Editor-application-argument" key={paramName}>{paramName.startsWith('_') ? null : <span className="Editor-application-argument-name">{paramName}:</span>}<span className="Editor-application-argument-expression"><ExpressionView expression={application.arguments[idx]} /></span></div>
         ))}
         {functionNode.signature.functionParameters.map(([paramName, signature], idx) => (
-          <div className="Editor-application-argument" key={paramName}>
-            <div>F {paramName.startsWith('_') ? null : <span className="Editor-application-argument-name">{paramName}:</span>}</div>
-            <div className="Editor-user-function-expressions"><DefinitionExpressions expressions={application.functionArguments[idx].expressions} /></div>
-          </div>
+          <div className="Editor-application-argument" key={paramName}><UserFunctionView userFunction={application.functionArguments[idx]} /></div>
         ))}
       </div>
     </div>

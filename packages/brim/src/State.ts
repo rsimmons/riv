@@ -71,13 +71,23 @@ export function isApplicationNode(node: Node): node is ApplicationNode {
   return node.type === 'Application';
 }
 
-export type ExpressionNode = UndefinedExpressionNode | IntegerLiteralNode | ArrayLiteralNode | StreamReferenceNode | ApplicationNode;
+export interface ParameterNode {
+  type: 'Parameter';
+  streamId: StreamID;
+  identifier: IdentifierNode | null;
+}
+export function isParameterNode(node: Node): node is ParameterNode {
+  return node.type === 'Parameter';
+}
+
+export type ExpressionNode = UndefinedExpressionNode | IntegerLiteralNode | ArrayLiteralNode | StreamReferenceNode | ApplicationNode | ParameterNode;
 export function isExpressionNode(node: Node): node is ExpressionNode {
   return isUndefinedExpressionNode(node)
     || isIntegerLiteralNode(node)
     || isArrayLiteralNode(node)
     || isStreamReferenceNode(node)
-    || isApplicationNode(node);
+    || isApplicationNode(node)
+    || isParameterNode(node);
 }
 
 export interface FunctionSignature {
@@ -100,7 +110,7 @@ export interface UserFunctionNode {
   functionId: FunctionID;
   identifier: IdentifierNode | null;
   signature: FunctionSignature;
-  parameterStreamIds: Array<StreamID>;
+  parameters: Array<ParameterNode>;
   functionParameterFunctionIds: Array<FunctionID>;
   expressions: ExpressionNode[]; // the "body" of the function
 }
@@ -127,9 +137,9 @@ export interface State {
   nativeFunctions: Array<NativeFunctionNode>;
   derivedLookups: {
     streamIdToNode: Map<StreamID, ExpressionNode>;
-    nameToNodes: Map<string, Node[]>;
+    // nameToNodes: Map<string, Node[]>;
     functionIdToNode: Map<FunctionID, FunctionNode>;
-    nameToFunctions: Map<string, Node[]>;
+    // nameToFunctions: Map<string, Node[]>;
   } | undefined;
   liveMain: {
     context: ExecutionContext;

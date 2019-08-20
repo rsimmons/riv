@@ -4,6 +4,7 @@ import { State, StreamID, FunctionID, ExpressionNode, UserFunctionNode } from '.
 Say we have the expression "display(add(time(), 10))". The call to display is an expression node, with streamId 'S1'. The call to add is an expression node with streamId 'S2'. The call to time is an expression node with streamId 'S3'. The literal 10 is a node with streamId 'S4'.
 
 const compiledDefinition = {
+  parameterStreams: [],
   literalStreamValues: [
     ['S4', 10],
   ],
@@ -18,6 +19,8 @@ const compiledDefinition = {
 */
 
 export interface CompiledDefinition {
+  parameterStreams: Array<StreamID>;
+  // TODO: support function-parameters
   literalStreamValues: Array<[StreamID, any]>;
   applications: Array<[StreamID, FunctionID, Array<StreamID>, Array<FunctionID>]>;
   containedDefinitions: Array<[FunctionID, CompiledDefinition]>;
@@ -38,7 +41,11 @@ function traverseFromExpression(expression: ExpressionNode, state: State, tempor
 
 
   switch (expression.type) {
-    case 'UndefinedExpression':
+    case 'Parameter':
+      // Nothing to be done
+      break;
+
+      case 'UndefinedExpression':
       compiledDefinition.literalStreamValues.push([expression.streamId, undefined]);
       break;
 
@@ -106,6 +113,7 @@ export function compileUserDefinition(definition: UserFunctionNode, state: State
   const temporaryMarkedStreamIds: Set<StreamID> = new Set();
   const permanentMarkedStreamIds: Set<StreamID> = new Set();
   const compiledDefinition: CompiledDefinition = {
+    parameterStreams: definition.parameters.map(param => param.streamId),
     literalStreamValues: [],
     applications: [],
     containedDefinitions: [],

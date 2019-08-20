@@ -2,17 +2,19 @@ import React, { useState, useEffect, useRef } from 'react';
 import './ExpressionChooser.css';
 import { fuzzy_match } from './vendor/fts_fuzzy_match';
 import genuid from './uid';
+import { environmentForSelectedNode } from './EditReducer';
 
-function fuzzySearchNames(query, names) {
+function fuzzySearch(query, items) {
   const results = [];
 
-  for (const name of names) {
+  for (const [name, data] of items) {
     const [hit, score, formattedStr] = fuzzy_match(query, name);
     if (hit) {
       results.push({
         score,
         formattedStr,
         name,
+        data,
       });
     }
   }
@@ -34,28 +36,22 @@ function generateChoices(text, mainState) {
     });
   }
 
-  const envNames = mainState.derivedLookups.nameToNodes.keys();
-  const envSearchResults = fuzzySearchNames(text, envNames);
-  for (const result of envSearchResults) {
-    const nodes = mainState.derivedLookups.nameToNodes.get(result.name);
-    for (const node of nodes) {
-      choices.push({
-        type: 'streamref',
-        node,
-      });
-    }
+  const { namedStreams, namedFunctions } = environmentForSelectedNode(mainState);
+
+  const streamSearchResults = fuzzySearch(text, namedStreams);
+  for (const result of streamSearchResults) {
+    choices.push({
+      type: 'streamref',
+      node: result.data,
+    });
   }
 
-  const funcNames = mainState.derivedLookups.nameToFunctions.keys();
-  const funcSearchResults = fuzzySearchNames(text, funcNames);
-  for (const result of funcSearchResults) {
-    const nodes = mainState.derivedLookups.nameToFunctions.get(result.name);
-    for (const node of nodes) {
-      choices.push({
-        type: 'function',
-        node,
-      });
-    }
+  const functionSearchResults = fuzzySearch(text, namedFunctions);
+  for (const result of functionSearchResults) {
+    choices.push({
+      type: 'function',
+      node: result.data,
+    });
   }
 
   if (FLOAT_REGEX.test(text)) {
@@ -168,7 +164,14 @@ export default function ExpressionChooser({ node, mainState, dispatch }) {
             functionId: genuid(),
             identifier: null,
             signature, // TODO: do we need to defensively copy this?
-            parameterStreamIds: signature.parameters.map(pn => genuid()),
+            parameters: signature.parameters.map(pn => ({
+              type: 'Parameter',
+              streamId: genuid(),
+              identifier: {
+                type: 'Identifier',
+                name: pn,
+              },
+            })),
             functionParameterFunctionIds: signature.functionParameters.map(([pn, sig]) => genuid()),
             expressions: [
               {

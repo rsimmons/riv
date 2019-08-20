@@ -52,7 +52,7 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerS
   const activations: Set<Activation> = new Set();
   let compiledDefinition = initialDefinition;
 
-  const streamFunc = () => {
+  function streamFunc() { // NOTE: this can't be an arrow function because we use "arguments"
     /* eslint-disable react-hooks/rules-of-hooks */
     const requestUpdate = useRequestUpdate();
 
@@ -99,12 +99,28 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerS
       };
     });
 
-    const {streamEnvironment: streamEnv, applicationContext: appCtx} = activation.current;
-    for (const [sid, , argIds] of compiledDefinition.applications) {
-      const argVals = argIds.map(id => streamEnv.get(id));
+    const {streamEnvironment: streamEnv, functionEnvironment: funcEnv, applicationContext: appCtx} = activation.current;
+
+    if (arguments.length !== compiledDefinition.parameterStreams.length) {
+      throw new Error('wrong number of arguments to live function, got ' + arguments.length + ' expected ' + compiledDefinition.parameterStreams.length);
+    }
+    let idx = 0;
+    for (const sid of compiledDefinition.parameterStreams) {
+      streamEnv.set(sid, arguments[idx]);
+      idx++;
+    }
+
+    for (const [sid, , argIds, fargIds] of compiledDefinition.applications) {
+      const argVals = [...argIds.map(sid => streamEnv.get(sid)), ...fargIds.map(fid => funcEnv.get(fid))];
       const context = appCtx.get(sid);
       if (!context) { throw new Error(); }
-      streamEnv.set(sid, context.update(...argVals));
+      let appVal;
+      try {
+        appVal = context.update(...argVals);
+      } catch (e) {
+        console.log('application error');
+      }
+      streamEnv.set(sid, appVal);
     }
 
     if (compiledDefinition.yieldStream) {
@@ -115,6 +131,10 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerS
   };
 
   const updateCompiledDefinition = (newDefinition: CompiledDefinition): void => {
+    if (JSON.stringify(newDefinition) === JSON.stringify(compiledDefinition)) {
+      return;
+    }
+
     //
     // RECONCILE LITERALS
     //
@@ -190,6 +210,42 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerS
             throw Error();
           }
           activation.applicationContext.set(sid, new ExecutionContext(func, activation.requestUpdate));
+        });
+      }
+    }
+
+    //
+    // RECONCILE CONTAINED DEFINITIONS
+    //
+    const oldDefMap: Map<FunctionID, CompiledDefinition> = new Map();
+    const newDefMap: Map<FunctionID, CompiledDefinition> = new Map();
+
+    for (const [fid, def] of compiledDefinition.containedDefinitions) {
+      oldDefMap.set(fid, def);
+    }
+    for (const [fid, def] of newDefinition.containedDefinitions) {
+      newDefMap.set(fid, def);
+    }
+
+    for (const [fid, ] of compiledDefinition.containedDefinitions) {
+      if (!newDefMap.has(fid)) {
+        activations.forEach(activation => {
+          activation.functionEnvironment.delete(fid);
+          activation.updateContainedDefinition.delete(fid);
+        });
+      }
+    }
+
+    for (const [fid, def] of newDefinition.containedDefinitions) {
+      if (!oldDefMap.has(fid)) {
+        activations.forEach(activation => {
+          const [sf, updateDef] = createLiveFunction(def, activation.streamEnvironment, activation.functionEnvironment);
+          activation.functionEnvironment.set(fid, sf);
+          activation.updateContainedDefinition.set(fid, updateDef);
+        });
+      } else {
+        activations.forEach(activation => {
+          activation.updateContainedDefinition.get(fid)!(def);
         });
       }
     }
