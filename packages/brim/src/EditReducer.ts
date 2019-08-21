@@ -883,7 +883,7 @@ nativeFunctions.forEach(([name, , , jsFunc]) => {
   nativeFunctionEnvironment.set(name, jsFunc);
 });
 
-const fooId = genuid();
+const mdId = genuid();
 export const initialState: State = addDerivedState(undefined, {
   program: {
     type: 'Program',
@@ -900,15 +900,47 @@ export const initialState: State = addDerivedState(undefined, {
       expressions: [
         {
           type: 'Application',
+          streamId: mdId,
+          identifier: {
+            type: 'Identifier',
+            name: 'md',
+          },
+          functionId: 'is mouse down',
+          arguments: [],
+          functionArguments: [],
+        },
+        {
+          type: 'Application',
           streamId: genuid(),
           identifier: null,
           functionId: 'show value',
           arguments: [
             {
-              type: 'IntegerLiteral',
-              streamId: fooId,
+              type: 'Application',
+              streamId: genuid(),
               identifier: null,
-              value: 123,
+              functionId: 'if',
+              arguments: [
+                {
+                  type: 'StreamReference',
+                  streamId: genuid(),
+                  identifier: null,
+                  targetStreamId: mdId,
+                },
+                {
+                  type: 'IntegerLiteral',
+                  streamId: genuid(),
+                  identifier: null,
+                  value: 10,
+                },
+                {
+                  type: 'IntegerLiteral',
+                  streamId: genuid(),
+                  identifier: null,
+                  value: 20,
+                },
+              ],
+              functionArguments: [],
             },
           ],
           functionArguments: [],
