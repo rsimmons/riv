@@ -1,4 +1,4 @@
-import { State, Path, StreamID, FunctionID, Node, isNode, isProgramNode, ExpressionNode, isExpressionNode, ArrayLiteralNode, isArrayLiteralNode, FunctionSignature, FunctionNode, isApplicationNode, UserFunctionNode, isUserFunctionNode } from './State';
+import { State, Path, StreamID, FunctionID, Node, isNode, isProgramNode, ExpressionNode, isExpressionNode, ArrayLiteralNode, isArrayLiteralNode, FunctionSignature, FunctionNode, isApplicationNode, UserFunctionNode, isUserFunctionNode, ProgramNode } from './State';
 import genuid from './uid';
 import { compileUserDefinition, CompilationError, CompiledDefinition } from './Compiler';
 import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
@@ -819,6 +819,58 @@ function addStateLookups(state: State): State {
   }
 }
 
+function recursiveUndefineDanglingStreamRefs(node: Node, streamIdToNode: Map<StreamID, Node>): Node {
+  switch (node.type) {
+    case 'Program':
+      return {
+        ...node,
+        mainDefinition: recursiveUndefineDanglingStreamRefs(node.mainDefinition, streamIdToNode) as UserFunctionNode,
+      };
+
+    case 'UserFunction':
+      return {
+        ...node,
+        expressions: node.expressions.map(expr => recursiveUndefineDanglingStreamRefs(expr, streamIdToNode)) as Array<ExpressionNode>,
+      };
+
+    case 'Application':
+      return {
+        ...node,
+        arguments: node.arguments.map(arg => recursiveUndefineDanglingStreamRefs(arg, streamIdToNode)) as Array<ExpressionNode>,
+        functionArguments: node.functionArguments.map(farg => recursiveUndefineDanglingStreamRefs(farg, streamIdToNode)) as Array<UserFunctionNode>,
+      };
+
+    case 'ArrayLiteral':
+      return {
+        ...node,
+        items: node.items.map(item => recursiveUndefineDanglingStreamRefs(item, streamIdToNode)) as Array<ExpressionNode>,
+      };
+
+    case 'IntegerLiteral':
+    case 'UndefinedExpression':
+      // NOTE: nothing to do
+      return node;
+
+    case 'StreamReference':
+      // This is the important case
+      return streamIdToNode.has(node.targetStreamId) ? node : {
+        type: 'UndefinedExpression',
+        streamId: genuid(),
+        identifier: node.identifier,
+      };
+
+    default:
+      throw new Error();
+  }
+}
+
+function undefineDanglingStreamRefs(state: State): State {
+  return {
+    ...state,
+    program: recursiveUndefineDanglingStreamRefs(state.program, state.derivedLookups!.streamIdToNode) as ProgramNode,
+  }
+}
+
 function addStateCompiled(oldState: State | undefined, newState: State): State {
   // We initialize with an "empty" definition, which we fall back on if compilation fails
   let newCompiledDefinition: CompiledDefinition = {
@@ -877,7 +929,7 @@ function addStateCompiled(oldState: State | undefined, newState: State): State {
 }
 
 function addDerivedState(oldState: State | undefined, newState: State): State {
-  return addStateCompiled(oldState, addStateLookups(newState));
+  return addStateCompiled(oldState, undefineDanglingStreamRefs(addStateLookups(newState)));
 }
 
 export function reducer(state: State, action: Action): State {
