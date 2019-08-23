@@ -5,7 +5,7 @@ function addSelection(selected, cns = '') {
   return selected ? (cns + ' SimpleTheme-selected') : cns;
 }
 
-export default {
+const generate = ({ brackets }) => ({
   Program: ({ expressions }) => (
     <div className="SimpleTheme-program">{expressions}</div>
   ),
@@ -37,8 +37,12 @@ export default {
 
   Expression: ({ identifier, selected, inside }) => (
     <div className={addSelection(selected, 'SimpleTheme-expression')}>
-      {identifier ? <div className="SimpleTheme-expression-identifier">{identifier}</div> : null}
-      <div className="SimpleTheme-expression-main">{inside}</div>
+      <div className={brackets ? "SimpleTheme-expression-bracket" : "SimpleTheme-expression-line"} />
+      <div className="SimpleTheme-expression-spacer"/>
+      <div>
+        {identifier ? <div className="SimpleTheme-expression-identifier">{identifier}</div> : null}
+        <div className="SimpleTheme-expression-main">{inside}</div>
+      </div>
     </div>
   ),
 
@@ -65,4 +69,9 @@ export default {
       <div>]</div>
     </div>
   ),
-}
+});
+
+export const Simple = generate({});
+export const SimpleBrackets = generate({
+  brackets: true,
+});

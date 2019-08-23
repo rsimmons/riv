@@ -20,3 +20,13 @@
   color: #333;
 }
 
+.Editor-theme-controls {
+  float: right;
+  font-size: 0.8em;
+}
+
+.Editor-theme-controls select {
+  font-size: inherit;
+  font-family: inherit;
+  margin-left: 0.3em;
+}

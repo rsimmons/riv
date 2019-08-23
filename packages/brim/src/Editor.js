@@ -2,8 +2,15 @@ import React, { createContext, useContext, useReducer, useRef, useEffect, useSta
 import { HotKeys, ObserveKeys } from "react-hotkeys";
 import { initialState, reducer, nodeFromPath } from './EditReducer';
 import ExpressionChooser from './ExpressionChooser';
-import Simple from './themes/Simple';
+import { Simple, SimpleBrackets } from './themes/Simple';
 import './Editor.css';
+
+const THEMES = [
+  ['Simple', Simple],
+  ['Simple w/brackets', SimpleBrackets],
+];
+const THEME_MAP = new Map(THEMES);
+const INIT_THEME = 'Simple';
 
 const keyMap = {
   MOVE_UP: 'up',
@@ -235,6 +242,7 @@ function ExpressionView({ expression }) {
 
 export default function Editor({ autoFocus }) {
   const [state, dispatch] = useReducer(reducer, initialState);
+  const [theme, setTheme] = useState(INIT_THEME);
 
   const editorElem = useRef();
 
@@ -279,10 +287,13 @@ export default function Editor({ autoFocus }) {
     <HotKeys keyMap={keyMap} handlers={handlers}>
       <ObserveKeys only={CATCH_IN_INPUTS}>
         <div className="Editor" onKeyDown={onKeyDown} tabIndex="0" ref={editorElem}>
+          <div className="Editor-theme-controls"><label>Theme
+            <select value={theme} onChange={evt => { setTheme(evt.target.value) }}>{THEMES.map(([name, ]) => <option key={name} value={name}>{name}</option>)}</select>
+          </label></div>
           <DispatchContext.Provider value={dispatch}>
             <SelectedNodeContext.Provider value={nodeFromPath(state.program, state.selectionPath)}>
               <FullStateContext.Provider value={state}>
-                <ThemeContext.Provider value={Simple}>
+                <ThemeContext.Provider value={THEME_MAP.get(theme)}>
                   <ProgramView program={state.program} />
                 </ThemeContext.Provider>
               </FullStateContext.Provider>

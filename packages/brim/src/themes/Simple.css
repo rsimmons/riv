@@ -14,13 +14,12 @@
   width: fit-content;
 }
 
-.SimpleTheme-application-argument-name {
-  display: inline-block;
-  margin-right: 0.2em;
+.SimpleTheme-application-argument {
+  display: flex;
 }
 
-.SimpleTheme-application-argument-expression {
-  display: inline-block;
+.SimpleTheme-application-argument-name {
+  margin-right: 0.2em;
 }
 
 /* NOTE: This is awkward that we reference Editor classes, but don't know a nice way to fix */
@@ -42,8 +41,23 @@
 }
 
 .SimpleTheme-expression {
-  padding-left: 0.3em;
+  display: flex;
+}
+
+.SimpleTheme-expression-line {
+  width: 0.2em;
   border-left: 1px solid #555;
+}
+
+.SimpleTheme-expression-bracket {
+  width: 0.2em;
+  border-left: 1px solid #555;
+  border-top: 1px solid #555;
+  border-bottom: 1px solid #555;
+}
+
+.SimpleTheme-expression-spacer {
+  width: 0.1em;
 }
 
 .SimpleTheme-stream-reference, .SimpleTheme-identifier {
