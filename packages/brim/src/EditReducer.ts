@@ -781,6 +781,22 @@ function recursiveBuildIdMaps(node: Node, streamIdToNode: Map<StreamID, Node>, f
       for (const farg of node.functionArguments) {
         recursiveBuildIdMaps(farg, streamIdToNode, functionIdToNode);
       }
+      break;
+
+    case 'ArrayLiteral':
+      for (const item of node.items) {
+        recursiveBuildIdMaps(item, streamIdToNode, functionIdToNode);
+      }
+      break;
+
+    case 'IntegerLiteral':
+    case 'UndefinedExpression':
+    case 'StreamReference':
+      // NOTE: nothing to recurse into
+      break;
+
+    default:
+      throw new Error();
   }
 }
 
