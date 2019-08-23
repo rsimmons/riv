@@ -99,7 +99,7 @@ function IdentifierChooser({ initialName, onUpdateName, onEndEdit }) {
     }
   };
 
-  return <div><input className="Editor-text-edit-input" value={text} onChange={handleChange} onKeyDown={handleKeyDown} autoFocus /></div>
+  return <input className="Editor-text-edit-input" value={text} onChange={handleChange} onKeyDown={handleKeyDown} autoFocus />;
 }
 
 function ExpressionIdentifierView({ expression }) {

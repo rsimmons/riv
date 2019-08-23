@@ -37,13 +37,13 @@ export default {
 
   Expression: ({ identifier, selected, inside }) => (
     <div className={addSelection(selected, 'SimpleTheme-expression')}>
-      <div className="SimpleTheme-expression-main">{inside}</div>
       {identifier ? <div className="SimpleTheme-expression-identifier">{identifier}</div> : null}
+      <div className="SimpleTheme-expression-main">{inside}</div>
     </div>
   ),
 
   Identifier: ({ selected, inside }) => (
-    <div className={addSelection(selected, 'SimpleTheme-identifier')}>{inside}</div>
+    <span className={addSelection(selected, 'SimpleTheme-identifier')}>{inside}</span>
   ),
 
   StreamReference: ({ name }) => (

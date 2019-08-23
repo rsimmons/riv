@@ -34,14 +34,16 @@
 }
 
 .SimpleTheme-expression-identifier {
-  margin-left: 1em;
-  padding-left: 0.3em;
-  border-left: 1px solid #555;
-  color: #aaa;
+  font-size: 0.8em;
+  padding: 0.1em 0.3em;
+  background: #aaa;
+  border-radius: 0.1em;
+  color: #333;
 }
 
 .SimpleTheme-expression {
-  display: flex;
+  padding-left: 0.3em;
+  border-left: 1px solid #555;
 }
 
 .SimpleTheme-stream-reference, .SimpleTheme-identifier {
