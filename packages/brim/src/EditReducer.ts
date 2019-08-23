@@ -152,27 +152,58 @@ export function nodeSplitPath(node: Node, root: Node, path: Path): [Path, Path] 
   }
 }
 
-export function addEnvironmentAlongPath(root: Node, path: Path, namedStreams: Array<[string, ExpressionNode]>, namedFunctions: Array<[string, FunctionNode]>) {
-  let cur: Node = root;
-  for (const seg of path) {
-    if (cur.type === 'UserFunction') {
-      for (const param of cur.parameters) {
-        if (param.identifier) {
-          namedStreams.push([param.identifier.name, param]);
-        }
-      }
+export function addExpressionLocalEnvironment(expr: ExpressionNode, namedStreams: Array<[string, ExpressionNode]>, namedFunctions: Array<[string, FunctionNode]>) {
+  if (expr.identifier) {
+    namedStreams.push([expr.identifier.name, expr]);
+  }
 
-      for (const exp of cur.expressions) {
-        if (exp.identifier) {
-          namedStreams.push([exp.identifier.name, exp]);
-        }
+  switch (expr.type) {
+    case 'Application':
+      for (const sarg of expr.arguments) {
+        addExpressionLocalEnvironment(sarg, namedStreams, namedFunctions);
       }
-    } else if (cur.type === 'Application') {
-      for (const farg of cur.functionArguments) {
+      for (const farg of expr.functionArguments) {
+        // NOTE: We don't recurse into the function-argument since we only want the local scope
         if (farg.identifier) {
           namedFunctions.push([farg.identifier.name, farg]);
         }
       }
+      break;
+
+    case 'ArrayLiteral':
+      for (const item of expr.items) {
+        addExpressionLocalEnvironment(item, namedStreams, namedFunctions);
+      }
+      break;
+
+    case 'StreamReference':
+    case 'IntegerLiteral':
+    case 'UndefinedExpression':
+      // nothing to do
+      break;
+
+    default:
+      throw new Error();
+  }
+}
+
+export function addUserFunctionLocalEnvironment(func: UserFunctionNode, namedStreams: Array<[string, ExpressionNode]>, namedFunctions: Array<[string, FunctionNode]>) {
+  for (const param of func.parameters) {
+    if (param.identifier) {
+      namedStreams.push([param.identifier.name, param]);
+    }
+  }
+
+  for (const exp of func.expressions) {
+    addExpressionLocalEnvironment(exp, namedStreams, namedFunctions);
+  }
+}
+
+export function addEnvironmentAlongPath(root: Node, path: Path, namedStreams: Array<[string, ExpressionNode]>, namedFunctions: Array<[string, FunctionNode]>) {
+  let cur: Node = root;
+  for (const seg of path) {
+    if (cur.type === 'UserFunction') {
+      addUserFunctionLocalEnvironment(cur, namedStreams, namedFunctions);
     }
     cur = (cur as any)[seg];
   }
