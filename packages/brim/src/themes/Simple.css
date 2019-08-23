@@ -23,6 +23,7 @@
   display: inline-block;
 }
 
+/* NOTE: This is awkward that we reference Editor classes, but don't know a nice way to fix */
 .Editor:focus .SimpleTheme-selected, .Editor-text-edit-input:focus {
   outline: rgb(0, 255, 0) solid 1px;
   outline-offset: 0;
