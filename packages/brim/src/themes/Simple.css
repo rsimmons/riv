@@ -1,0 +1,53 @@
+.SimpleTheme-application-function-name {
+  font-weight: bold;
+}
+
+.SimpleTheme-array-items, .SimpleTheme-application-arguments, .SimpleTheme-user-function-expressions {
+  padding-left: 1em;
+}
+
+.SimpleTheme-array-item, .SimpleTheme-application-argument {
+  padding: 0.05em 0;
+}
+
+.SimpleTheme-program, .SimpleTheme-definition-expression, .SimpleTheme-array-item, .SimpleTheme-application-argument, .SimpleTheme-expression-identifier {
+  width: fit-content;
+}
+
+.SimpleTheme-application-argument-name {
+  display: inline-block;
+  margin-right: 0.2em;
+}
+
+.SimpleTheme-application-argument-expression {
+  display: inline-block;
+}
+
+.Editor:focus .SimpleTheme-selected, .Editor-text-edit-input:focus {
+  outline: rgb(0, 255, 0) solid 1px;
+  outline-offset: 0;
+}
+
+.SimpleTheme-definition-expression {
+  padding: 0.2em 0;
+}
+
+.SimpleTheme-expression-identifier {
+  margin-left: 1em;
+  padding-left: 0.3em;
+  border-left: 1px solid #555;
+  color: #aaa;
+}
+
+.SimpleTheme-expression {
+  display: flex;
+}
+
+.SimpleTheme-stream-reference, .SimpleTheme-identifier {
+  font-style: italic;
+}
+
+.SimpleTheme-undefined-expression {
+  background: rgba(255, 0, 0, 0.75);
+  padding: 0 1em;
+}

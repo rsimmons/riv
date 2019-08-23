@@ -11,11 +11,6 @@
   box-shadow: none;
 }
 
-.Editor:focus .Editor-selected, .Editor-text-edit-input:focus {
-  outline: rgb(0, 255, 0) solid 1px;
-  outline-offset: 0;
-}
-
 .Editor-text-edit-input {
   border: 0;
   padding: 0;
@@ -25,51 +20,3 @@
   color: #333;
 }
 
-.Editor-undefined-expression {
-  background: rgba(255, 0, 0, 0.75);
-  padding: 0 1em;
-}
-
-.Editor-definition-expression {
-  padding: 0.2em 0;
-}
-
-.Editor-expression {
-  display: flex;
-}
-
-.Editor-expression-identifier {
-  margin-left: 1em;
-  padding-left: 0.3em;
-  border-left: 1px solid #555;
-  color: #aaa;
-}
-
-.Editor-array-items, .Editor-application-arguments, .Editor-user-function-expressions {
-  padding-left: 1em;
-}
-
-.Editor-array-item, .Editor-application-argument {
-  padding: 0.05em 0;
-}
-
-.Editor-program, .Editor-definition-expression, .Editor-array-item, .Editor-application-argument, .Editor-expression-identifier {
-  width: fit-content;
-}
-
-.Editor-application-argument-name {
-  display: inline-block;
-  margin-right: 0.2em;
-}
-
-.Editor-application-argument-expression {
-  display: inline-block;
-}
-
-.Editor-stream-name {
-  font-style: italic;
-}
-
-.Editor-application-function-name {
-  font-weight: bold;
-}

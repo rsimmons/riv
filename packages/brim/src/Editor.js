@@ -2,6 +2,7 @@ import React, { createContext, useContext, useReducer, useRef, useEffect, useSta
 import { HotKeys, ObserveKeys } from "react-hotkeys";
 import { initialState, reducer, nodeFromPath } from './EditReducer';
 import ExpressionChooser from './ExpressionChooser';
+import Simple from './themes/Simple';
 import './Editor.css';
 
 const keyMap = {
@@ -43,27 +44,29 @@ const CATCH_IN_INPUTS = [
 const DispatchContext = createContext();
 
 const SelectedNodeContext = createContext();
-function useWithSelectedClass(obj, cns = '') {
+function useIsSelected(obj) {
   const selectedNode = useContext(SelectedNodeContext);
-  return (obj === selectedNode) ? (cns + ' Editor-selected') : cns;
+  return obj === selectedNode;
 }
 
 const FullStateContext = createContext();
 
+const ThemeContext = createContext();
+
 function ProgramView({ program }) {
-  return (
-    <div className="Editor-program">
-      <DefinitionExpressions expressions={program.mainDefinition.expressions} />
-    </div>
-  );
+  const { Program } = useContext(ThemeContext);
+
+  return <Program expressions={<DefinitionExpressionsView expressions={program.mainDefinition.expressions} />} />;
 }
 
-function DefinitionExpressions({ expressions }) {
+function DefinitionExpressionsView({ expressions }) {
+  const { DefinitionExpression } = useContext(ThemeContext);
+
   return (
     <>
       {expressions.map((expression) => (
-        <div className="Editor-definition-expression" key={expression.streamId}>
-          <ExpressionView expression={expression} />
+        <div key={expression.streamId}>
+          <DefinitionExpression expression={<ExpressionView expression={expression} />} />
         </div>
       ))}
     </>
@@ -99,13 +102,9 @@ function IdentifierChooser({ initialName, onUpdateName, onEndEdit }) {
   return <div><input className="Editor-text-edit-input" value={text} onChange={handleChange} onKeyDown={handleKeyDown} autoFocus /></div>
 }
 
-function NotEditingIdentifierView({ identifier }) {
-  return <span className="Editor-stream-name">{identifier.name}</span>;
-}
-
 function ExpressionIdentifierView({ expression }) {
   const identifier = expression.identifier;
-  const selected = (identifier === useContext(SelectedNodeContext));
+  const selected = useIsSelected(identifier);
   const {editingSelected} = useContext(FullStateContext);
   const dispatch = useContext(DispatchContext);
 
@@ -123,12 +122,12 @@ function ExpressionIdentifierView({ expression }) {
     dispatch({type: 'END_EXPRESSION_IDENTIFIER_EDIT'});
   };
 
-  return (
-    <div className={useWithSelectedClass(identifier)}>{(selected && editingSelected)
-      ? <IdentifierChooser initialName={identifier.name} onUpdateName={handleUpdateName} onEndEdit={handleEndEdit} />
-      : <NotEditingIdentifierView identifier={identifier} />
-    }</div>
-  );
+  const { Identifier } = useContext(ThemeContext);
+
+  return <Identifier selected={selected} inside={(selected && editingSelected)
+    ? <IdentifierChooser initialName={identifier.name} onUpdateName={handleUpdateName} onEndEdit={handleEndEdit} />
+    : identifier.name
+  } />;
 }
 
 function IntegerLiteralView({ integerLiteral }) {
@@ -136,21 +135,14 @@ function IntegerLiteralView({ integerLiteral }) {
 }
 
 function ArrayLiteralView({ arrayLiteral }) {
-  return (
-    <div>
-      <div>[</div>
-      <div className="Editor-array-items">
-        {arrayLiteral.items.map(item => (
-          <div className="Editor-array-item" key={item.streamId}><ExpressionView expression={item} /></div>
-        ))}
-      </div>
-      <div>]</div>
-    </div>
-  );
+  const { ArrayLiteral } = useContext(ThemeContext);
+
+return <ArrayLiteral keyedItems={arrayLiteral.items.map(item => [item.streamId, <ExpressionView expression={item} />])} />
 }
 
 function UndefinedExpressionView({ undefinedExpression }) {
-  return <div className="Editor-undefined-expression">&nbsp;</div>;
+  const { UndefinedExpression } = useContext(ThemeContext);
+  return <UndefinedExpression />
 }
 
 function StreamReferenceView({ streamReference }) {
@@ -159,17 +151,17 @@ function StreamReferenceView({ streamReference }) {
   if (!targetExpressionNode) {
     throw new Error();
   }
-  return <div><span className="Editor-stream-name">{(targetExpressionNode.identifier && targetExpressionNode.identifier.name) ? targetExpressionNode.identifier.name : '<stream ' + streamReference.targetStreamId + '>'}</span></div>
+
+  const { StreamReference } = useContext(ThemeContext);
+  return <StreamReference name={(targetExpressionNode.identifier && targetExpressionNode.identifier.name) ? targetExpressionNode.identifier.name : '<stream ' + streamReference.targetStreamId + '>'} />;
 }
 
 function UserFunctionView({ userFunction }) {
-  // <span>{paramName.startsWith('_') ? null : <span className="Editor-application-argument-name">{paramName}:</span>}</span>
+  const selected = useIsSelected(userFunction);
+  const { UserFunction } = useContext(ThemeContext);
 
   return (
-    <div className={useWithSelectedClass(userFunction, 'Editor-user-function')}>
-      <div>F {userFunction.parameters.map(param => param.identifier.name).join(', ')}</div>
-      <div className="Editor-user-function-expressions"><DefinitionExpressions expressions={userFunction.expressions} /></div>
-    </div>
+    <UserFunction parameterNames={userFunction.parameters.map(param => param.identifier.name)} expressions={<DefinitionExpressionsView expressions={userFunction.expressions} />} selected={selected} />
   );
 }
 
@@ -188,19 +180,21 @@ function ApplicationView({ application }) {
     throw new Error('function params and args length mismatch');
   }
 
-  return (
-    <div>
-      <div><span className="Editor-application-function-name">{(functionNode.identifier && functionNode.identifier.name) ? functionNode.identifier.name : '<function ' + application.functionId + '>'}</span></div>
-      <div className="Editor-application-arguments">
-        {functionNode.signature.parameters.map((paramName, idx) => (
-          <div className="Editor-application-argument" key={paramName}>{paramName.startsWith('_') ? null : <span className="Editor-application-argument-name">{paramName}:</span>}<span className="Editor-application-argument-expression"><ExpressionView expression={application.arguments[idx]} /></span></div>
-        ))}
-        {functionNode.signature.functionParameters.map(([paramName, signature], idx) => (
-          <div className="Editor-application-argument" key={paramName}><UserFunctionView userFunction={application.functionArguments[idx]} /></div>
-        ))}
-      </div>
-    </div>
-  );
+  const functionName = (functionNode.identifier && functionNode.identifier.name) ? functionNode.identifier.name : '<function ' + application.functionId + '>';
+  const streamArgs = functionNode.signature.parameters.map((paramName, idx) => ({
+    key: paramName,
+    name: paramName.startsWith('_') ? undefined : paramName,
+    expression: <ExpressionView expression={application.arguments[idx]} />
+  }));
+  const functionArgs = functionNode.signature.functionParameters.map(([paramName, signature], idx) => ({
+    key: paramName,
+    name: 'dunno',
+    functionExpression: <UserFunctionView userFunction={application.functionArguments[idx]} />
+  }));
+
+  const { Application } = useContext(ThemeContext);
+
+  return <Application functionName={functionName} streamArgs={streamArgs} functionArgs={functionArgs} />;
 }
 
 function NotEditingExpressionView({ expression }) {
@@ -226,24 +220,17 @@ function NotEditingExpressionView({ expression }) {
 }
 
 function ExpressionView({ expression }) {
-  const selected = (expression === useContext(SelectedNodeContext));
+  const selected = useIsSelected(expression);
   const mainState = useContext(FullStateContext);
+  const editingSelected = mainState.editingSelected;
   const dispatch = useContext(DispatchContext);
+  const { Expression } = useContext(ThemeContext);
 
-  return (
-    <div className={useWithSelectedClass(expression, 'Editor-expression')}>
-      <div className="Editor-expression-main">
-        {(selected && mainState.editingSelected)
-        ? <ExpressionChooser node={expression} mainState={mainState} dispatch={dispatch} />
-        : <NotEditingExpressionView expression={expression} />
-        }
-      </div>
-      {expression.identifier
-        ? <div className="Editor-expression-identifier"><ExpressionIdentifierView expression={expression} /></div>
-        : null
-      }
-    </div>
-  );
+  return <Expression identifier={expression.identifier ? <ExpressionIdentifierView expression={expression} /> : null} selected={selected} inside={
+    (selected && editingSelected)
+      ? <ExpressionChooser node={expression} mainState={mainState} dispatch={dispatch} />
+      : <NotEditingExpressionView expression={expression} />
+  } />;
 }
 
 export default function Editor({ autoFocus }) {
@@ -295,7 +282,9 @@ export default function Editor({ autoFocus }) {
           <DispatchContext.Provider value={dispatch}>
             <SelectedNodeContext.Provider value={nodeFromPath(state.program, state.selectionPath)}>
               <FullStateContext.Provider value={state}>
-                <ProgramView program={state.program} />
+                <ThemeContext.Provider value={Simple}>
+                  <ProgramView program={state.program} />
+                </ThemeContext.Provider>
               </FullStateContext.Provider>
             </SelectedNodeContext.Provider>
           </DispatchContext.Provider>
