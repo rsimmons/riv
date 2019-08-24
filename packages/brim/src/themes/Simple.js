@@ -40,7 +40,7 @@ export const generateTheme = ({ expressionGrouping, applicationArguments }) => (
   ),
 
   Expression: ({ identifier, selected, inside }) => (
-    <div className={addSelection(selected, 'SimpleTheme-expression')}>
+    <div className={addSelection(selected, 'SimpleTheme-expression' + ((expressionGrouping === 'background') ? ' SimpleTheme-expression-background' : ''))}>
       { (() => {
         switch (expressionGrouping) {
           case 'line':

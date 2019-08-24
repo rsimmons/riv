@@ -31,6 +31,7 @@ export function ThemePicker({ onChange }) {
         ['none', 'None'],
         ['line', 'Line'],
         ['bracket', 'Bracket'],
+        ['background', 'Background'],
       ]} selectedKey={options.expressionGrouping} onChange={v => update({ ...options, expressionGrouping: v })} /></label></div>
       <div className="ThemePicker-option"><label>Application Arguments: <Select keyLabels={[
         ['below', 'Below'],

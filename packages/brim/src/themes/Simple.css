@@ -67,6 +67,11 @@
   border-bottom: 1px solid #555;
 }
 
+.SimpleTheme-expression-background {
+  padding: 0.2em;
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
 .SimpleTheme-stream-reference, .SimpleTheme-identifier {
   font-style: italic;
 }
