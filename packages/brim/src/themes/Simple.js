@@ -50,6 +50,10 @@ export const generateTheme = ({ expressionGrouping, applicationArguments }) => (
       case 'shadow':
         exprClass += ' SimpleTheme-expression-shadow';
         break;
+
+      default:
+        // ignore
+        break;
     }
 
     return (
