@@ -39,30 +39,44 @@ export const generateTheme = ({ expressionGrouping, applicationArguments }) => (
     <div className="SimpleTheme-definition-expression">{expression}</div>
   ),
 
-  Expression: ({ identifier, selected, inside }) => (
-    <div className={addSelection(selected, 'SimpleTheme-expression' + ((expressionGrouping === 'background') ? ' SimpleTheme-expression-background' : ''))}>
-      { (() => {
-        switch (expressionGrouping) {
-          case 'line':
-            return (
-              <div className="SimpleTheme-expression-line" />
-            );
+  Expression: ({ identifier, selected, inside }) => {
+    let exprClass = 'SimpleTheme-expression';
 
-          case 'bracket':
-            return (
-              <div className="SimpleTheme-expression-bracket" />
-            );
+    switch (expressionGrouping) {
+      case 'background':
+        exprClass += ' SimpleTheme-expression-background';
+        break;
 
-          default:
-            return null;
-        }
-      })() }
-      <div>
-        {identifier ? <div className="SimpleTheme-expression-identifier">{identifier}</div> : null}
-        <div className="SimpleTheme-expression-main">{inside}</div>
+      case 'shadow':
+        exprClass += ' SimpleTheme-expression-shadow';
+        break;
+    }
+
+    return (
+      <div className={addSelection(selected, exprClass)}>
+        { (() => {
+          switch (expressionGrouping) {
+            case 'line':
+              return (
+                <div className="SimpleTheme-expression-line" />
+              );
+
+            case 'bracket':
+              return (
+                <div className="SimpleTheme-expression-bracket" />
+              );
+
+            default:
+              return null;
+          }
+        })() }
+        <div>
+          {identifier ? <div className="SimpleTheme-expression-identifier">{identifier}</div> : null}
+          <div className="SimpleTheme-expression-main">{inside}</div>
+        </div>
       </div>
-    </div>
-  ),
+    );
+  },
 
   Identifier: ({ selected, inside }) => (
     <span className={addSelection(selected, 'SimpleTheme-identifier')}>{inside}</span>
