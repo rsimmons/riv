@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { generateTheme } from './themes/Simple';
+import './ThemePicker.css';
 
 const INITIAL_OPTIONS = {
   expressionGrouping: 'line',
+  applicationArguments: 'below',
 };
 
 export const INITIAL_THEME = generateTheme(INITIAL_OPTIONS);
@@ -24,12 +26,17 @@ export function ThemePicker({ onChange }) {
   };
 
   return (
-    <div>
-      <label>Expression Grouping: <Select keyLabels={[
+    <div className="ThemePicker">
+      <div className="ThemePicker-option"><label>Expression Grouping: <Select keyLabels={[
         ['none', 'None'],
         ['line', 'Line'],
         ['bracket', 'Bracket'],
-      ]} selectedKey={options.expressionGrouping} onChange={v => update({ ...options, expressionGrouping: v })} /></label>
+      ]} selectedKey={options.expressionGrouping} onChange={v => update({ ...options, expressionGrouping: v })} /></label></div>
+      <div className="ThemePicker-option"><label>Application Arguments: <Select keyLabels={[
+        ['below', 'Below'],
+        ['right', 'Right'],
+        ['right-centered', 'Right (centered)'],
+      ]} selectedKey={options.applicationArguments} onChange={v => update({ ...options, applicationArguments: v })} /></label></div>
     </div>
   );
 }

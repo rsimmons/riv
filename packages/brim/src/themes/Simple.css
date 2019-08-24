@@ -1,6 +1,3 @@
-.SimpleTheme-application-function-name {
-  font-weight: bold;
-}
 
 .SimpleTheme-array-items, .SimpleTheme-application-arguments, .SimpleTheme-user-function-expressions {
   padding-left: 1em;
@@ -12,6 +9,18 @@
 
 .SimpleTheme-program, .SimpleTheme-definition-expression, .SimpleTheme-array-item, .SimpleTheme-application-argument, .SimpleTheme-expression-identifier {
   width: fit-content;
+}
+
+.SimpleTheme-application-flex {
+  display: flex;
+}
+
+.SimpleTheme-application-function-name {
+  font-weight: bold;
+}
+
+.SimpleTheme-application-function-name-centered {
+  align-self: center;
 }
 
 .SimpleTheme-application-argument {
