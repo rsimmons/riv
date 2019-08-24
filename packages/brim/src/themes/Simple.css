@@ -68,12 +68,12 @@
 }
 
 .SimpleTheme-expression-background {
-  padding: 0.2em;
+  padding: 0 0.2em;
   background-color: rgba(255, 255, 255, 0.05);
 }
 
 .SimpleTheme-expression-shadow {
-  padding: 0.2em;
+  padding: 0 0.2em;
   box-shadow: 0 0 5px 0px rgba(0,0,0,0.5);
 }
 
