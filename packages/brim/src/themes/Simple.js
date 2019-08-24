@@ -5,14 +5,14 @@ function addSelection(selected, cns = '') {
   return selected ? (cns + ' SimpleTheme-selected') : cns;
 }
 
-const generate = ({ brackets }) => ({
+export const generateTheme = ({ expressionGrouping }) => ({
   Program: ({ expressions }) => (
     <div className="SimpleTheme-program">{expressions}</div>
   ),
 
   Application: ({ functionName, streamArgs, functionArgs }) => (
     <div>
-      <div><span className="SimpleTheme-application-function-name">{functionName}</span></div>
+      <div className="SimpleTheme-application-function-name">{functionName}</div>
       <div className="SimpleTheme-application-arguments">
         {streamArgs.map(({key, name, expression}) => (
           <div className="SimpleTheme-application-argument" key={key}>{name ? <span className="SimpleTheme-application-argument-name">{name}:</span> : null}<span className="SimpleTheme-application-argument-expression">{expression}</span></div>
@@ -37,8 +37,22 @@ const generate = ({ brackets }) => ({
 
   Expression: ({ identifier, selected, inside }) => (
     <div className={addSelection(selected, 'SimpleTheme-expression')}>
-      <div className={brackets ? "SimpleTheme-expression-bracket" : "SimpleTheme-expression-line"} />
-      <div className="SimpleTheme-expression-spacer"/>
+      { (() => {
+        switch (expressionGrouping) {
+          case 'line':
+            return (
+              <div className="SimpleTheme-expression-line" />
+            );
+
+          case 'bracket':
+            return (
+              <div className="SimpleTheme-expression-bracket" />
+            );
+
+          default:
+            return null;
+        }
+      })() }
       <div>
         {identifier ? <div className="SimpleTheme-expression-identifier">{identifier}</div> : null}
         <div className="SimpleTheme-expression-main">{inside}</div>
@@ -69,9 +83,4 @@ const generate = ({ brackets }) => ({
       <div>]</div>
     </div>
   ),
-});
-
-export const Simple = generate({});
-export const SimpleBrackets = generate({
-  brackets: true,
 });
