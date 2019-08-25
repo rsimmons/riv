@@ -968,7 +968,7 @@ const nativeFunctions: Array<[string, Array<string>, Array<[string, FunctionSign
   ['is mouse down', [], [], mouseDown],
   ['change count', ['_stream'], [], changeCount],
   ['map', ['_array'], [['_func', {parameters: ['value'], functionParameters: []}]], (arr: Array<any>, f: (v: any) => any) => streamMap(f, arr)],
-  ['if', ['_pred', 'then', 'else'], [], (_pred: any, _then: any, _else: any) => (_pred ? _then : _else)],
+  ['if', ['cond', 'then', 'else'], [], (cond: any, _then: any, _else: any) => (cond ? _then : _else)],
   ['audio driver', [], [['_func', {parameters: ['audio time', 'next frame', 'sample rate'], functionParameters: []}]], audioDriver],
   ['cosine', ['_v'], [], Math.cos],
   ['random', ['repick'], [], random],
