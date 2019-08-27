@@ -41,6 +41,8 @@ const CATCH_IN_INPUTS = [
   ',',
 ];
 
+const FullStateContext = createContext();
+
 const DispatchContext = createContext();
 
 const SelectedNodeContext = createContext();
@@ -48,8 +50,21 @@ function useIsSelected(obj) {
   const selectedNode = useContext(SelectedNodeContext);
   return obj === selectedNode;
 }
+function useHandleSelect(obj) {
+  const dispatch = useContext(DispatchContext);
+  const state = useContext(FullStateContext);
 
-const FullStateContext = createContext();
+  return () => {
+    const path = state.derivedLookups.nodeToPath.get(obj);
+    if (path) {
+      dispatch({
+        type: 'SET_PATH',
+        newPath: path,
+      });
+    }
+  };
+}
+
 
 const ThemeContext = createContext();
 
@@ -221,12 +236,13 @@ function NotEditingExpressionView({ expression }) {
 
 function ExpressionView({ expression }) {
   const selected = useIsSelected(expression);
+  const handleSelect = useHandleSelect(expression);
   const mainState = useContext(FullStateContext);
   const editingSelected = mainState.editingSelected;
   const dispatch = useContext(DispatchContext);
   const { Expression } = useContext(ThemeContext);
 
-  return <Expression identifier={expression.identifier ? <ExpressionIdentifierView expression={expression} /> : null} selected={selected} inside={
+  return <Expression identifier={expression.identifier ? <ExpressionIdentifierView expression={expression} /> : null} selected={selected} onSelect={handleSelect} inside={
     (selected && editingSelected)
       ? <ExpressionChooser node={expression} mainState={mainState} dispatch={dispatch} />
       : <NotEditingExpressionView expression={expression} />

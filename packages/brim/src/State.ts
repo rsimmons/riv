@@ -140,6 +140,7 @@ export interface State {
     // nameToNodes: Map<string, Node[]>;
     functionIdToNode: Map<FunctionID, FunctionNode>;
     // nameToFunctions: Map<string, Node[]>;
+    nodeToPath: Map<Node, Path>;
   } | undefined;
   liveMain: {
     context: ExecutionContext;

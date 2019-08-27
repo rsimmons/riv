@@ -10,6 +10,7 @@ interface Action {
   type: string;
   char?: string;
   newNode?: Node;
+  newPath?: Path;
 }
 
 interface HandlerArgs {
@@ -743,7 +744,9 @@ function recursiveReducer(state: State, node: Node, action: Action): (null | [No
   return null;
 }
 
-function recursiveBuildIdMaps(node: Node, streamIdToNode: Map<StreamID, Node>, functionIdToNode: Map<FunctionID, FunctionNode>): void {
+function recursiveBuildMaps(node: Node, path: Path, streamIdToNode: Map<StreamID, Node>, functionIdToNode: Map<FunctionID, FunctionNode>, nodeToPath: Map<Node, Path>): void {
+  nodeToPath.set(node, path);
+
   if (isExpressionNode(node)) {
     if (streamIdToNode.has(node.streamId)) {
       throw new Error('stream ids must be unique');
@@ -753,7 +756,7 @@ function recursiveBuildIdMaps(node: Node, streamIdToNode: Map<StreamID, Node>, f
 
   switch (node.type) {
     case 'Program':
-      recursiveBuildIdMaps(node.mainDefinition, streamIdToNode, functionIdToNode);
+      recursiveBuildMaps(node.mainDefinition, path.concat(['mainDefinition']), streamIdToNode, functionIdToNode, nodeToPath);
       break;
 
     case 'UserFunction':
@@ -769,24 +772,24 @@ function recursiveBuildIdMaps(node: Node, streamIdToNode: Map<StreamID, Node>, f
         streamIdToNode.set(param.streamId, param);
       }
 
-      for (const expression of node.expressions) {
-        recursiveBuildIdMaps(expression, streamIdToNode, functionIdToNode);
-      }
+      node.expressions.forEach((expression, idx) => {
+        recursiveBuildMaps(expression, path.concat(['expressions', idx]), streamIdToNode, functionIdToNode, nodeToPath);
+      });
       break;
 
     case 'Application':
-      for (const arg of node.arguments) {
-        recursiveBuildIdMaps(arg, streamIdToNode, functionIdToNode);
-      }
-      for (const farg of node.functionArguments) {
-        recursiveBuildIdMaps(farg, streamIdToNode, functionIdToNode);
-      }
+      node.arguments.forEach((arg, idx) => {
+        recursiveBuildMaps(arg, path.concat(['arguments', idx]), streamIdToNode, functionIdToNode, nodeToPath);
+      });
+      node.functionArguments.forEach((farg, idx) => {
+        recursiveBuildMaps(farg, path.concat(['functionArguments', idx]), streamIdToNode, functionIdToNode, nodeToPath);
+      });
       break;
 
     case 'ArrayLiteral':
-      for (const item of node.items) {
-        recursiveBuildIdMaps(item, streamIdToNode, functionIdToNode);
-      }
+      node.items.forEach((item, idx) => {
+        recursiveBuildMaps(item, path.concat(['items', idx]), streamIdToNode, functionIdToNode, nodeToPath);
+      })
       break;
 
     case 'IntegerLiteral':
@@ -803,18 +806,20 @@ function recursiveBuildIdMaps(node: Node, streamIdToNode: Map<StreamID, Node>, f
 function addStateLookups(state: State): State {
   const streamIdToNode: Map<StreamID, ExpressionNode> = new Map();
   const functionIdToNode: Map<FunctionID, FunctionNode> = new Map();
+  const nodeToPath: Map<Node, Path> = new Map();
 
   for (const extFunc of state.nativeFunctions) {
     functionIdToNode.set(extFunc.functionId, extFunc);
   }
 
-  recursiveBuildIdMaps(state.program, streamIdToNode, functionIdToNode);
+  recursiveBuildMaps(state.program, [], streamIdToNode, functionIdToNode, nodeToPath);
 
   return {
     ...state,
     derivedLookups: {
       streamIdToNode,
       functionIdToNode,
+      nodeToPath,
     },
   }
 }
@@ -935,10 +940,17 @@ function addDerivedState(oldState: State | undefined, newState: State): State {
 export function reducer(state: State, action: Action): State {
   console.log('action', action.type);
 
-  const recResult = recursiveReducer(state, state.program, action);
-  if (recResult) {
+  let newCore: (null | [Node, Path, boolean]) = null;
+
+  if (action.type === 'SET_PATH') {
+    newCore = [state.program, action.newPath!, false];
+  } else {
+    newCore = recursiveReducer(state, state.program, action);
+  }
+
+  if (newCore) {
     console.log('handled');
-    const [newProgram, newSelectionPath, newEditingSelected] = recResult;
+    const [newProgram, newSelectionPath, newEditingSelected] = newCore;
     // console.log('new selectionPath is', newSelectionPath, 'newEditingSelected is', newEditingSelected);
     // console.log('new prog', newProgram);
 
