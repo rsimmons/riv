@@ -801,8 +801,35 @@ function recursiveBuildIdMaps(node: Node, streamIdToNode: Map<StreamID, Node>, f
   }
 }
 
+function addStateIdLookups(state: State): State {
+  const streamIdToNode: Map<StreamID, ExpressionNode> = new Map();
+  const functionIdToNode: Map<FunctionID, FunctionNode> = new Map();
+  const nodeToPath: Map<Node, Path> = new Map();
+
+  for (const extFunc of state.nativeFunctions) {
+    functionIdToNode.set(extFunc.functionId, extFunc);
+  }
+
+  recursiveBuildIdMaps(state.program, streamIdToNode, functionIdToNode);
+
+  return {
+    ...state,
+    derivedLookups: {
+      streamIdToNode,
+      functionIdToNode,
+      nodeToPath,
+    },
+  };
+}
+
 function recursiveBuildPathMap(node: Node, path: Path, nodeToPath: Map<Node, Path>): void {
   nodeToPath.set(node, path);
+
+  if (isExpressionNode(node)) {
+    if (node.identifier) {
+      recursiveBuildPathMap(node.identifier, path.concat(['identifier']), nodeToPath)
+    }
+  }
 
   switch (node.type) {
     case 'Program':
@@ -830,6 +857,7 @@ function recursiveBuildPathMap(node: Node, path: Path, nodeToPath: Map<Node, Pat
       })
       break;
 
+    case 'Identifier':
     case 'IntegerLiteral':
     case 'UndefinedExpression':
     case 'StreamReference':
@@ -839,27 +867,6 @@ function recursiveBuildPathMap(node: Node, path: Path, nodeToPath: Map<Node, Pat
     default:
       throw new Error();
   }
-}
-
-function addStateIdLookups(state: State): State {
-  const streamIdToNode: Map<StreamID, ExpressionNode> = new Map();
-  const functionIdToNode: Map<FunctionID, FunctionNode> = new Map();
-  const nodeToPath: Map<Node, Path> = new Map();
-
-  for (const extFunc of state.nativeFunctions) {
-    functionIdToNode.set(extFunc.functionId, extFunc);
-  }
-
-  recursiveBuildIdMaps(state.program, streamIdToNode, functionIdToNode);
-
-  return {
-    ...state,
-    derivedLookups: {
-      streamIdToNode,
-      functionIdToNode,
-      nodeToPath,
-    },
-  };
 }
 
 function addStatePathLookup(state: State): State {
@@ -998,7 +1005,10 @@ export function reducer(state: State, action: Action): State {
   let newCore: (null | [Node, Path, boolean]) = null;
 
   if (action.type === 'SET_PATH') {
-    newCore = [state.program, action.newPath!, false];
+    const newPath: Path = action.newPath!;
+    const newSelectedNode = nodeFromPath(state.program, newPath);
+    const newEditingSelected = newSelectedNode.type === 'Identifier';
+    newCore = [state.program, newPath, newEditingSelected];
   } else {
     newCore = recursiveReducer(state, state.program, action);
   }

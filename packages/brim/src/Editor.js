@@ -120,6 +120,7 @@ function IdentifierChooser({ initialName, onUpdateName, onEndEdit }) {
 function ExpressionIdentifierView({ expression }) {
   const identifier = expression.identifier;
   const selected = useIsSelected(identifier);
+  const handleSelect = useHandleSelect(identifier);
   const {editingSelected} = useContext(FullStateContext);
   const dispatch = useContext(DispatchContext);
 
@@ -139,7 +140,7 @@ function ExpressionIdentifierView({ expression }) {
 
   const { Identifier } = useContext(ThemeContext);
 
-  return <Identifier selected={selected} inside={(selected && editingSelected)
+  return <Identifier selected={selected} onSelect={handleSelect} inside={(selected && editingSelected)
     ? <IdentifierChooser initialName={identifier.name} onUpdateName={handleUpdateName} onEndEdit={handleEndEdit} />
     : identifier.name
   } />;

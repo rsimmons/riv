@@ -112,8 +112,8 @@ export const generateTheme = ({ expressionGrouping, applicationArguments }) => (
     );
   },
 
-  Identifier: ({ selected, inside }) => (
-    <Selectable selected={selected} extraClassName={'SimpleTheme-identifier'}>{inside}</Selectable>
+  Identifier: ({ selected, onSelect, inside }) => (
+    <Selectable selected={selected} onSelect={onSelect} extraClassName={'SimpleTheme-identifier'}>{inside}</Selectable>
   ),
 
   StreamReference: ({ name }) => (
