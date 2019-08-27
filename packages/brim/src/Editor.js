@@ -173,10 +173,11 @@ function StreamReferenceView({ streamReference }) {
 
 function UserFunctionView({ userFunction }) {
   const selected = useIsSelected(userFunction);
+  const handleSelect = useHandleSelect(userFunction);
   const { UserFunction } = useContext(ThemeContext);
 
   return (
-    <UserFunction parameterNames={userFunction.parameters.map(param => param.identifier.name)} expressions={<DefinitionExpressionsView expressions={userFunction.expressions} />} selected={selected} />
+    <UserFunction parameterNames={userFunction.parameters.map(param => param.identifier.name)} expressions={<DefinitionExpressionsView expressions={userFunction.expressions} />} selected={selected} onSelect={handleSelect} />
   );
 }
 

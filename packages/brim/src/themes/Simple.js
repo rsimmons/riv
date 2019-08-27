@@ -58,8 +58,8 @@ export const generateTheme = ({ expressionGrouping, applicationArguments }) => (
     );
   },
 
-  UserFunction: ({ parameterNames, expressions, selected }) => (
-    <Selectable selected={selected} extraClassName={'SimpleTheme-user-function'}>
+  UserFunction: ({ parameterNames, expressions, selected, onSelect }) => (
+    <Selectable selected={selected} onSelect={onSelect} extraClassName={'SimpleTheme-user-function'}>
       <div>F {parameterNames.join(', ')}</div>
       <div className="SimpleTheme-user-function-expressions">{expressions}</div>
     </Selectable>
