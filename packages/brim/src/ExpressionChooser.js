@@ -111,6 +111,10 @@ export default function ExpressionChooser({ node, mainState, dispatch }) {
       case 'IntegerLiteral':
         return initFromNode.value.toString();
 
+      case 'StreamReference':
+      case 'Application':
+        return ''; // Don't prefill with text, but in case we change our mind, old code is below
+/*
       case 'StreamReference': {
         const targetExpressionNode = mainState.derivedLookups.streamIdToNode.get(initFromNode.targetStreamId);
         return targetExpressionNode.identifier ? targetExpressionNode.identifier.name : '';
@@ -120,6 +124,7 @@ export default function ExpressionChooser({ node, mainState, dispatch }) {
         const functionNode = mainState.derivedLookups.functionIdToNode.get(initFromNode.functionId);
         return functionNode.identifier ? functionNode.identifier.name : '';
       }
+*/
 
       default:
         throw new Error();
