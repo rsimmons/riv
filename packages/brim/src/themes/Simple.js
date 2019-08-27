@@ -13,7 +13,7 @@ function Selectable({ selected, onSelect, children, extraClassName }) {
   }
 
   const handleClick = (e) => {
-    if (onSelect) {
+    if (onSelect && (e.target.tagName !== 'INPUT')) {
       onSelect();
       e.stopPropagation();
     }
