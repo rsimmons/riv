@@ -10,7 +10,7 @@ const App: React.FC = () => {
         <h2>Notes</h2>
         <ul>
           <li>If you don't see a green selection/cursor box, focus the editor.</li>
-          <li>There's no mouse/touch support yet, only keyboard.</li>
+          <li>The mouse can be used to select parts of the tree, but otherwise editing is keyboard-driven.</li>
           <li>Up/down arrows move selection up and down within lists (expressions, arguments, arrays).</li>
           <li>Right/left arrows move selection in and out of nested structures.</li>
           <li>Enter on an expression (or expression sub-tree) will begin editing it. Pressing enter again will stop editing.</li>
