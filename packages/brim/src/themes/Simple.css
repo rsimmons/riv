@@ -37,7 +37,7 @@
   outline-offset: 0;
 }
 
-.Editor:focus .SimpleTheme-hovered {
+.SimpleTheme-hovered {
   outline: rgb(0, 200, 200) dashed 1px;
   outline-offset: 0;
 }
