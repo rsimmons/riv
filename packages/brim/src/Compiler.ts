@@ -65,7 +65,7 @@ function traverseFromExpression(expression: ExpressionNode, state: State, tempor
       break;
 
     case 'StreamReference':
-      const targetExpressionNode = state.derivedLookups!.streamIdToNode.get(expression.targetStreamId);
+      const targetExpressionNode = state.derivedLookups.streamIdToNode!.get(expression.targetStreamId);
       if (!targetExpressionNode) {
         throw Error();
       }
@@ -79,7 +79,7 @@ function traverseFromExpression(expression: ExpressionNode, state: State, tempor
       break;
 
     case 'Application':
-      const functionNode = state.derivedLookups!.functionIdToNode.get(expression.functionId);
+      const functionNode = state.derivedLookups.functionIdToNode!.get(expression.functionId);
       if (!functionNode) {
         throw Error();
       }

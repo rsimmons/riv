@@ -744,9 +744,7 @@ function recursiveReducer(state: State, node: Node, action: Action): (null | [No
   return null;
 }
 
-function recursiveBuildMaps(node: Node, path: Path, streamIdToNode: Map<StreamID, Node>, functionIdToNode: Map<FunctionID, FunctionNode>, nodeToPath: Map<Node, Path>): void {
-  nodeToPath.set(node, path);
-
+function recursiveBuildIdMaps(node: Node, streamIdToNode: Map<StreamID, Node>, functionIdToNode: Map<FunctionID, FunctionNode>): void {
   if (isExpressionNode(node)) {
     if (streamIdToNode.has(node.streamId)) {
       throw new Error('stream ids must be unique');
@@ -756,7 +754,7 @@ function recursiveBuildMaps(node: Node, path: Path, streamIdToNode: Map<StreamID
 
   switch (node.type) {
     case 'Program':
-      recursiveBuildMaps(node.mainDefinition, path.concat(['mainDefinition']), streamIdToNode, functionIdToNode, nodeToPath);
+      recursiveBuildIdMaps(node.mainDefinition, streamIdToNode, functionIdToNode);
       break;
 
     case 'UserFunction':
@@ -773,22 +771,22 @@ function recursiveBuildMaps(node: Node, path: Path, streamIdToNode: Map<StreamID
       }
 
       node.expressions.forEach((expression, idx) => {
-        recursiveBuildMaps(expression, path.concat(['expressions', idx]), streamIdToNode, functionIdToNode, nodeToPath);
+        recursiveBuildIdMaps(expression, streamIdToNode, functionIdToNode);
       });
       break;
 
     case 'Application':
       node.arguments.forEach((arg, idx) => {
-        recursiveBuildMaps(arg, path.concat(['arguments', idx]), streamIdToNode, functionIdToNode, nodeToPath);
+        recursiveBuildIdMaps(arg, streamIdToNode, functionIdToNode);
       });
       node.functionArguments.forEach((farg, idx) => {
-        recursiveBuildMaps(farg, path.concat(['functionArguments', idx]), streamIdToNode, functionIdToNode, nodeToPath);
+        recursiveBuildIdMaps(farg, streamIdToNode, functionIdToNode);
       });
       break;
 
     case 'ArrayLiteral':
       node.items.forEach((item, idx) => {
-        recursiveBuildMaps(item, path.concat(['items', idx]), streamIdToNode, functionIdToNode, nodeToPath);
+        recursiveBuildIdMaps(item, streamIdToNode, functionIdToNode);
       })
       break;
 
@@ -803,7 +801,47 @@ function recursiveBuildMaps(node: Node, path: Path, streamIdToNode: Map<StreamID
   }
 }
 
-function addStateLookups(state: State): State {
+function recursiveBuildPathMap(node: Node, path: Path, nodeToPath: Map<Node, Path>): void {
+  nodeToPath.set(node, path);
+
+  switch (node.type) {
+    case 'Program':
+      recursiveBuildPathMap(node.mainDefinition, path.concat(['mainDefinition']), nodeToPath);
+      break;
+
+    case 'UserFunction':
+      node.expressions.forEach((expression, idx) => {
+        recursiveBuildPathMap(expression, path.concat(['expressions', idx]), nodeToPath);
+      });
+      break;
+
+    case 'Application':
+      node.arguments.forEach((arg, idx) => {
+        recursiveBuildPathMap(arg, path.concat(['arguments', idx]), nodeToPath);
+      });
+      node.functionArguments.forEach((farg, idx) => {
+        recursiveBuildPathMap(farg, path.concat(['functionArguments', idx]), nodeToPath);
+      });
+      break;
+
+    case 'ArrayLiteral':
+      node.items.forEach((item, idx) => {
+        recursiveBuildPathMap(item, path.concat(['items', idx]), nodeToPath);
+      })
+      break;
+
+    case 'IntegerLiteral':
+    case 'UndefinedExpression':
+    case 'StreamReference':
+      // NOTE: nothing to recurse into
+      break;
+
+    default:
+      throw new Error();
+  }
+}
+
+function addStateIdLookups(state: State): State {
   const streamIdToNode: Map<StreamID, ExpressionNode> = new Map();
   const functionIdToNode: Map<FunctionID, FunctionNode> = new Map();
   const nodeToPath: Map<Node, Path> = new Map();
@@ -812,7 +850,7 @@ function addStateLookups(state: State): State {
     functionIdToNode.set(extFunc.functionId, extFunc);
   }
 
-  recursiveBuildMaps(state.program, [], streamIdToNode, functionIdToNode, nodeToPath);
+  recursiveBuildIdMaps(state.program, streamIdToNode, functionIdToNode);
 
   return {
     ...state,
@@ -821,7 +859,21 @@ function addStateLookups(state: State): State {
       functionIdToNode,
       nodeToPath,
     },
-  }
+  };
+}
+
+function addStatePathLookup(state: State): State {
+  const nodeToPath: Map<Node, Path> = new Map();
+
+  recursiveBuildPathMap(state.program, [], nodeToPath);
+
+  return {
+    ...state,
+    derivedLookups: {
+      ...state.derivedLookups,
+      nodeToPath,
+    },
+  };
 }
 
 function recursiveUndefineDanglingStreamRefs(node: Node, streamIdToNode: Map<StreamID, Node>): Node {
@@ -872,7 +924,7 @@ function recursiveUndefineDanglingStreamRefs(node: Node, streamIdToNode: Map<Str
 function undefineDanglingStreamRefs(state: State): State {
   return {
     ...state,
-    program: recursiveUndefineDanglingStreamRefs(state.program, state.derivedLookups!.streamIdToNode) as ProgramNode,
+    program: recursiveUndefineDanglingStreamRefs(state.program, state.derivedLookups.streamIdToNode!) as ProgramNode,
   }
 }
 
@@ -934,7 +986,10 @@ function addStateCompiled(oldState: State | undefined, newState: State): State {
 }
 
 function addDerivedState(oldState: State | undefined, newState: State): State {
-  return addStateCompiled(oldState, undefineDanglingStreamRefs(addStateLookups(newState)));
+  // undefineDanglingStreamRefs needs up-to-date id lookups
+  const danglingRemovedState = undefineDanglingStreamRefs(addStateIdLookups(newState));
+
+  return addStateCompiled(oldState, addStatePathLookup(addStateIdLookups(danglingRemovedState)));
 }
 
 export function reducer(state: State, action: Action): State {
@@ -963,7 +1018,11 @@ export function reducer(state: State, action: Action): State {
       selectionPath: newSelectionPath,
       editingSelected: newEditingSelected,
       nativeFunctions: state.nativeFunctions,
-      derivedLookups: undefined,
+      derivedLookups: {
+        streamIdToNode: undefined,
+        functionIdToNode: undefined,
+        nodeToPath: undefined,
+      },
       liveMain: undefined,
     });
   } else {
@@ -1073,6 +1132,10 @@ export const initialState: State = addDerivedState(undefined, {
       functionParameters: funcParams,
     },
   })),
-  derivedLookups: undefined,
+  derivedLookups: {
+    streamIdToNode: undefined,
+    functionIdToNode: undefined,
+    nodeToPath: undefined,
+  },
   liveMain: undefined,
 });

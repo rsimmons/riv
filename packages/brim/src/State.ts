@@ -136,12 +136,10 @@ export interface State {
   editingSelected: boolean;
   nativeFunctions: Array<NativeFunctionNode>;
   derivedLookups: {
-    streamIdToNode: Map<StreamID, ExpressionNode>;
-    // nameToNodes: Map<string, Node[]>;
-    functionIdToNode: Map<FunctionID, FunctionNode>;
-    // nameToFunctions: Map<string, Node[]>;
-    nodeToPath: Map<Node, Path>;
-  } | undefined;
+    streamIdToNode: Map<StreamID, ExpressionNode> | undefined;
+    functionIdToNode: Map<FunctionID, FunctionNode> | undefined;
+    nodeToPath: Map<Node, Path> | undefined;
+  };
   liveMain: {
     context: ExecutionContext;
     compiledDefinition: CompiledDefinition | null;
