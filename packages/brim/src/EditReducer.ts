@@ -1029,11 +1029,11 @@ export function reducer(state: State, action: Action): State {
       editingSelected: newEditingSelected,
       nativeFunctions: state.nativeFunctions,
       derivedLookups: {
-        streamIdToNode: undefined,
-        functionIdToNode: undefined,
-        nodeToPath: undefined,
+        streamIdToNode: null,
+        functionIdToNode: null,
+        nodeToPath: null,
       },
-      liveMain: undefined,
+      liveMain: null,
     });
   } else {
     console.log('not handled');
@@ -1143,9 +1143,9 @@ export const initialState: State = addDerivedState(undefined, {
     },
   })),
   derivedLookups: {
-    streamIdToNode: undefined,
-    functionIdToNode: undefined,
-    nodeToPath: undefined,
+    streamIdToNode: null,
+    functionIdToNode: null,
+    nodeToPath: null,
   },
-  liveMain: undefined,
+  liveMain: null,
 });
