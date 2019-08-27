@@ -66,6 +66,23 @@ function useHandleSelect(obj) {
     }
   };
 }
+function useHandleEdit(obj) {
+  const dispatch = useContext(DispatchContext);
+  const state = useContext(FullStateContext);
+
+  return () => {
+    const path = state.derivedLookups.nodeToPath.get(obj);
+    if (path) {
+      dispatch({
+        type: 'SET_PATH',
+        newPath: path,
+      });
+      dispatch({
+        type: 'TOGGLE_EDIT',
+      });
+    }
+  };
+}
 
 
 const ThemeContext = createContext();
@@ -221,12 +238,13 @@ function NotEditingExpressionView({ expression }) {
 function ExpressionView({ expression }) {
   const selected = useIsSelected(expression);
   const handleSelect = useHandleSelect(expression);
+  const handleEdit = useHandleEdit(expression);
   const mainState = useContext(FullStateContext);
   const editingSelected = mainState.editingSelected;
   const dispatch = useContext(DispatchContext);
   const { Expression } = useContext(ThemeContext);
 
-  return <Expression identifier={expression.identifier ? <IdentifierView identifier={expression.identifier} /> : null} selected={selected} onSelect={handleSelect} inside={
+  return <Expression identifier={expression.identifier ? <IdentifierView identifier={expression.identifier} /> : null} selected={selected} onSelect={handleSelect} onEdit={handleEdit} inside={
     (selected && editingSelected)
       ? <ExpressionChooser node={expression} mainState={mainState} dispatch={dispatch} />
       : <NotEditingExpressionView expression={expression} />

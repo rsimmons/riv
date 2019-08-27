@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import './Simple.css';
 
-function Selectable({ selected, onSelect, children, extraClassName }) {
+function Selectable({ selected, onSelect, onEdit, children, extraClassName }) {
   const [hovered, setHovered] = useState(false);
 
   let className = extraClassName || '';
@@ -14,8 +14,15 @@ function Selectable({ selected, onSelect, children, extraClassName }) {
 
   const handleClick = (e) => {
     if (onSelect && (e.target.tagName !== 'INPUT')) {
-      onSelect();
       e.stopPropagation();
+      onSelect();
+    }
+  };
+
+  const handleDoubleClick = (e) => {
+    if (onEdit && (e.target.tagName !== 'INPUT')) {
+      e.stopPropagation();
+      onEdit();
     }
   };
 
@@ -29,7 +36,7 @@ function Selectable({ selected, onSelect, children, extraClassName }) {
   };
 
   return (
-    <div className={className} onClick={handleClick} onMouseOver={handleMouseOver} onMouseOut={handleMouseOut}>
+    <div className={className} onClick={handleClick} onDoubleClick={handleDoubleClick} onMouseOver={handleMouseOver} onMouseOut={handleMouseOut}>
       {children}
     </div>
   );
@@ -69,7 +76,7 @@ export const generateTheme = ({ expressionGrouping, applicationArguments }) => (
     <div className="SimpleTheme-definition-expression">{expression}</div>
   ),
 
-  Expression: ({ identifier, selected, onSelect, inside }) => {
+  Expression: ({ identifier, selected, onSelect, onEdit, inside }) => {
     let exprClass = 'SimpleTheme-expression';
 
     switch (expressionGrouping) {
@@ -87,7 +94,7 @@ export const generateTheme = ({ expressionGrouping, applicationArguments }) => (
     }
 
     return (
-      <Selectable selected={selected} onSelect={onSelect} extraClassName={exprClass}>
+      <Selectable selected={selected} onSelect={onSelect} onEdit={onEdit} extraClassName={exprClass}>
         { (() => {
           switch (expressionGrouping) {
             case 'line':
