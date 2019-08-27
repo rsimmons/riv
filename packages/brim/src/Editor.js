@@ -15,12 +15,13 @@ const keyMap = {
   ZOOM_OUT: 'shift+left',
 
   TOGGLE_EDIT: 'enter',
+  ABORT_EDIT: 'escape',
 
   EDIT_AFTER: ['shift+enter', ','],
 
   DELETE: 'backspace',
 
-  BEGIN_EXPRESSION_IDENTIFIER_EDIT: '=',
+  BEGIN_IDENTIFIER_EDIT: '=',
 };
 
 // These are "normal" character keys that we use as commands. We identify them because we don't want
@@ -37,6 +38,7 @@ const COMMAND_CHARS = new Set([
 const CATCH_IN_INPUTS = [
   'Enter',
   'Shift',
+  'Escape',
   '=',
   ',',
 ];
@@ -99,26 +101,10 @@ function IdentifierChooser({ initialName, onUpdateName, onEndEdit }) {
     }
   };
 
-  const handleKeyDown = e => {
-    switch (e.key) {
-      case 'Enter':
-        e.stopPropagation();
-        if (onEndEdit) {
-          onEndEdit();
-        }
-        break;
-
-      default:
-        // do nothing
-        break;
-    }
-  };
-
-  return <input className="Editor-text-edit-input" value={text} onChange={handleChange} onKeyDown={handleKeyDown} autoFocus />;
+  return <input className="Editor-text-edit-input" value={text} onChange={handleChange} autoFocus />;
 }
 
-function ExpressionIdentifierView({ expression }) {
-  const identifier = expression.identifier;
+function IdentifierView({ identifier }) {
   const selected = useIsSelected(identifier);
   const handleSelect = useHandleSelect(identifier);
   const {editingSelected} = useContext(FullStateContext);
@@ -126,7 +112,7 @@ function ExpressionIdentifierView({ expression }) {
 
   const handleUpdateName = (name) => {
     dispatch({
-      type: 'UPDATE_NODE',
+      type: 'UPDATE_EDITING_TENTATIVE_NODE',
       newNode: {
         type: 'Identifier',
         name,
@@ -134,14 +120,10 @@ function ExpressionIdentifierView({ expression }) {
     });
   };
 
-  const handleEndEdit = () => {
-    dispatch({type: 'END_EXPRESSION_IDENTIFIER_EDIT'});
-  };
-
   const { Identifier } = useContext(ThemeContext);
 
   return <Identifier selected={selected} onSelect={handleSelect} inside={(selected && editingSelected)
-    ? <IdentifierChooser initialName={identifier.name} onUpdateName={handleUpdateName} onEndEdit={handleEndEdit} />
+    ? <IdentifierChooser initialName={identifier.name} onUpdateName={handleUpdateName} />
     : identifier.name
   } />;
 }
@@ -244,7 +226,7 @@ function ExpressionView({ expression }) {
   const dispatch = useContext(DispatchContext);
   const { Expression } = useContext(ThemeContext);
 
-  return <Expression identifier={expression.identifier ? <ExpressionIdentifierView expression={expression} /> : null} selected={selected} onSelect={handleSelect} inside={
+  return <Expression identifier={expression.identifier ? <IdentifierView identifier={expression.identifier} /> : null} selected={selected} onSelect={handleSelect} inside={
     (selected && editingSelected)
       ? <ExpressionChooser node={expression} mainState={mainState} dispatch={dispatch} />
       : <NotEditingExpressionView expression={expression} />

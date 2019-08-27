@@ -130,10 +130,15 @@ export function isNode(node: any): node is Node {
 
 export type Path = (string | number)[];
 
+export type NodeEditState = {
+  originalNode: Node,
+  tentativeNode: Node,
+} | null;
+
 export interface State {
   program: ProgramNode;
   selectionPath: Path;
-  editingSelected: boolean;
+  editingSelected: NodeEditState;
   nativeFunctions: Array<NativeFunctionNode>;
   derivedLookups: {
     streamIdToNode: Map<StreamID, ExpressionNode> | null;

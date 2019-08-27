@@ -1,9 +1,12 @@
-import { State, Path, StreamID, FunctionID, Node, isNode, isProgramNode, ExpressionNode, isExpressionNode, ArrayLiteralNode, isArrayLiteralNode, FunctionSignature, FunctionNode, isApplicationNode, UserFunctionNode, isUserFunctionNode, ProgramNode } from './State';
+import { State, Path, StreamID, FunctionID, Node, isNode, isProgramNode, ExpressionNode, isExpressionNode, IdentifierNode, ArrayLiteralNode, isArrayLiteralNode, FunctionSignature, FunctionNode, isApplicationNode, UserFunctionNode, isUserFunctionNode, ProgramNode, NodeEditState, UndefinedExpressionNode, isIdentifierNode } from './State';
 import genuid from './uid';
 import { compileUserDefinition, CompilationError, CompiledDefinition } from './Compiler';
 import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
 import { createLiveFunction, Environment } from './LiveFunction';
 const { showString, animationTime, mouseDown, changeCount, streamMap, audioDriver, random, mouseClickEvts } = require('riv-demo-lib');
+
+const REALIZE_TENTATIVE_EXPRESSION_EDITS = false;
+const REALIZE_TENTATIVE_IDENTIFIER_EDITS = true;
 
 // We don't make a discriminated union of specific actions, but maybe we could
 interface Action {
@@ -16,10 +19,10 @@ interface Action {
 interface HandlerArgs {
   node: Node,
   subpath: Path,
-  editingSelected: boolean,
+  editingSelected: NodeEditState,
   action: Action;
 }
-type HandlerResult = (undefined | [Node, Path, boolean]);
+type HandlerResult = (undefined | [Node, Path, NodeEditState]);
 type Handler = [string, string[], (args: HandlerArgs) => HandlerResult];
 
 
@@ -230,7 +233,7 @@ export function environmentForSelectedNode(state: State) {
 
 const equiv = (a: any, b: any): boolean => JSON.stringify(a) === JSON.stringify(b);
 
-function deleteDefinitionExpression(node: UserFunctionNode, removeIdx: number): [UserFunctionNode, Path, boolean] {
+function deleteDefinitionExpression(node: UserFunctionNode, removeIdx: number): [UserFunctionNode, Path, NodeEditState] {
   // TODO: Handle case where we delete all expressions
   if (typeof(removeIdx) !== 'number') {
     throw new Error();
@@ -247,16 +250,59 @@ function deleteDefinitionExpression(node: UserFunctionNode, removeIdx: number): 
     let newIdx = removeIdx-1;
     newIdx = Math.max(newIdx, 0);
     newIdx = Math.min(newIdx, node.expressions.length-1);
-    return [newNode, ['expressions', newIdx], false];
+    return [newNode, ['expressions', newIdx], null];
   } else {
     // We've deleted all expressions, so make a single empty one.
-    newNode.expressions.push({
+    const n: Node = {
       type: 'UndefinedExpression',
       streamId: genuid(),
       identifier: null,
-    });
-    return [newNode, ['expressions', 0], true];
+    };
+    newNode.expressions.push(n);
+    return [newNode, ['expressions', 0], {originalNode: n, tentativeNode: n}];
   }
+}
+
+function endEdit({node, subpath, editingSelected}: HandlerArgs, confirm: boolean): HandlerResult {
+  if (!editingSelected) {
+    throw new Error(); // sanity check
+  }
+
+  if (isIdentifierNode(node)) {
+    // Ignore this so that it gets handled by its parent
+    return;
+  }
+
+  if (subpath.length !== 0) {
+    if (!isExpressionNode(node) || !equiv(subpath, ['identifier'])) {
+      throw new Error(); // sanity check
+    }
+
+    // Ending an edit on the identifier that is the child of this expression
+    if (!node.identifier) {
+      throw new Error();
+    }
+
+    let newIdName;
+    if (confirm) {
+      newIdName = node.identifier.name.trim();
+    } else {
+      newIdName = (editingSelected.originalNode as IdentifierNode).name;
+    }
+
+    let newIdNode: IdentifierNode | null = newIdName ? {
+      type: 'Identifier',
+      name: newIdName,
+    } : null;
+
+    return [{
+      ...node,
+      identifier: newIdNode,
+    }, [], null];
+  }
+
+  const newNode = confirm ? editingSelected.tentativeNode : editingSelected.originalNode;
+  return [newNode, subpath, null];
 }
 
 const HANDLERS: Handler[] = [
@@ -278,7 +324,7 @@ const HANDLERS: Handler[] = [
     }
 
     if ((subpath.length === 2) && (subpath[0] === 'expressions')) {
-      return [node, ['expressions', newExpressionIdx()], false];
+      return [node, ['expressions', newExpressionIdx()], null];
     }
   }],
 
@@ -300,20 +346,26 @@ const HANDLERS: Handler[] = [
       throw new Error();
     }
     if (subpath.length === 0) {
-      return [node, ['expressions', 0], false];
+      return [node, ['expressions', 0], null];
     }
   }],
 
-  ['Expression', ['TOGGLE_EDIT'], ({node, subpath, editingSelected}) => {
+  ['Any', ['TOGGLE_EDIT'], (args) => {
+    const {node, subpath, editingSelected} = args;
+
     if (editingSelected) {
-      return [node, subpath, false];
+      return endEdit(args, true);
     } else {
+      if (subpath.length !== 0) {
+        throw new Error();
+      }
+
       switch (node.type) {
         case 'IntegerLiteral':
         case 'UndefinedExpression':
         case 'StreamReference':
         case 'Application':
-          return [node, subpath, true];
+          return [node, subpath, {originalNode: node, tentativeNode: node}];
 
         case 'ArrayLiteral':
           // Can't directly edit
@@ -325,44 +377,61 @@ const HANDLERS: Handler[] = [
     }
   }],
 
-  ['Expression', ['END_EXPRESSION_IDENTIFIER_EDIT'], ({node, subpath}) => {
+  ['Any', ['ABORT_EDIT'], (args) => {
+    const {editingSelected} = args;
+
+    if (editingSelected) {
+      return endEdit(args, false);
+    }
+  }],
+
+  ['Expression', ['BEGIN_IDENTIFIER_EDIT'], ({node, subpath}) => {
     if (!isExpressionNode(node)) {
       throw new Error();
     }
-    if (!equiv(subpath, ['identifier'])) {
-      throw new Error();
-    }
-    if (!node.identifier) {
-      throw new Error();
-    }
-    const trimmedName = node.identifier.name.trim();
-    return [{
-      ...node,
-      identifier: trimmedName ? {
+    if (equiv(subpath, [])) {
+      const idNode = node.identifier || {
         type: 'Identifier',
-        name: trimmedName,
-      } : null,
-    }, [], false];
+        name: '',
+      };
+
+      return [{
+        ...node,
+        identifier: idNode,
+      }, ['identifier'], {originalNode: idNode, tentativeNode: idNode}];
+    }
   }],
 
   ['Expression', ['BEGIN_OVERWRITE_EDIT'], ({node, subpath}) => {
+    console.log('BEGIN_OVERWRITE_EDIT');
     if (!isExpressionNode(node)) {
       throw new Error();
     }
-    return [{
+    const newNode: Node = {
       type: 'UndefinedExpression',
       streamId: node.streamId,
       identifier: node.identifier,
-    }, subpath, true];
+    };
+    return [node, subpath, {originalNode: node, tentativeNode: newNode}];
   }],
 
-  ['Any', ['UPDATE_NODE'], ({subpath, action, editingSelected}) => {
+  ['Any', ['UPDATE_EDITING_TENTATIVE_NODE'], ({node, subpath, action, editingSelected}) => {
     if (!action.newNode) {
       throw new Error();
     }
-    console.log('UPDATE_NODE newNode', action.newNode);
+    if (!editingSelected) {
+      throw new Error();
+    }
     if (subpath.length === 0) {
-      return [action.newNode, subpath, editingSelected];
+      let newNode: Node;
+      if (isIdentifierNode(node)) {
+        newNode = REALIZE_TENTATIVE_IDENTIFIER_EDITS ? action.newNode : node;
+      } else if (isExpressionNode(node)) {
+        newNode = REALIZE_TENTATIVE_EXPRESSION_EDITS ? action.newNode : node;
+      } else {
+        throw new Error();
+      }
+      return [newNode, subpath, {...editingSelected, tentativeNode: action.newNode}];
     }
   }],
 
@@ -375,34 +444,20 @@ const HANDLERS: Handler[] = [
       if (typeof(afterIdx) !== 'number') {
         throw new Error();
       }
+      const insertingExprNode: UndefinedExpressionNode = {
+        type: 'UndefinedExpression',
+        streamId: genuid(),
+        identifier: null,
+      };
       const newNode: UserFunctionNode = {
         ...node,
         expressions: [
           ...node.expressions.slice(0, afterIdx+1),
-          {
-            type: 'UndefinedExpression',
-            streamId: genuid(),
-            identifier: null,
-          },
+          insertingExprNode,
           ...node.expressions.slice(afterIdx+1),
         ],
       };
-      return [newNode, ['expressions', afterIdx+1], true];
-    }
-  }],
-
-  /**
-   * NAME on an expression will move to editing identifer.
-   */
-  ['Expression', ['BEGIN_EXPRESSION_IDENTIFIER_EDIT'], ({node, subpath}) => {
-    if (!isExpressionNode(node)) {
-      throw new Error();
-    }
-    if (equiv(subpath, [])) {
-      return [{
-        ...node,
-        identifier: node.identifier ? node.identifier : {type: 'Identifier', name: ''},
-      }, ['identifier'], true];
+      return [newNode, ['expressions', afterIdx+1], {originalNode: insertingExprNode, tentativeNode: insertingExprNode}];
     }
   }],
 
@@ -412,7 +467,7 @@ const HANDLERS: Handler[] = [
       if ((subpath[0] !== 'items') || (typeof(subpath[1]) !== 'number')) {
         throw Error();
       }
-      return [node, [], false];
+      return [node, [], null];
     }
   }],
 
@@ -425,18 +480,17 @@ const HANDLERS: Handler[] = [
       // We do a special thing here: If the array is empty, we create a single undefined item.
       // This gives us a way to add a new element to an empty array.
       if (node.items.length === 0) {
+        const newExprNode: UndefinedExpressionNode = {
+          type: 'UndefinedExpression',
+          streamId: genuid(),
+          identifier: null,
+        };
         return [{
           ...node,
-          items: [
-            {
-              type: 'UndefinedExpression',
-              streamId: genuid(),
-              identifier: null,
-            }
-          ],
-        }, ['items', 0], true];
+          items: [newExprNode],
+        }, ['items', 0], {originalNode: newExprNode, tentativeNode: newExprNode}];
       } else {
-        return [node, ['items', 0], false];
+        return [node, ['items', 0], null];
       }
     }
   }],
@@ -454,9 +508,9 @@ const HANDLERS: Handler[] = [
       const newIdx = idx + ((action.type === 'MOVE_UP') ? -1 : 1);
 
       if ((newIdx < 0) || (newIdx >= node.items.length)) {
-        return [node, [], false];
+        return [node, [], null];
       } else {
-        return [node, ['items', newIdx], false];
+        return [node, ['items', newIdx], null];
       }
     }
   }],
@@ -470,19 +524,20 @@ const HANDLERS: Handler[] = [
       if (typeof(afterIdx) !== 'number') {
         throw new Error();
       }
+      const insertingExprNode: UndefinedExpressionNode = {
+        type: 'UndefinedExpression',
+        streamId: genuid(),
+        identifier: null,
+      };
       const newNode: ArrayLiteralNode = {
         ...node,
         items: [
           ...node.items.slice(0, afterIdx+1),
-          {
-            type: 'UndefinedExpression',
-            streamId: genuid(),
-            identifier: null,
-          },
+          insertingExprNode,
           ...node.items.slice(afterIdx+1),
         ],
       };
-      return [newNode, ['items', afterIdx+1], true];
+      return [newNode, ['items', afterIdx+1], {originalNode: insertingExprNode, tentativeNode: insertingExprNode}];
     }
   }],
 
@@ -511,9 +566,9 @@ const HANDLERS: Handler[] = [
         let newIdx = removeIdx-1;
         newIdx = Math.max(newIdx, 0);
         newIdx = Math.min(newIdx, node.items.length-1);
-        return [newNode, ['items', newIdx], false];
+        return [newNode, ['items', newIdx], null];
       } else {
-        return [newNode, [], false];
+        return [newNode, [], null];
       }
     }
   }],
@@ -524,18 +579,17 @@ const HANDLERS: Handler[] = [
     }
 
     if (subpath.length === 0) {
-      return [{
+      const newExprNode: UndefinedExpressionNode = {
+        type: 'UndefinedExpression',
+        streamId: genuid(),
+        identifier: null,
+      };
+    return [{
         type: 'ArrayLiteral',
         streamId: node.streamId,
         identifier: node.identifier,
-        items: [
-          {
-            type: 'UndefinedExpression',
-            identifier: null,
-            streamId: genuid(),
-          }
-        ],
-      }, ['items', 0], true];
+        items: [newExprNode],
+      }, ['items', 0], {originalNode: newExprNode, tentativeNode: newExprNode}];
     }
   }],
 
@@ -546,15 +600,15 @@ const HANDLERS: Handler[] = [
     }
     if (subpath.length === 2) {
       if ((subpath[0] === 'arguments') && (typeof(subpath[1]) === 'number')) {
-        return [node, [], false];
+        return [node, [], null];
       } else if ((subpath[0] === 'functionArguments') && (typeof(subpath[1]) === 'number')) {
-        return [node, [], false];
+        return [node, [], null];
       } else {
         throw new Error();
       }
     } else if ((subpath.length >= 3) && (subpath[0] === 'functionArguments') && (typeof(subpath[1]) === 'number')) {
       // We handle this here (slightly unusual) so that user can't zoom out to main function definition
-      return [node, subpath.slice(0, 2), false];
+      return [node, subpath.slice(0, 2), null];
     }
   }],
 
@@ -565,9 +619,9 @@ const HANDLERS: Handler[] = [
     }
     if (subpath.length === 0) {
       if (node.arguments.length > 0) {
-        return [node, ['arguments', 0], false];
+        return [node, ['arguments', 0], null];
       } else if (node.functionArguments.length > 0) {
-        return [node, ['functionArguments', 0], false];
+        return [node, ['functionArguments', 0], null];
       }
     }
   }],
@@ -585,11 +639,11 @@ const HANDLERS: Handler[] = [
       const newIdx = idx + ((action.type === 'MOVE_UP') ? -1 : 1);
 
       if ((newIdx >= node.arguments.length) && node.functionArguments.length) {
-        return [node, ['functionArguments', 0], false];
+        return [node, ['functionArguments', 0], null];
       } else if ((newIdx < 0) || (newIdx >= node.arguments.length)) {
-        return [node, [], false];
+        return [node, [], null];
       } else {
-        return [node, ['arguments', newIdx], false];
+        return [node, ['arguments', newIdx], null];
       }
     } else if ((subpath.length === 2) && (subpath[0] === 'functionArguments')) {
       const idx = subpath[1];
@@ -599,11 +653,11 @@ const HANDLERS: Handler[] = [
       const newIdx = idx + ((action.type === 'MOVE_UP') ? -1 : 1);
 
       if ((newIdx < 0) && node.arguments.length) {
-        return [node, ['arguments', node.arguments.length-1], false];
+        return [node, ['arguments', node.arguments.length-1], null];
       } else if ((newIdx < 0) || (newIdx >= node.arguments.length)) {
-        return [node, [], false];
+        return [node, [], null];
       } else {
-        return [node, ['functionArguments', newIdx], false];
+        return [node, ['functionArguments', newIdx], null];
       }
     }
   }],
@@ -629,7 +683,7 @@ const HANDLERS: Handler[] = [
       return [{
         ...node,
         arguments: newArguments,
-      }, ['arguments', idx], false];
+      }, ['arguments', idx], null];
     }
   }],
 ];
@@ -637,7 +691,7 @@ const HANDLERS: Handler[] = [
 /**
  * Returns null or [newNode, newSelectionPath, newTextEdit]
  */
-function recursiveReducer(state: State, node: Node, action: Action): (null | [Node, Path, boolean]) {
+function recursiveReducer(state: State, node: Node, action: Action): (null | [Node, Path, NodeEditState]) {
   // If this node is not on the selection path, we can short circuit
   if (!nodeOnPath(node, state.program, state.selectionPath)) {
     return null;
@@ -653,7 +707,7 @@ function recursiveReducer(state: State, node: Node, action: Action): (null | [No
     type: node.type,
   };
   let newSelPath = null;
-  let newEditingSelected = false;
+  let newEditingSelected: NodeEditState = null;
   let handled = false;
   const indexableNode = node as {[prop: string]: any}; // to avoid type errors
   for (const [fieldName, fieldInfo] of Object.entries(nodeInfo.fields)) {
@@ -1002,12 +1056,13 @@ function addDerivedState(oldState: State | undefined, newState: State): State {
 export function reducer(state: State, action: Action): State {
   console.log('action', action.type);
 
-  let newCore: (null | [Node, Path, boolean]) = null;
+  let newCore: (null | [Node, Path, NodeEditState]) = null;
 
   if (action.type === 'SET_PATH') {
     const newPath: Path = action.newPath!;
     const newSelectedNode = nodeFromPath(state.program, newPath);
-    const newEditingSelected = newSelectedNode.type === 'Identifier';
+    const beginEdit = (newSelectedNode.type === 'Identifier');
+    const newEditingSelected: NodeEditState = beginEdit ? {originalNode: newSelectedNode, tentativeNode: newSelectedNode} : null;
     newCore = [state.program, newPath, newEditingSelected];
   } else {
     newCore = recursiveReducer(state, state.program, action);
@@ -1129,7 +1184,7 @@ export const initialState: State = addDerivedState(undefined, {
     },
   },
   selectionPath: ['mainDefinition', 'expressions', 0],
-  editingSelected: false,
+  editingSelected: null,
   nativeFunctions: nativeFunctions.map(([name, paramNames, funcParams, ]) => ({
     type: 'NativeFunction',
     functionId: name,

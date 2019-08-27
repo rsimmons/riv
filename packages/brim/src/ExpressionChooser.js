@@ -101,21 +101,23 @@ export default function ExpressionChooser({ node, mainState, dispatch }) {
   });
 
   const [text, setText] = useState(() => {
-    // Initialize text based on existing node
-    switch (node.type) {
+    const initFromNode = mainState.editingSelected.tentativeNode;
+
+    // Initialize text based on node
+    switch (initFromNode.type) {
       case 'UndefinedExpression':
         return '';
 
       case 'IntegerLiteral':
-        return node.value.toString();
+        return initFromNode.value.toString();
 
       case 'StreamReference': {
-        const targetExpressionNode = mainState.derivedLookups.streamIdToNode.get(node.targetStreamId);
+        const targetExpressionNode = mainState.derivedLookups.streamIdToNode.get(initFromNode.targetStreamId);
         return targetExpressionNode.identifier ? targetExpressionNode.identifier.name : '';
       }
 
       case 'Application': {
-        const functionNode = mainState.derivedLookups.functionIdToNode.get(node.functionId);
+        const functionNode = mainState.derivedLookups.functionIdToNode.get(initFromNode.functionId);
         return functionNode.identifier ? functionNode.identifier.name : '';
       }
 
@@ -188,10 +190,10 @@ export default function ExpressionChooser({ node, mainState, dispatch }) {
         throw new Error();
     }
 
-    newNode.streamId = node.streamId;
-    newNode.identifier = node.identifier;
+    newNode.streamId = mainState.editingSelected.tentativeNode.streamId;
+    newNode.identifier = mainState.editingSelected.tentativeNode.identifier;
 
-    dispatch({type: 'UPDATE_NODE', newNode});
+    dispatch({type: 'UPDATE_EDITING_TENTATIVE_NODE', newNode});
   };
 
   const recomputeDropdownChoices = (text) => {
