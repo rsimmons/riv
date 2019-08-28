@@ -4,6 +4,7 @@
   background: #333;
   color: #eee;
   padding: 1em;
+  overflow: hidden;
 }
 
 .Editor:focus {
