@@ -937,7 +937,7 @@ function addStatePathLookup(state: State): State {
   };
 }
 
-function recursiveUndefineDanglingStreamRefs(node: Node, streamIdToNode: Map<StreamID, Node>): Node {
+function recursiveUndefineDanglingStreamRefs(node: Node, streamIdToNode: ReadonlyMap<StreamID, Node>): Node {
   switch (node.type) {
     case 'Program':
       return {

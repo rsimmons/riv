@@ -5,76 +5,76 @@ export type StreamID = string;
 export type FunctionID = string;
 
 export interface ProgramNode {
-  type: 'Program';
-  mainDefinition: UserFunctionNode;
+  readonly type: 'Program';
+  readonly mainDefinition: UserFunctionNode;
 }
 export function isProgramNode(node: Node): node is ProgramNode {
   return node.type === 'Program';
 }
 
 export interface IdentifierNode {
-  type: 'Identifier';
-  name: string;
+  readonly type: 'Identifier';
+  readonly name: string;
 }
 export function isIdentifierNode(node: Node): node is IdentifierNode {
   return node.type === 'Identifier';
 }
 
 export interface UndefinedExpressionNode {
-  type: 'UndefinedExpression';
-  streamId: StreamID;
-  identifier: IdentifierNode | null;
+  readonly type: 'UndefinedExpression';
+  readonly streamId: StreamID;
+  readonly identifier: IdentifierNode | null;
 }
 export function isUndefinedExpressionNode(node: Node): node is UndefinedExpressionNode {
   return node.type === 'UndefinedExpression';
 }
 
 export interface IntegerLiteralNode {
-  type: 'IntegerLiteral';
-  streamId: StreamID;
-  identifier: IdentifierNode | null;
-  value: number;
+  readonly type: 'IntegerLiteral';
+  readonly streamId: StreamID;
+  readonly identifier: IdentifierNode | null;
+  readonly value: number;
 }
 export function isIntegerLiteralNode(node: Node): node is IntegerLiteralNode {
   return node.type === 'IntegerLiteral';
 }
 
 export interface ArrayLiteralNode {
-  type: 'ArrayLiteral';
-  streamId: StreamID;
-  identifier: IdentifierNode | null;
-  items: ExpressionNode[];
+  readonly type: 'ArrayLiteral';
+  readonly streamId: StreamID;
+  readonly identifier: IdentifierNode | null;
+  readonly items: ReadonlyArray<ExpressionNode>;
 }
 export function isArrayLiteralNode(node: Node): node is ArrayLiteralNode {
   return node.type === 'ArrayLiteral';
 }
 
 export interface StreamReferenceNode {
-  type: 'StreamReference';
-  streamId: StreamID;
-  identifier: IdentifierNode | null;
-  targetStreamId: StreamID;
+  readonly type: 'StreamReference';
+  readonly streamId: StreamID;
+  readonly identifier: IdentifierNode | null;
+  readonly targetStreamId: StreamID;
 }
 export function isStreamReferenceNode(node: Node): node is StreamReferenceNode {
   return node.type === 'StreamReference';
 }
 
 export interface ApplicationNode {
-  type: 'Application';
-  streamId: StreamID, // stream of the function "output"
-  identifier: IdentifierNode | null;
-  functionId: FunctionID; // the function we are applying (calling), could be user-defined or external
-  arguments: Array<ExpressionNode>;
-  functionArguments: Array<UserFunctionNode>;
+  readonly type: 'Application';
+  readonly streamId: StreamID, // stream of the function "output"
+  readonly identifier: IdentifierNode | null;
+  readonly functionId: FunctionID; // the function we are applying (calling), could be user-defined or external
+  readonly arguments: ReadonlyArray<ExpressionNode>;
+  readonly functionArguments: ReadonlyArray<UserFunctionNode>;
 }
 export function isApplicationNode(node: Node): node is ApplicationNode {
   return node.type === 'Application';
 }
 
 export interface ParameterNode {
-  type: 'Parameter';
-  streamId: StreamID;
-  identifier: IdentifierNode | null;
+  readonly type: 'Parameter';
+  readonly streamId: StreamID;
+  readonly identifier: IdentifierNode | null;
 }
 export function isParameterNode(node: Node): node is ParameterNode {
   return node.type === 'Parameter';
@@ -91,28 +91,28 @@ export function isExpressionNode(node: Node): node is ExpressionNode {
 }
 
 export interface FunctionSignature {
-  parameters: Array<string>; // just the names for now
-  functionParameters: Array<[string, FunctionSignature]>; // names and signatures
+  readonly parameters: ReadonlyArray<string>; // just the names for now
+  readonly functionParameters: ReadonlyArray<[string, FunctionSignature]>; // names and signatures
 }
 
 export interface NativeFunctionNode {
-  type: 'NativeFunction';
-  functionId: FunctionID;
-  identifier: IdentifierNode | null;
-  signature: FunctionSignature;
+  readonly type: 'NativeFunction';
+  readonly functionId: FunctionID;
+  readonly identifier: IdentifierNode | null;
+  readonly signature: FunctionSignature;
 }
 export function isNativeFunctionNode(node: Node): node is NativeFunctionNode {
   return node.type === 'NativeFunction';
 }
 
 export interface UserFunctionNode {
-  type: 'UserFunction';
-  functionId: FunctionID;
-  identifier: IdentifierNode | null;
-  signature: FunctionSignature;
-  parameters: Array<ParameterNode>;
-  functionParameterFunctionIds: Array<FunctionID>;
-  expressions: ExpressionNode[]; // the "body" of the function
+  readonly type: 'UserFunction';
+  readonly functionId: FunctionID;
+  readonly identifier: IdentifierNode | null;
+  readonly signature: FunctionSignature;
+  readonly parameters: ReadonlyArray<ParameterNode>;
+  readonly functionParameterFunctionIds: ReadonlyArray<FunctionID>;
+  readonly expressions: ReadonlyArray<ExpressionNode>; // the "body" of the function
 }
 export function isUserFunctionNode(node: Node): node is UserFunctionNode {
   return node.type === 'UserFunction';
@@ -131,21 +131,21 @@ export function isNode(node: any): node is Node {
 export type Path = (string | number)[];
 
 export type NodeEditState = {
-  originalNode: Node,
-  tentativeNode: Node,
+  readonly originalNode: Node,
+  readonly tentativeNode: Node,
 } | null;
 
 export interface State {
-  program: ProgramNode;
-  selectionPath: Path;
-  editingSelected: NodeEditState;
-  nativeFunctions: Array<NativeFunctionNode>;
-  derivedLookups: {
-    streamIdToNode: Map<StreamID, ExpressionNode> | null;
-    functionIdToNode: Map<FunctionID, FunctionNode> | null;
-    nodeToPath: Map<Node, Path> | null;
+  readonly program: ProgramNode;
+  readonly selectionPath: Path;
+  readonly editingSelected: NodeEditState;
+  readonly nativeFunctions: ReadonlyArray<NativeFunctionNode>;
+  readonly derivedLookups: {
+    streamIdToNode: ReadonlyMap<StreamID, ExpressionNode> | null;
+    functionIdToNode: ReadonlyMap<FunctionID, FunctionNode> | null;
+    nodeToPath: ReadonlyMap<Node, Path> | null;
   };
-  liveMain: {
+  readonly liveMain: {
     context: ExecutionContext;
     compiledDefinition: CompiledDefinition | null;
     updateCompiledDefinition: (newDefinition: CompiledDefinition) => void;
