@@ -305,6 +305,74 @@ function endEdit({node, subpath, editingSelected}: HandlerArgs, confirm: boolean
   return [newNode, subpath, null];
 }
 
+function recursiveFirstUndefinedNode(node: Node, path: Path, after: Path | undefined, passed: [boolean]): [Node, Path] | undefined {
+  if (after && equiv(path, after)) {
+    passed[0] = true;
+  }
+
+  switch (node.type) {
+    case 'Program':
+      return recursiveFirstUndefinedNode(node.mainDefinition, path.concat(['mainDefinition']), after, passed);
+
+    case 'UserFunction': {
+      let idx = 0;
+      for (const expression of node.expressions) {
+        const result = recursiveFirstUndefinedNode(expression, path.concat(['expressions', idx]), after, passed);
+        if (result) { return result; }
+        idx++;
+      }
+      break;
+    }
+
+    case 'Application': {
+      let idx = 0;
+      for (const arg of node.arguments) {
+        const result = recursiveFirstUndefinedNode(arg, path.concat(['arguments', idx]), after, passed);
+        if (result) { return result; }
+        idx++;
+      }
+
+      idx = 0; // so ghetto
+      for (const farg of node.functionArguments) {
+        const result = recursiveFirstUndefinedNode(farg, path.concat(['functionArguments', idx]), after, passed);
+        if (result) { return result; }
+        idx++;
+      }
+      break;
+    }
+
+    case 'ArrayLiteral': {
+      let idx = 0;
+      for (const item of node.items) {
+        const result = recursiveFirstUndefinedNode(item, path.concat(['items', idx]), after, passed);
+        if (result) { return result; }
+        idx++;
+      }
+      break;
+    }
+
+    case 'Identifier':
+    case 'IntegerLiteral':
+    case 'StreamReference':
+      // NOTE: nothing to recurse into
+      break;
+
+    case 'UndefinedExpression':
+      if (!after || passed[0]) {
+        return [node, path];
+      }
+      break;
+
+    default:
+      throw new Error();
+  }
+}
+
+function firstUndefinedNode(node: Node, after: Path | undefined): [Node, Path] | undefined {
+  const passed: [boolean] = [false]; // have we passed the "after" path?
+  return recursiveFirstUndefinedNode(node, [], after, passed);
+}
+
 const HANDLERS: Handler[] = [
   ['UserFunction', ['MOVE_UP', 'MOVE_DOWN'], ({node, subpath, action}) => {
     if (!isUserFunctionNode(node)) {
@@ -382,6 +450,14 @@ const HANDLERS: Handler[] = [
 
     if (editingSelected) {
       return endEdit(args, false);
+    }
+  }],
+
+  ['Any', ['CONFIRM_EDIT'], (args) => {
+    const {editingSelected} = args;
+
+    if (editingSelected) {
+      return endEdit(args, true);
     }
   }],
 
@@ -1064,6 +1140,17 @@ export function reducer(state: State, action: Action): State {
     const beginEdit = (newSelectedNode.type === 'Identifier');
     const newEditingSelected: NodeEditState = beginEdit ? {originalNode: newSelectedNode, tentativeNode: newSelectedNode} : null;
     newCore = [state.program, newPath, newEditingSelected];
+  } else if (action.type === 'EDIT_NEXT_UNDEFINED') {
+    const confirmedResult = recursiveReducer(state, state.program, {type: 'CONFIRM_EDIT'});
+    const [confirmedProgram, confirmedPath] = confirmedResult ? [confirmedResult[0], confirmedResult[1]] : [state.program, state.selectionPath];
+
+    const hit = firstUndefinedNode(confirmedProgram, confirmedPath);
+    if (hit) {
+      const [hitNode, hitPath] = hit;
+      newCore = [confirmedProgram, hitPath, {originalNode: hitNode, tentativeNode: hitNode}];
+    } else {
+      newCore = [confirmedProgram, confirmedPath, null];
+    }
   } else {
     newCore = recursiveReducer(state, state.program, action);
   }

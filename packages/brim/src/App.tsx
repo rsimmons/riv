@@ -19,6 +19,7 @@ const App: React.FC = () => {
           <li>Shift-enter (or comma) adds a new expression (or array item) below the current one.</li>
           <li>Pressing the = key on on an expression will move to editing its name/label.</li>
           <li>A red box indicates an undefined expression.</li>
+          <li>Tab edits the next undefined expression.</li>
           <li>Delete will delete expressions, array items, etc.</li>
           <li>Typing [ when editing an expression will create an array literal.</li>
         </ul>

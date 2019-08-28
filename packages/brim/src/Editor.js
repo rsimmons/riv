@@ -22,6 +22,8 @@ const keyMap = {
   DELETE: 'backspace',
 
   BEGIN_IDENTIFIER_EDIT: '=',
+
+  EDIT_NEXT_UNDEFINED: 'tab',
 };
 
 // These are "normal" character keys that we use as commands. We identify them because we don't want
@@ -39,6 +41,7 @@ const CATCH_IN_INPUTS = [
   'Enter',
   'Shift',
   'Escape',
+  'Tab',
   '=',
   ',',
 ];
