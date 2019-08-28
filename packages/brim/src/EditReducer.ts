@@ -302,7 +302,19 @@ function endEdit({node, subpath, editingSelected}: HandlerArgs, confirm: boolean
   }
 
   const newNode = confirm ? editingSelected.tentativeNode : editingSelected.originalNode;
-  return [newNode, subpath, null];
+
+  let newSubpath: Path = subpath;
+  let newEditingSelected = null;
+  if (confirm) {
+    const hit = firstUndefinedNode(newNode);
+    if (hit) {
+      const [hitNode, hitPath] = hit;
+      newSubpath = hitPath;
+      newEditingSelected = {originalNode: hitNode, tentativeNode: hitNode};
+    }
+  }
+
+  return [newNode, newSubpath, newEditingSelected];
 }
 
 function recursiveFirstUndefinedNode(node: Node, path: Path, after: Path | undefined, passed: [boolean]): [Node, Path] | undefined {
@@ -368,7 +380,7 @@ function recursiveFirstUndefinedNode(node: Node, path: Path, after: Path | undef
   }
 }
 
-function firstUndefinedNode(node: Node, after: Path | undefined): [Node, Path] | undefined {
+function firstUndefinedNode(node: Node, after: Path | undefined = undefined): [Node, Path] | undefined {
   const passed: [boolean] = [false]; // have we passed the "after" path?
   return recursiveFirstUndefinedNode(node, [], after, passed);
 }
