@@ -491,7 +491,6 @@ const HANDLERS: Handler[] = [
   }],
 
   ['Expression', ['BEGIN_OVERWRITE_EDIT'], ({node, subpath}) => {
-    console.log('BEGIN_OVERWRITE_EDIT');
     if (!isExpressionNode(node)) {
       throw new Error();
     }
@@ -1103,7 +1102,7 @@ function addStateCompiled(oldState: State | undefined, newState: State): State {
   if (oldState) {
     const { context, updateCompiledDefinition } = oldState.liveMain!;
 
-    console.log('updating compiled definition to', newCompiledDefinition);
+    // console.log('updating compiled definition to', newCompiledDefinition);
     beginBatch(); // batch thing is not necessary yet, but will be in the future
     updateCompiledDefinition(newCompiledDefinition);
     endBatch();
@@ -1115,7 +1114,7 @@ function addStateCompiled(oldState: State | undefined, newState: State): State {
     };
   } else {
     // There is no old state, so we need to create the long-lived stuff
-    console.log('initializing compiled definition to', newCompiledDefinition);
+    // console.log('initializing compiled definition to', newCompiledDefinition);
     const [liveStreamFunc, updateCompiledDefinition] = createLiveFunction(newCompiledDefinition, new Environment(), nativeFunctionEnvironment);
     const context = createNullaryVoidRootExecutionContext(liveStreamFunc);
 
@@ -1142,7 +1141,7 @@ function addDerivedState(oldState: State | undefined, newState: State): State {
 }
 
 export function reducer(state: State, action: Action): State {
-  console.log('action', action.type);
+  // console.log('action', action.type);
 
   let newCore: (null | [Node, Path, NodeEditState]) = null;
 
@@ -1168,7 +1167,7 @@ export function reducer(state: State, action: Action): State {
   }
 
   if (newCore) {
-    console.log('handled');
+    // console.log('handled');
     const [newProgram, newSelectionPath, newEditingSelected] = newCore;
     // console.log('new selectionPath is', newSelectionPath, 'newEditingSelected is', newEditingSelected);
     // console.log('new prog', newProgram);
@@ -1190,7 +1189,7 @@ export function reducer(state: State, action: Action): State {
       liveMain: null,
     });
   } else {
-    console.log('not handled');
+    // console.log('not handled');
     return state;
   }
 }
