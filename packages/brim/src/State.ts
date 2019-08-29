@@ -128,7 +128,7 @@ export function isNode(node: any): node is Node {
   return isProgramNode(node) || isIdentifierNode(node) || isExpressionNode(node) || isFunctionNode(node);
 }
 
-export type Path = (string | number)[];
+export type Path = ReadonlyArray<string | number>;
 
 export type NodeEditState = {
   readonly originalNode: Node,
