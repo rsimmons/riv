@@ -1,4 +1,4 @@
-import { State, Path, StreamID, FunctionID, Node, isProgramNode, ExpressionNode, isExpressionNode, IdentifierNode, ArrayLiteralNode, isArrayLiteralNode, FunctionSignature, FunctionNode, isApplicationNode, UserFunctionNode, isUserFunctionNode, ProgramNode, NodeEditState, UndefinedExpressionNode, isIdentifierNode, isFunctionNode, ParameterNode, isParameterNode } from './State';
+import { State, Path, StreamID, FunctionID, Node, ExpressionNode, isExpressionNode, IdentifierNode, ArrayLiteralNode, isArrayLiteralNode, FunctionSignature, FunctionNode, isApplicationNode, UserFunctionNode, isUserFunctionNode, ProgramNode, NodeEditState, UndefinedExpressionNode, isIdentifierNode, isFunctionNode, ParameterNode, isParameterNode } from './State';
 import genuid from './uid';
 import { compileUserDefinition, CompilationError, CompiledDefinition } from './Compiler';
 import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
@@ -510,7 +510,6 @@ const HANDLERS: Handler[] = [
     if (!editingSelected) {
       throw new Error();
     }
-    console.log('UPDATE_EDITING_TENTATIVE_NODE', action.newNode);
     if (subpath.length === 0) {
       let newNode: Node;
       if (isIdentifierNode(node)) {
@@ -777,20 +776,20 @@ const HANDLERS: Handler[] = [
   }],
 ];
 
-function applyActionToProgram(state: State, action: Action): (null | [Node, Path, NodeEditState]) {
+function applyActionToProgram(program: ProgramNode, selectionPath: Path, editingSelected: NodeEditState, action: Action): [ProgramNode, Path, NodeEditState] {
   let handled = false;
-  let newSelectionPath: Path | undefined;
-  let newEditingSelected: NodeEditState | undefined;
+  let newSelectionPath: Path = selectionPath;
+  let newEditingSelected: NodeEditState = editingSelected;
 
-  const newTree = traverseTree(state.program, {alongPath: state.selectionPath}, (node, path) => {
+  let newProgram = traverseTree(program, {alongPath: selectionPath}, (node, path) => {
     for (const [nt, acts, hfunc] of HANDLERS) {
       const matchingTypes = SCHEMA_CLASSES[nt] ? SCHEMA_CLASSES[nt] : [nt];
       if (matchingTypes.includes(node.type) && acts.includes(action.type)) {
-        const [pathBefore, pathAfter] = nodeSplitPath(node, state.program, state.selectionPath);
+        const [pathBefore, pathAfter] = nodeSplitPath(node, program, selectionPath);
         const handlerResult = hfunc({
           node,
           subpath: pathAfter,
-          editingSelected: state.editingSelected,
+          editingSelected,
           action,
         });
         if (handlerResult) {
@@ -808,17 +807,15 @@ function applyActionToProgram(state: State, action: Action): (null | [Node, Path
     return [false, node];
   });
 
-  if (handled) {
-    if ((newSelectionPath === undefined) || (newEditingSelected === undefined)) {
-      throw new Error();
-    }
-    return [newTree, newSelectionPath, newEditingSelected];
-  } else {
-    if (newTree !== state.program) {
-      throw new Error();
-    }
-    return null;
+  if (newProgram.type !== 'Program') {
+    throw new Error(); // sanity check
   }
+
+  if (!handled && ((newProgram !== program) || (newSelectionPath !== selectionPath) || (newEditingSelected !== editingSelected))) {
+    throw new Error(); // sanity check
+  }
+
+  return [newProgram, newSelectionPath, newEditingSelected];
 }
 
 function addStateIdLookups(state: State): State {
@@ -958,41 +955,39 @@ function addDerivedState(oldState: State | undefined, newState: State): State {
 }
 
 export function reducer(state: State, action: Action): State {
-  console.log('action', action.type);
+  // console.log('action', action);
 
-  let newCore: (null | [Node, Path, NodeEditState]) = null;
+  let newProgram = state.program;
+  let newSelectionPath = state.selectionPath;
+  let newEditingSelected = state.editingSelected;
 
-  if (action.type === 'SET_PATH') {
-    const newPath: Path = action.newPath!;
-    const newSelectedNode = nodeFromPath(state.program, newPath);
-    const beginEdit = (newSelectedNode.type === 'Identifier');
-    const newEditingSelected: NodeEditState = beginEdit ? {originalNode: newSelectedNode, tentativeNode: newSelectedNode} : null;
-    newCore = [state.program, newPath, newEditingSelected];
-  } else if (action.type === 'EDIT_NEXT_UNDEFINED') {
-    const confirmedResult = applyActionToProgram(state, {type: 'CONFIRM_EDIT'});
-    const [confirmedProgram, confirmedPath] = confirmedResult ? [confirmedResult[0], confirmedResult[1]] : [state.program, state.selectionPath];
-
-    const hit = firstUndefinedNode(confirmedProgram, confirmedPath);
-    if (hit) {
-      const [hitNode, hitPath] = hit;
-      newCore = [confirmedProgram, hitPath, {originalNode: hitNode, tentativeNode: hitNode}];
-    } else {
-      newCore = [confirmedProgram, confirmedPath, null];
-    }
-  } else {
-    newCore = applyActionToProgram(state, action);
+  // Do an implicit confirm before certain actions
+  if (['EDIT_NEXT_UNDEFINED', 'EDIT_AFTER', 'BEGIN_IDENTIFIER_EDIT'].includes(action.type)) {
+    [newProgram, newSelectionPath, newEditingSelected] = applyActionToProgram(newProgram, newSelectionPath, newEditingSelected, {type: 'CONFIRM_EDIT'});
   }
 
-  if (newCore) {
-    console.log('handled');
-    const [newProgram, newSelectionPath, newEditingSelected] = newCore;
-    console.log('new prog', newProgram, 'new selectionPath is', newSelectionPath, 'newEditingSelected is', newEditingSelected);
+  if (action.type === 'SET_PATH') {
+    newSelectionPath = action.newPath!;
+    const newSelectedNode = nodeFromPath(newProgram, newSelectionPath);
+    const beginEdit = (newSelectedNode.type === 'Identifier');
+    newEditingSelected = beginEdit ? {originalNode: newSelectedNode, tentativeNode: newSelectedNode} : null;
+  } else if (action.type === 'EDIT_NEXT_UNDEFINED') {
+    const hit = firstUndefinedNode(newProgram, newSelectionPath);
+    if (hit) {
+      const [hitNode, hitPath] = hit;
+      newSelectionPath = hitPath;
+      newEditingSelected = {originalNode: hitNode, tentativeNode: hitNode};
+    } else {
+      newEditingSelected = null;
+    }
+  } else {
+    [newProgram, newSelectionPath, newEditingSelected] = applyActionToProgram(newProgram, newSelectionPath, newEditingSelected, action);
+  }
+
+  if ((newProgram !== state.program) || (newSelectionPath !== state.selectionPath) || (newEditingSelected !== state.editingSelected)) {
+    // console.log('handled! new prog', newProgram, 'new selectionPath is', newSelectionPath, 'newEditingSelected is', newEditingSelected);
     if (newProgram !== state.program) {
       console.log('program changed identity');
-    }
-
-    if (!isProgramNode(newProgram)) {
-      throw new Error();
     }
 
     return addDerivedState(state, {
@@ -1008,7 +1003,7 @@ export function reducer(state: State, action: Action): State {
       liveMain: null,
     });
   } else {
-    console.log('not handled');
+    // console.log('not handled');
     return state;
   }
 }
