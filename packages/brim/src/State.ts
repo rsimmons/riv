@@ -135,6 +135,11 @@ export type NodeEditState = {
   readonly tentativeNode: Node,
 } | null;
 
+export interface UndoStackFrame {
+  readonly program: ProgramNode;
+  readonly selectionPath: Path;
+};
+
 export interface State {
   readonly program: ProgramNode;
   readonly selectionPath: Path;
@@ -150,4 +155,5 @@ export interface State {
     compiledDefinition: CompiledDefinition | null;
     updateCompiledDefinition: (newDefinition: CompiledDefinition) => void;
   } | null;
+  readonly undoStack: ReadonlyArray<UndoStackFrame>;
 }

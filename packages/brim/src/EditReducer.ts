@@ -960,13 +960,21 @@ export function reducer(state: State, action: Action): State {
   let newProgram = state.program;
   let newSelectionPath = state.selectionPath;
   let newEditingSelected = state.editingSelected;
+  let newUndoStack = state.undoStack;
 
   // Do an implicit confirm before certain actions
   if (['EDIT_NEXT_UNDEFINED', 'EDIT_AFTER', 'BEGIN_IDENTIFIER_EDIT'].includes(action.type)) {
     [newProgram, newSelectionPath, newEditingSelected] = applyActionToProgram(newProgram, newSelectionPath, newEditingSelected, {type: 'CONFIRM_EDIT'});
   }
 
-  if (action.type === 'SET_PATH') {
+  if (action.type === 'UNDO') {
+    if (state.undoStack.length > 0) {
+      const topFrame = newUndoStack[newUndoStack.length-1];
+      newProgram = topFrame.program;
+      newSelectionPath = topFrame.selectionPath;
+      newUndoStack = newUndoStack.slice(0, newUndoStack.length-1);
+    }
+  } else if (action.type === 'SET_PATH') {
     newSelectionPath = action.newPath!;
     const newSelectedNode = nodeFromPath(newProgram, newSelectionPath);
     const beginEdit = (newSelectedNode.type === 'Identifier');
@@ -988,6 +996,14 @@ export function reducer(state: State, action: Action): State {
     // console.log('handled! new prog', newProgram, 'new selectionPath is', newSelectionPath, 'newEditingSelected is', newEditingSelected);
     if (newProgram !== state.program) {
       console.log('program changed identity');
+
+      // Push the state of things _before_ this action onto the stack
+      if (action.type !== 'UNDO') {
+        newUndoStack = newUndoStack.concat([{
+          program: state.program,
+          selectionPath: state.selectionPath,
+        }]);
+      }
     }
 
     return addDerivedState(state, {
@@ -1001,6 +1017,7 @@ export function reducer(state: State, action: Action): State {
         nodeToPath: null,
       },
       liveMain: null,
+      undoStack: newUndoStack,
     });
   } else {
     // console.log('not handled');
@@ -1115,4 +1132,5 @@ export const initialState: State = addDerivedState(undefined, {
     nodeToPath: null,
   },
   liveMain: null,
+  undoStack: [],
 });

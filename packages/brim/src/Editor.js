@@ -24,6 +24,8 @@ const keyMap = {
   BEGIN_IDENTIFIER_EDIT: '=',
 
   EDIT_NEXT_UNDEFINED: 'tab',
+
+  UNDO: 'command+z',
 };
 
 // These are "normal" character keys that we use as commands. We identify them because we don't want
