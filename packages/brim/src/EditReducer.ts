@@ -1,4 +1,4 @@
-import { State, Path, StreamID, FunctionID, Node, isNode, isProgramNode, ExpressionNode, isExpressionNode, IdentifierNode, ArrayLiteralNode, isArrayLiteralNode, FunctionSignature, FunctionNode, isApplicationNode, UserFunctionNode, isUserFunctionNode, ProgramNode, NodeEditState, UndefinedExpressionNode, isIdentifierNode } from './State';
+import { State, Path, StreamID, FunctionID, Node, isProgramNode, ExpressionNode, isExpressionNode, IdentifierNode, ArrayLiteralNode, isArrayLiteralNode, FunctionSignature, FunctionNode, isApplicationNode, UserFunctionNode, isUserFunctionNode, ProgramNode, NodeEditState, UndefinedExpressionNode, isIdentifierNode, isFunctionNode, ParameterNode } from './State';
 import genuid from './uid';
 import { compileUserDefinition, CompilationError, CompiledDefinition } from './Compiler';
 import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
@@ -25,90 +25,8 @@ interface HandlerArgs {
 type HandlerResult = (undefined | [Node, Path, NodeEditState]);
 type Handler = [string, string[], (args: HandlerArgs) => HandlerResult];
 
-
-const SCHEMA_NODES = {
-  Program: {
-    fields: {
-      mainDefinition: {type: 'node'},
-    }
-  },
-
-  Identifier: {
-    fields: {
-      name: {type: 'value'},
-    }
-  },
-
-  UndefinedExpression: {
-    fields: {
-      streamId: {type: 'uid'},
-      identifier: {type: 'node'},
-    }
-  },
-
-  IntegerLiteral: {
-    fields: {
-      streamId: {type: 'uid'},
-      identifier: {type: 'node'},
-      value: {type: 'value'},
-    }
-  },
-
-  ArrayLiteral: {
-    fields: {
-      streamId: {type: 'uid'},
-      identifier: {type: 'node'},
-      items: {type: 'nodes'},
-    }
-  },
-
-  StreamReference: {
-    fields: {
-      streamId: {type: 'uid'},
-      identifier: {type: 'node'},
-      targetStreamId: {type: 'uid'},
-    }
-  },
-
-  Application: {
-    fields: {
-      streamId: {type: 'uid'},
-      identifier: {type: 'node'},
-      functionId: {type: 'uid'},
-      arguments: {type: 'nodes'},
-      functionArguments: {type: 'nodes'},
-    }
-  },
-
-  Parameter: {
-    fields: {
-      streamId: {type: 'uid'},
-      identifier: {type: 'node'},
-    }
-  },
-
-  NativeFunction: {
-    fields: {
-      functionId: {type: 'uid'},
-      identifier: {type: 'node'},
-      signature: {type: 'value'},
-      jsFunction: {type: 'value'},
-    }
-  },
-
-  UserFunction: {
-    fields: {
-      functionId: {type: 'uid'},
-      identifier: {type: 'node'},
-      signature: {type: 'value'},
-      parameters: {type: 'nodes'},
-      functionParameterFunctionIds: {type: 'value'},
-      expressions: {type: 'nodes'},
-    }
-  },
-};
-
 // TODO: If we want to include other classes in the lists, generate an expansion over the closure
+// TODO: Instead of this, we could have handlers provide predicate functions, and use isExpressionNode, etc.
 const SCHEMA_CLASSES: {[nodeType: string]: string[]} = {
   Expression: ['UndefinedExpression', 'IntegerLiteral', 'ArrayLiteral', 'StreamReference', 'Application', 'Parameter'],
   Any: ['Program', 'Identifier', 'UndefinedExpression', 'IntegerLiteral', 'ArrayLiteral', 'StreamReference', 'Application', 'NativeFunction', 'UserFunction'],
@@ -122,23 +40,7 @@ export function nodeFromPath(root: Node, path: Path): Node {
   return cur;
 }
 
-export function nodeOnPath(node: Node, root: Node, path: Path): boolean {
-  if (node === root) {
-    return true;
-  }
-
-  let cur: any = root;
-  for (const seg of path) {
-    cur = cur[seg];
-    if (node === cur) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-export function nodeSplitPath(node: Node, root: Node, path: Path): [Path, Path] {
+function nodeSplitPath(node: Node, root: Node, path: Path): [Path, Path] {
   let cur: any = root;
   let idx = 0;
   for (const seg of path) {
@@ -154,6 +56,185 @@ export function nodeSplitPath(node: Node, root: Node, path: Path): [Path, Path] 
   } else {
     throw new Error('node was not in path');
   }
+}
+
+function pathIsPrefix(a: Path, b: Path): boolean {
+  if (a.length > b.length) {
+    return false;
+  }
+
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+type TraversalVisitor = (node: Node, path: Path) => [boolean, Node];
+
+interface TraversalOptions {
+  onlyLocal?: true; // do not traverse into contained function definitions
+  alongPath?: Path;
+}
+
+// Returns [exit, newNode]. exit indicates an early end to traversal. newNode returns replacement node, which may be the same node
+// Warning: This is a juicy-ass function that demands respect.
+function recursiveTraverseTree(node: Node, path: Path, options: TraversalOptions, visit: TraversalVisitor): [boolean, Node] {
+  if (options.alongPath && !pathIsPrefix(path, options.alongPath)) {
+    return [false, node];
+  }
+
+  // Recurse
+  let exited = false;
+  let newNode: Node = node;
+
+  if ((isExpressionNode(newNode) || isFunctionNode(newNode)) && newNode.identifier) {
+    const [exit, newIdentifier] = recursiveTraverseTree(newNode.identifier, path.concat(['identifier']), options, visit);
+    if (exit) exited = true;
+    if (newIdentifier !== newNode.identifier) {
+      newNode = {
+        ...newNode,
+        identifier: newIdentifier,
+      } as Node;
+    };
+  }
+
+  switch (newNode.type) {
+    case 'Program': {
+      const [exit, newMainDefinition] = recursiveTraverseTree(newNode.mainDefinition, path.concat(['mainDefinition']), options, visit);
+      if (exit) exited = true;
+      if (newMainDefinition !== newNode.mainDefinition) {
+        newNode = {
+          ...newNode,
+          mainDefinition: newMainDefinition as UserFunctionNode,
+        };
+      }
+      break;
+    }
+
+    case 'UserFunction': {
+      const newParameters: Array<ParameterNode> = [];
+      const newExpressions: Array<ExpressionNode> = [];
+      let anyNewChildren = false;
+
+      newNode.parameters.forEach((parameter, idx) => {
+        if (exited) {
+          newParameters.push(parameter);
+        } else {
+          const [exit, newParameter] = recursiveTraverseTree(parameter, path.concat(['parameters', idx]), options, visit);
+          if (exit) exited = true;
+          newParameters.push(newParameter as ParameterNode);
+          if (newParameter !== parameter) anyNewChildren = true;
+        }
+      });
+
+      newNode.expressions.forEach((expression, idx) => {
+        if (exited) {
+          newExpressions.push(expression);
+        } else {
+          const [exit, newExpression] = recursiveTraverseTree(expression, path.concat(['expressions', idx]), options, visit);
+          if (exit) exited = true;
+          newExpressions.push(newExpression as ExpressionNode);
+          if (newExpression !== expression) anyNewChildren = true;
+        }
+      });
+
+      if (anyNewChildren) {
+        newNode = {
+          ...newNode,
+          parameters: newParameters,
+          expressions: newExpressions,
+        };
+      }
+      break;
+    }
+
+    case 'Application': {
+      const newArguments: Array<ExpressionNode> = [];
+      const newFunctionArguments: Array<UserFunctionNode> = [];
+      let anyNewChildren = false;
+
+      newNode.arguments.forEach((argument, idx) => {
+        if (exited) {
+          newArguments.push(argument);
+        } else {
+          const [exit, newArgument] = recursiveTraverseTree(argument, path.concat(['arguments', idx]), options, visit);
+          if (exit) exited = true;
+          newArguments.push(newArgument as ExpressionNode);
+          if (newArgument !== argument) anyNewChildren = true;
+        }
+      });
+
+      newNode.functionArguments.forEach((functionArgument, idx) => {
+        if (exited || options.onlyLocal) {
+          newFunctionArguments.push(functionArgument);
+        } else {
+          const [exit, newFunctionArgument] = recursiveTraverseTree(functionArgument, path.concat(['functionArguments', idx]), options, visit);
+          if (exit) exited = true;
+          newFunctionArguments.push(newFunctionArgument as UserFunctionNode);
+          if (newFunctionArgument !== functionArgument) anyNewChildren = true;
+        }
+      });
+
+      if (anyNewChildren) {
+        newNode = {
+          ...newNode,
+          arguments: newArguments,
+          functionArguments: newFunctionArguments,
+        };
+      }
+      break;
+    }
+
+    case 'ArrayLiteral': {
+      let newItems: Array<ExpressionNode> = [];
+      let anyNewChildren = false;
+
+      newNode.items.forEach((item, idx) => {
+        if (exited) {
+          newItems.push(item);
+        } else {
+          const [exit, newItem] = recursiveTraverseTree(item, path.concat(['items', idx]), options, visit);
+          if (exit) exited = true;
+          newItems.push(newItem as ExpressionNode);
+          if (newItem !== item) anyNewChildren = true;
+        }
+      });
+
+      if (anyNewChildren) {
+        newNode = {
+          ...newNode,
+          items: newItems,
+        };
+      }
+      break;
+    }
+
+    case 'Identifier':
+    case 'IntegerLiteral':
+    case 'StreamReference':
+    case 'UndefinedExpression':
+    case 'Parameter':
+      // Nothing else to recurse into
+      break;
+
+    default:
+      throw new Error();
+  }
+
+  if (exited) {
+    return [exited, newNode];
+  }
+
+  return visit(newNode, path);
+}
+
+// Post-order traversal. Avoids returning new node unless something has changed.
+function traverseTree(node: Node, options: TraversalOptions, visit: TraversalVisitor): Node {
+  const [, newNode] = recursiveTraverseTree(node, [], options, visit);
+  return newNode;
 }
 
 export function addExpressionLocalEnvironment(expr: ExpressionNode, namedStreams: Array<[string, ExpressionNode]>, namedFunctions: Array<[string, FunctionNode]>) {
@@ -775,114 +856,48 @@ const HANDLERS: Handler[] = [
   }],
 ];
 
-/**
- * Returns null or [newNode, newSelectionPath, newTextEdit]
- */
-function recursiveReducer(state: State, node: Node, action: Action): (null | [Node, Path, NodeEditState]) {
-  // If this node is not on the selection path, we can short circuit
-  if (!nodeOnPath(node, state.program, state.selectionPath)) {
+function applyActionToProgram(state: State, action: Action): (null | [Node, Path, NodeEditState]) {
+  let handled = false;
+  let newSelectionPath: Path | undefined;
+  let newEditingSelected: NodeEditState | undefined;
+
+  const newTree = traverseTree(state.program, {alongPath: state.selectionPath}, (node, path) => {
+    for (const [nt, acts, hfunc] of HANDLERS) {
+      const matchingTypes = SCHEMA_CLASSES[nt] ? SCHEMA_CLASSES[nt] : [nt];
+      if (matchingTypes.includes(node.type) && acts.includes(action.type)) {
+        const [pathBefore, pathAfter] = nodeSplitPath(node, state.program, state.selectionPath);
+        const handlerResult = hfunc({
+          node,
+          subpath: pathAfter,
+          editingSelected: state.editingSelected,
+          action,
+        });
+        if (handlerResult) {
+          // console.log('action handled, with result', handlerResult);
+          handled = true;
+          const [handlerNewNode, handlerNewSubpath, handlerNewEditingSelected] = handlerResult;
+
+          newSelectionPath = pathBefore.concat(handlerNewSubpath);
+          newEditingSelected = handlerNewEditingSelected;
+          return [true, handlerNewNode];
+        }
+      }
+    }
+
+    return [false, node];
+  });
+
+  if (handled) {
+    if ((newSelectionPath === undefined) || (newEditingSelected === undefined)) {
+      throw new Error();
+    }
+    return [newTree, newSelectionPath, newEditingSelected];
+  } else {
+    if (newTree !== state.program) {
+      throw new Error();
+    }
     return null;
   }
-
-  // Build new node, recursing into any child nodes
-  // If nothing has changed, we try to return the original object to allow callers to memoize
-  const nodeInfo = SCHEMA_NODES[node.type];
-  if (!nodeInfo) {
-    throw new Error();
-  }
-  const newNode: any = {
-    type: node.type,
-  };
-  let newSelPath = null;
-  let newEditingSelected: NodeEditState = null;
-  let handled = false;
-  const indexableNode = node as {[prop: string]: any}; // to avoid type errors
-  for (const [fieldName, fieldInfo] of Object.entries(nodeInfo.fields)) {
-    switch (fieldInfo.type) {
-      case 'node': {
-        const childNode = indexableNode[fieldName];
-        const recResult = recursiveReducer(state, childNode, action);
-        if (recResult) {
-          if (handled) {
-            throw new Error('already handled');
-          }
-          const [n, sp, es] = recResult;
-          newNode[fieldName] = n;
-          newSelPath = sp;
-          newEditingSelected = es;
-          handled = true;
-        } else {
-          newNode[fieldName] = childNode;
-        }
-        break;
-      }
-
-      case 'nodes': {
-        const newArr = [];
-        const childNodes = indexableNode[fieldName];
-        for (const arrn of childNodes) {
-          const recResult = recursiveReducer(state, arrn, action);
-          if (recResult) {
-            if (handled) {
-              throw new Error('already handled');
-            }
-            const [n, sp, es] = recResult;
-            newArr.push(n);
-            newSelPath = sp;
-            newEditingSelected = es;
-            handled = true;
-          } else {
-            newArr.push(arrn);
-          }
-        }
-        newNode[fieldName] = newArr;
-        break;
-      }
-
-      case 'value':
-        newNode[fieldName] = indexableNode[fieldName];
-        break;
-
-      case 'uid':
-        newNode[fieldName] = indexableNode[fieldName];
-        break;
-
-      default:
-        throw new Error();
-    }
-  }
-
-  // If the action has been handled, we can return now
-  if (handled) {
-    if (!isNode(newNode)) {
-      throw new Error();
-    }
-    if (!newSelPath) {
-      throw new Error();
-    }
-    return [newNode, newSelPath, newEditingSelected];
-  }
-
-  // Try any matching handlers
-  for (const [nt, acts, hfunc] of HANDLERS) {
-    const matchingTypes = SCHEMA_CLASSES[nt] ? SCHEMA_CLASSES[nt] : [nt];
-    if (matchingTypes.includes(node.type) && acts.includes(action.type)) {
-      const [pathBefore, pathAfter] = nodeSplitPath(node, state.program, state.selectionPath);
-      const handlerResult = hfunc({
-        node,
-        subpath: pathAfter,
-        editingSelected: state.editingSelected,
-        action,
-      });
-      if (handlerResult) {
-        // console.log('handlerResult', handlerResult);
-        const [handlerNewNode, handlerNewSubpath, handlerNewEditingSelected] = handlerResult;
-        return [handlerNewNode, pathBefore.concat(handlerNewSubpath), handlerNewEditingSelected];
-      }
-    }
-  }
-
-  return null;
 }
 
 function recursiveBuildIdMaps(node: Node, streamIdToNode: Map<StreamID, Node>, functionIdToNode: Map<FunctionID, FunctionNode>): void {
@@ -1024,55 +1039,22 @@ function addStatePathLookup(state: State): State {
   };
 }
 
-function recursiveUndefineDanglingStreamRefs(node: Node, streamIdToNode: ReadonlyMap<StreamID, Node>): Node {
-  switch (node.type) {
-    case 'Program':
-      return {
-        ...node,
-        mainDefinition: recursiveUndefineDanglingStreamRefs(node.mainDefinition, streamIdToNode) as UserFunctionNode,
-      };
-
-    case 'UserFunction':
-      return {
-        ...node,
-        expressions: node.expressions.map(expr => recursiveUndefineDanglingStreamRefs(expr, streamIdToNode)) as Array<ExpressionNode>,
-      };
-
-    case 'Application':
-      return {
-        ...node,
-        arguments: node.arguments.map(arg => recursiveUndefineDanglingStreamRefs(arg, streamIdToNode)) as Array<ExpressionNode>,
-        functionArguments: node.functionArguments.map(farg => recursiveUndefineDanglingStreamRefs(farg, streamIdToNode)) as Array<UserFunctionNode>,
-      };
-
-    case 'ArrayLiteral':
-      return {
-        ...node,
-        items: node.items.map(item => recursiveUndefineDanglingStreamRefs(item, streamIdToNode)) as Array<ExpressionNode>,
-      };
-
-    case 'IntegerLiteral':
-    case 'UndefinedExpression':
-      // NOTE: nothing to do
-      return node;
-
-    case 'StreamReference':
-      // This is the important case
-      return streamIdToNode.has(node.targetStreamId) ? node : {
+function undefineDanglingStreamRefs(state: State): State {
+  const newProgram = traverseTree(state.program, {}, (node, ) => {
+    if (node.type === 'StreamReference') {
+      return [false, state.derivedLookups.streamIdToNode!.has(node.targetStreamId) ? node : {
         type: 'UndefinedExpression',
         streamId: genuid(),
         identifier: node.identifier,
-      };
+      }];
+    } else {
+      return [false, node];
+    }
+  });
 
-    default:
-      throw new Error();
-  }
-}
-
-function undefineDanglingStreamRefs(state: State): State {
-  return {
+  return (newProgram === state.program) ? state : {
     ...state,
-    program: recursiveUndefineDanglingStreamRefs(state.program, state.derivedLookups.streamIdToNode!) as ProgramNode,
+    program: newProgram as ProgramNode,
   }
 }
 
@@ -1152,7 +1134,7 @@ export function reducer(state: State, action: Action): State {
     const newEditingSelected: NodeEditState = beginEdit ? {originalNode: newSelectedNode, tentativeNode: newSelectedNode} : null;
     newCore = [state.program, newPath, newEditingSelected];
   } else if (action.type === 'EDIT_NEXT_UNDEFINED') {
-    const confirmedResult = recursiveReducer(state, state.program, {type: 'CONFIRM_EDIT'});
+    const confirmedResult = applyActionToProgram(state, {type: 'CONFIRM_EDIT'});
     const [confirmedProgram, confirmedPath] = confirmedResult ? [confirmedResult[0], confirmedResult[1]] : [state.program, state.selectionPath];
 
     const hit = firstUndefinedNode(confirmedProgram, confirmedPath);
@@ -1163,7 +1145,7 @@ export function reducer(state: State, action: Action): State {
       newCore = [confirmedProgram, confirmedPath, null];
     }
   } else {
-    newCore = recursiveReducer(state, state.program, action);
+    newCore = applyActionToProgram(state, action);
   }
 
   if (newCore) {
