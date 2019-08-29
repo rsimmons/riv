@@ -355,8 +355,10 @@ function endEdit({node, subpath, editingSelected}: HandlerArgs, confirm: boolean
     const hit = firstUndefinedNode(newNode);
     if (hit) {
       const [hitNode, hitPath] = hit;
-      newSubpath = hitPath;
-      newEditingSelected = {originalNode: hitNode, tentativeNode: hitNode};
+      if (hitNode !== newNode) { // need to check this otherwise we can't confirm edit of undefined node
+        newSubpath = hitPath;
+        newEditingSelected = {originalNode: hitNode, tentativeNode: hitNode};
+      }
     }
   }
 
@@ -508,6 +510,7 @@ const HANDLERS: Handler[] = [
     if (!editingSelected) {
       throw new Error();
     }
+    console.log('UPDATE_EDITING_TENTATIVE_NODE', action.newNode);
     if (subpath.length === 0) {
       let newNode: Node;
       if (isIdentifierNode(node)) {
@@ -955,7 +958,7 @@ function addDerivedState(oldState: State | undefined, newState: State): State {
 }
 
 export function reducer(state: State, action: Action): State {
-  // console.log('action', action.type);
+  console.log('action', action.type);
 
   let newCore: (null | [Node, Path, NodeEditState]) = null;
 
@@ -981,10 +984,9 @@ export function reducer(state: State, action: Action): State {
   }
 
   if (newCore) {
-    // console.log('handled');
+    console.log('handled');
     const [newProgram, newSelectionPath, newEditingSelected] = newCore;
-    // console.log('new selectionPath is', newSelectionPath, 'newEditingSelected is', newEditingSelected);
-    // console.log('new prog', newProgram);
+    console.log('new prog', newProgram, 'new selectionPath is', newSelectionPath, 'newEditingSelected is', newEditingSelected);
     if (newProgram !== state.program) {
       console.log('program changed identity');
     }
@@ -1006,7 +1008,7 @@ export function reducer(state: State, action: Action): State {
       liveMain: null,
     });
   } else {
-    // console.log('not handled');
+    console.log('not handled');
     return state;
   }
 }
