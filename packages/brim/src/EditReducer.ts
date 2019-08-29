@@ -237,54 +237,19 @@ function traverseTree(node: Node, options: TraversalOptions, visit: TraversalVis
   return newNode;
 }
 
-export function addExpressionLocalEnvironment(expr: ExpressionNode, namedStreams: Array<[string, ExpressionNode]>, namedFunctions: Array<[string, FunctionNode]>) {
-  if (expr.identifier) {
-    namedStreams.push([expr.identifier.name, expr]);
-  }
-
-  switch (expr.type) {
-    case 'Application':
-      for (const sarg of expr.arguments) {
-        addExpressionLocalEnvironment(sarg, namedStreams, namedFunctions);
-      }
-      for (const farg of expr.functionArguments) {
-        // NOTE: We don't recurse into the function-argument since we only want the local scope
-        if (farg.identifier) {
-          namedFunctions.push([farg.identifier.name, farg]);
-        }
-      }
-      break;
-
-    case 'ArrayLiteral':
-      for (const item of expr.items) {
-        addExpressionLocalEnvironment(item, namedStreams, namedFunctions);
-      }
-      break;
-
-    case 'StreamReference':
-    case 'IntegerLiteral':
-    case 'UndefinedExpression':
-      // nothing to do
-      break;
-
-    default:
-      throw new Error();
-  }
-}
-
-export function addUserFunctionLocalEnvironment(func: UserFunctionNode, namedStreams: Array<[string, ExpressionNode]>, namedFunctions: Array<[string, FunctionNode]>) {
-  for (const param of func.parameters) {
-    if (param.identifier) {
-      namedStreams.push([param.identifier.name, param]);
+function addUserFunctionLocalEnvironment(func: UserFunctionNode, namedStreams: Array<[string, ExpressionNode]>, namedFunctions: Array<[string, FunctionNode]>) {
+  traverseTree(func, {onlyLocal: true}, (node, path) => {
+    if (isExpressionNode(node) && node.identifier) {
+      namedStreams.push([node.identifier.name, node]);
     }
-  }
-
-  for (const exp of func.expressions) {
-    addExpressionLocalEnvironment(exp, namedStreams, namedFunctions);
-  }
+    if (isUserFunctionNode(node) && node.identifier) {
+      namedFunctions.push([node.identifier.name, node]);
+    }
+    return [false, node];
+  });
 }
 
-export function addEnvironmentAlongPath(root: Node, path: Path, namedStreams: Array<[string, ExpressionNode]>, namedFunctions: Array<[string, FunctionNode]>) {
+function addEnvironmentAlongPath(root: Node, path: Path, namedStreams: Array<[string, ExpressionNode]>, namedFunctions: Array<[string, FunctionNode]>) {
   let cur: Node = root;
   for (const seg of path) {
     if (cur.type === 'UserFunction') {
