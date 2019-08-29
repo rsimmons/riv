@@ -1,4 +1,4 @@
-import { State, Path, StreamID, FunctionID, Node, isProgramNode, ExpressionNode, isExpressionNode, IdentifierNode, ArrayLiteralNode, isArrayLiteralNode, FunctionSignature, FunctionNode, isApplicationNode, UserFunctionNode, isUserFunctionNode, ProgramNode, NodeEditState, UndefinedExpressionNode, isIdentifierNode, isFunctionNode, ParameterNode } from './State';
+import { State, Path, StreamID, FunctionID, Node, isProgramNode, ExpressionNode, isExpressionNode, IdentifierNode, ArrayLiteralNode, isArrayLiteralNode, FunctionSignature, FunctionNode, isApplicationNode, UserFunctionNode, isUserFunctionNode, ProgramNode, NodeEditState, UndefinedExpressionNode, isIdentifierNode, isFunctionNode, ParameterNode, isParameterNode } from './State';
 import genuid from './uid';
 import { compileUserDefinition, CompilationError, CompiledDefinition } from './Compiler';
 import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
@@ -398,72 +398,25 @@ function endEdit({node, subpath, editingSelected}: HandlerArgs, confirm: boolean
   return [newNode, newSubpath, newEditingSelected];
 }
 
-function recursiveFirstUndefinedNode(node: Node, path: Path, after: Path | undefined, passed: [boolean]): [Node, Path] | undefined {
-  if (after && equiv(path, after)) {
-    passed[0] = true;
-  }
-
-  switch (node.type) {
-    case 'Program':
-      return recursiveFirstUndefinedNode(node.mainDefinition, path.concat(['mainDefinition']), after, passed);
-
-    case 'UserFunction': {
-      let idx = 0;
-      for (const expression of node.expressions) {
-        const result = recursiveFirstUndefinedNode(expression, path.concat(['expressions', idx]), after, passed);
-        if (result) { return result; }
-        idx++;
-      }
-      break;
-    }
-
-    case 'Application': {
-      let idx = 0;
-      for (const arg of node.arguments) {
-        const result = recursiveFirstUndefinedNode(arg, path.concat(['arguments', idx]), after, passed);
-        if (result) { return result; }
-        idx++;
-      }
-
-      idx = 0; // so ghetto
-      for (const farg of node.functionArguments) {
-        const result = recursiveFirstUndefinedNode(farg, path.concat(['functionArguments', idx]), after, passed);
-        if (result) { return result; }
-        idx++;
-      }
-      break;
-    }
-
-    case 'ArrayLiteral': {
-      let idx = 0;
-      for (const item of node.items) {
-        const result = recursiveFirstUndefinedNode(item, path.concat(['items', idx]), after, passed);
-        if (result) { return result; }
-        idx++;
-      }
-      break;
-    }
-
-    case 'Identifier':
-    case 'IntegerLiteral':
-    case 'StreamReference':
-      // NOTE: nothing to recurse into
-      break;
-
-    case 'UndefinedExpression':
-      if (!after || passed[0]) {
-        return [node, path];
-      }
-      break;
-
-    default:
-      throw new Error();
-  }
-}
-
 function firstUndefinedNode(node: Node, after: Path | undefined = undefined): [Node, Path] | undefined {
-  const passed: [boolean] = [false]; // have we passed the "after" path?
-  return recursiveFirstUndefinedNode(node, [], after, passed);
+  let passed = false; // have we passed the "after" path?
+  let result: [Node, Path] | undefined;
+
+  traverseTree(node, {}, (node, path) => {
+    if (after && pathIsPrefix(after, path)) {
+      passed = true;
+    }
+
+    if (node.type === 'UndefinedExpression') {
+      if (passed || !after) {
+        result = [node, path];
+        return [true, node];
+      }
+    }
+    return [false, node];
+  });
+
+  return result;
 }
 
 const HANDLERS: Handler[] = [
@@ -900,135 +853,49 @@ function applyActionToProgram(state: State, action: Action): (null | [Node, Path
   }
 }
 
-function recursiveBuildIdMaps(node: Node, streamIdToNode: Map<StreamID, Node>, functionIdToNode: Map<FunctionID, FunctionNode>): void {
-  if (isExpressionNode(node)) {
-    if (streamIdToNode.has(node.streamId)) {
-      throw new Error('stream ids must be unique');
-    }
-    streamIdToNode.set(node.streamId, node);
-  }
-
-  switch (node.type) {
-    case 'Program':
-      recursiveBuildIdMaps(node.mainDefinition, streamIdToNode, functionIdToNode);
-      break;
-
-    case 'UserFunction':
-      if (functionIdToNode.has(node.functionId)) {
-        throw new Error('function ids must be unique');
-      }
-      functionIdToNode.set(node.functionId, node);
-
-      for (const param of node.parameters) {
-        if (streamIdToNode.has(param.streamId)) {
-          throw new Error('stream ids must be unique');
-        }
-        streamIdToNode.set(param.streamId, param);
-      }
-
-      node.expressions.forEach((expression, idx) => {
-        recursiveBuildIdMaps(expression, streamIdToNode, functionIdToNode);
-      });
-      break;
-
-    case 'Application':
-      node.arguments.forEach((arg, idx) => {
-        recursiveBuildIdMaps(arg, streamIdToNode, functionIdToNode);
-      });
-      node.functionArguments.forEach((farg, idx) => {
-        recursiveBuildIdMaps(farg, streamIdToNode, functionIdToNode);
-      });
-      break;
-
-    case 'ArrayLiteral':
-      node.items.forEach((item, idx) => {
-        recursiveBuildIdMaps(item, streamIdToNode, functionIdToNode);
-      })
-      break;
-
-    case 'IntegerLiteral':
-    case 'UndefinedExpression':
-    case 'StreamReference':
-      // NOTE: nothing to recurse into
-      break;
-
-    default:
-      throw new Error();
-  }
-}
-
 function addStateIdLookups(state: State): State {
   const streamIdToNode: Map<StreamID, ExpressionNode> = new Map();
   const functionIdToNode: Map<FunctionID, FunctionNode> = new Map();
-  const nodeToPath: Map<Node, Path> = new Map();
 
   for (const extFunc of state.nativeFunctions) {
     functionIdToNode.set(extFunc.functionId, extFunc);
   }
 
-  recursiveBuildIdMaps(state.program, streamIdToNode, functionIdToNode);
+  traverseTree(state.program, {}, (node, ) => {
+    if (isExpressionNode(node) || isParameterNode(node)) {
+      if (streamIdToNode.has(node.streamId)) {
+        throw new Error('stream ids must be unique');
+      }
+      streamIdToNode.set(node.streamId, node);
+    }
+
+    if (isUserFunctionNode(node)) {
+      if (functionIdToNode.has(node.functionId)) {
+        throw new Error('funciton ids must be unique');
+      }
+      functionIdToNode.set(node.functionId, node);
+    }
+
+    return [false, node];
+  });
 
   return {
     ...state,
     derivedLookups: {
       streamIdToNode,
       functionIdToNode,
-      nodeToPath,
+      nodeToPath: null,
     },
   };
-}
-
-function recursiveBuildPathMap(node: Node, path: Path, nodeToPath: Map<Node, Path>): void {
-  nodeToPath.set(node, path);
-
-  if (isExpressionNode(node)) {
-    if (node.identifier) {
-      recursiveBuildPathMap(node.identifier, path.concat(['identifier']), nodeToPath)
-    }
-  }
-
-  switch (node.type) {
-    case 'Program':
-      recursiveBuildPathMap(node.mainDefinition, path.concat(['mainDefinition']), nodeToPath);
-      break;
-
-    case 'UserFunction':
-      node.expressions.forEach((expression, idx) => {
-        recursiveBuildPathMap(expression, path.concat(['expressions', idx]), nodeToPath);
-      });
-      break;
-
-    case 'Application':
-      node.arguments.forEach((arg, idx) => {
-        recursiveBuildPathMap(arg, path.concat(['arguments', idx]), nodeToPath);
-      });
-      node.functionArguments.forEach((farg, idx) => {
-        recursiveBuildPathMap(farg, path.concat(['functionArguments', idx]), nodeToPath);
-      });
-      break;
-
-    case 'ArrayLiteral':
-      node.items.forEach((item, idx) => {
-        recursiveBuildPathMap(item, path.concat(['items', idx]), nodeToPath);
-      })
-      break;
-
-    case 'Identifier':
-    case 'IntegerLiteral':
-    case 'UndefinedExpression':
-    case 'StreamReference':
-      // NOTE: nothing to recurse into
-      break;
-
-    default:
-      throw new Error();
-  }
 }
 
 function addStatePathLookup(state: State): State {
   const nodeToPath: Map<Node, Path> = new Map();
 
-  recursiveBuildPathMap(state.program, [], nodeToPath);
+  traverseTree(state.program, {}, (node, path) => {
+    nodeToPath.set(node, path);
+    return [false, node];
+  });
 
   return {
     ...state,
@@ -1153,6 +1020,9 @@ export function reducer(state: State, action: Action): State {
     const [newProgram, newSelectionPath, newEditingSelected] = newCore;
     // console.log('new selectionPath is', newSelectionPath, 'newEditingSelected is', newEditingSelected);
     // console.log('new prog', newProgram);
+    if (newProgram !== state.program) {
+      console.log('program changed identity');
+    }
 
     if (!isProgramNode(newProgram)) {
       throw new Error();
