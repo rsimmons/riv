@@ -68,6 +68,7 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerS
       for (const [sid, fid, ] of compiledDefinition.applications) {
         const func = functionEnvironment.get(fid);
         if (!func) {
+          console.log(fid);
           throw Error();
         }
         applicationContext.set(sid, new ExecutionContext(func, requestUpdate));

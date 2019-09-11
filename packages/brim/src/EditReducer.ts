@@ -1,9 +1,9 @@
-import { State, Path, StreamID, FunctionID, Node, ExpressionNode, isExpressionNode, IdentifierNode, ArrayLiteralNode, isArrayLiteralNode, FunctionSignature, FunctionNode, isApplicationNode, UserFunctionNode, isUserFunctionNode, ProgramNode, NodeEditState, UndefinedExpressionNode, isIdentifierNode, isFunctionNode, ParameterNode, isParameterNode } from './State';
+import { State, Path, StreamID, FunctionID, Node, ExpressionNode, isExpressionNode, IdentifierNode, ArrayLiteralNode, isArrayLiteralNode, FunctionNode, isApplicationNode, UserFunctionNode, isUserFunctionNode, ProgramNode, NodeEditState, UndefinedExpressionNode, isIdentifierNode, isFunctionNode, ParameterNode, isParameterNode } from './State';
 import genuid from './uid';
 import { compileUserDefinition, CompilationError, CompiledDefinition } from './Compiler';
 import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
 import { createLiveFunction, Environment } from './LiveFunction';
-const { showString, animationTime, mouseDown, changeCount, streamMap, audioDriver, random, mouseClickEvts } = require('riv-demo-lib');
+import globalNativeFunctions from './globalNatives';
 
 const REALIZE_TENTATIVE_EXPRESSION_EDITS = false;
 const REALIZE_TENTATIVE_IDENTIFIER_EDITS = true;
@@ -1036,26 +1036,13 @@ export function reducer(state: State, action: Action): State {
   }
 }
 
-const nativeFunctions: Array<[string, Array<string>, Array<[string, FunctionSignature]>, Function]> = [
-  ['add', ['_a', '_b'], [], (a: number, b: number) => a + b],
-  ['multiply', ['_a', '_b'], [], (a: number, b: number) => a * b],
-  ['show value', ['_v'], [], showString],
-  ['animation time', [], [], animationTime],
-  ['is mouse down', [], [], mouseDown],
-  ['change count', ['_stream'], [], changeCount],
-  ['map', ['_array'], [['_func', {parameters: ['value'], functionParameters: []}]], (arr: Array<any>, f: (v: any) => any) => streamMap(f, arr)],
-  ['if', ['cond', 'then', 'else'], [], (cond: any, _then: any, _else: any) => (cond ? _then : _else)],
-  ['audio driver', [], [['_func', {parameters: ['audio time', 'next frame', 'sample rate'], functionParameters: []}]], audioDriver],
-  ['cosine', ['_v'], [], Math.cos],
-  ['random', ['repick'], [], random],
-  ['mouse click', [], [], mouseClickEvts],
-];
+
 
 const nativeFunctionEnvironment: Environment<Function> = new Environment();
 nativeFunctionEnvironment.set('id', (x: any) => x);
 nativeFunctionEnvironment.set('Array_of', Array.of);
-nativeFunctions.forEach(([name, , , jsFunc]) => {
-  nativeFunctionEnvironment.set(name, jsFunc);
+globalNativeFunctions.forEach(([id, , , , jsFunc]) => {
+  nativeFunctionEnvironment.set(id, jsFunc);
 });
 
 const mdId = genuid();
@@ -1080,7 +1067,7 @@ export const initialState: State = addDerivedState(undefined, {
             type: 'Identifier',
             name: 'md',
           },
-          functionId: 'is mouse down',
+          functionId: 'mouseDown',
           arguments: [],
           functionArguments: [],
         },
@@ -1088,13 +1075,13 @@ export const initialState: State = addDerivedState(undefined, {
           type: 'Application',
           streamId: genuid(),
           identifier: null,
-          functionId: 'show value',
+          functionId: 'showString',
           arguments: [
             {
               type: 'Application',
               streamId: genuid(),
               identifier: null,
-              functionId: 'if',
+              functionId: 'ifte',
               arguments: [
                 {
                   type: 'StreamReference',
@@ -1125,12 +1112,12 @@ export const initialState: State = addDerivedState(undefined, {
   },
   selectionPath: ['mainDefinition', 'expressions', 0],
   editingSelected: null,
-  nativeFunctions: nativeFunctions.map(([name, paramNames, funcParams, ]) => ({
+  nativeFunctions: globalNativeFunctions.map(([id, name, paramNames, funcParams, ]) => ({
     type: 'NativeFunction',
-    functionId: name,
+    functionId: id,
     identifier: {
       type: 'Identifier',
-      name: name,
+      name,
     },
     signature: {
       parameters: paramNames,
