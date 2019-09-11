@@ -3,8 +3,8 @@ import { generateTheme } from './themes/Simple';
 import './ThemePicker.css';
 
 const INITIAL_OPTIONS = {
-  expressionGrouping: 'line',
-  applicationArguments: 'below',
+  expressionGrouping: 'background',
+  applicationArguments: 'right',
 };
 
 export const INITIAL_THEME = generateTheme(INITIAL_OPTIONS);
