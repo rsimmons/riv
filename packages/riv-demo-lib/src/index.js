@@ -35,7 +35,7 @@ export function animationFrameEvts() {
   return frameEvts;
 }
 
-function latestValue(evts, initialValue) {
+export function latestValue(evts, initialValue) {
   return useReducer(evts, (_, value) => value, initialValue);
 }
 
