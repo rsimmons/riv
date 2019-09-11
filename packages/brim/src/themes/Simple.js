@@ -43,10 +43,6 @@ function Selectable({ selected, onSelect, onEdit, children, extraClassName }) {
 }
 
 export const generateTheme = ({ expressionGrouping, applicationArguments }) => ({
-  Program: ({ expressions }) => (
-    <div className="SimpleTheme-program">{expressions}</div>
-  ),
-
   Application: ({ functionName, streamArgs, functionArgs }) => {
     const appClass = ((applicationArguments === 'right') || (applicationArguments === 'right-centered')) ? 'SimpleTheme-application-flex' : '';
     const nameClass = 'SimpleTheme-application-function-name' + ((applicationArguments === 'right-centered') ? ' SimpleTheme-application-function-name-centered' : '');

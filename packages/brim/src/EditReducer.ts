@@ -682,6 +682,20 @@ const HANDLERS: Handler[] = [
   }],
 
   // NOTE: We only allow MOVE_LEFT to act as ZOOM_OUT here because we know arguments are displayed vertically for now
+  ['UserFunction', ['ZOOM_OUT', 'MOVE_LEFT'], ({node, subpath}) => {
+    if (!isUserFunctionNode(node)) {
+      throw new Error();
+    }
+    if (subpath.length === 2) {
+      if ((subpath[0] === 'expressions') && (typeof(subpath[1]) === 'number')) {
+        return [node, [], null];
+      } else {
+        throw new Error();
+      }
+    }
+  }],
+
+  // NOTE: We only allow MOVE_LEFT to act as ZOOM_OUT here because we know arguments are displayed vertically for now
   ['Application', ['ZOOM_OUT', 'MOVE_LEFT'], ({node, subpath}) => {
     if (!isApplicationNode(node)) {
       throw new Error();
@@ -694,9 +708,6 @@ const HANDLERS: Handler[] = [
       } else {
         throw new Error();
       }
-    } else if ((subpath.length >= 3) && (subpath[0] === 'functionArguments') && (typeof(subpath[1]) === 'number')) {
-      // We handle this here (slightly unusual) so that user can't zoom out to main function definition
-      return [node, subpath.slice(0, 2), null];
     }
   }],
 

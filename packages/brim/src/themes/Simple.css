@@ -7,7 +7,7 @@
   padding: 0.05em 0;
 }
 
-.SimpleTheme-program, .SimpleTheme-definition-expression, .SimpleTheme-array-item, .SimpleTheme-application-argument, .SimpleTheme-expression-identifier {
+.SimpleTheme-definition-expression, .SimpleTheme-array-item, .SimpleTheme-application-argument, .SimpleTheme-expression-identifier {
   width: fit-content;
 }
 

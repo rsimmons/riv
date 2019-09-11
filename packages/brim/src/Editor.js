@@ -92,12 +92,6 @@ function useHandleEdit(obj) {
 
 const ThemeContext = createContext();
 
-function ProgramView({ program }) {
-  const { Program } = useContext(ThemeContext);
-
-  return <Program expressions={<DefinitionExpressionsView expressions={program.mainDefinition.expressions} />} />;
-}
-
 function DefinitionExpressionsView({ expressions }) {
   const { DefinitionExpression } = useContext(ThemeContext);
 
@@ -308,7 +302,7 @@ export default function Editor({ autoFocus }) {
             <SelectedNodeContext.Provider value={nodeFromPath(state.program, state.selectionPath)}>
               <FullStateContext.Provider value={state}>
                 <ThemeContext.Provider value={theme}>
-                  <ProgramView program={state.program} />
+                  <UserFunctionView userFunction={state.program.mainDefinition} />
                 </ThemeContext.Provider>
               </FullStateContext.Provider>
             </SelectedNodeContext.Provider>
