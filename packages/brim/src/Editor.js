@@ -26,6 +26,9 @@ const keyMap = {
   EDIT_NEXT_UNDEFINED: 'tab',
 
   UNDO: 'command+z',
+
+  CUT: 'command+x',
+  PASTE: 'command+v',
 };
 
 // These are "normal" character keys that we use as commands. We identify them because we don't want
@@ -52,10 +55,20 @@ const FullStateContext = createContext();
 
 const DispatchContext = createContext();
 
-const SelectedNodeContext = createContext();
-function useIsSelected(obj) {
-  const selectedNode = useContext(SelectedNodeContext);
-  return obj === selectedNode;
+const MarkedNodesContext = createContext();
+function useMarks(obj) {
+  const marks = [];
+  const { selectedNode, clipboardTopNode, clipboardRestNodes } = useContext(MarkedNodesContext);
+  if (obj === selectedNode) {
+    marks.push('selected');
+  }
+  if (obj === clipboardTopNode) {
+    marks.push('clipboard-top');
+  }
+  if (clipboardRestNodes.includes(obj)) {
+    marks.push('clipboard-rest');
+  }
+  return marks;
 }
 function useHandleSelect(obj) {
   const dispatch = useContext(DispatchContext);
@@ -121,7 +134,7 @@ function IdentifierChooser({ initialName, onUpdateName, onEndEdit }) {
 }
 
 function IdentifierView({ identifier }) {
-  const selected = useIsSelected(identifier);
+  const marks = useMarks(identifier);
   const handleSelect = useHandleSelect(identifier);
   const {editingSelected} = useContext(FullStateContext);
   const dispatch = useContext(DispatchContext);
@@ -138,7 +151,7 @@ function IdentifierView({ identifier }) {
 
   const { Identifier } = useContext(ThemeContext);
 
-  return <Identifier selected={selected} onSelect={handleSelect} inside={(selected && editingSelected)
+  return <Identifier marks={marks} onSelect={handleSelect} inside={(marks.includes('selected') && editingSelected)
     ? <IdentifierChooser initialName={identifier.name} onUpdateName={handleUpdateName} />
     : identifier.name
   } />;
@@ -171,12 +184,12 @@ function StreamReferenceView({ streamReference }) {
 }
 
 function UserFunctionView({ userFunction }) {
-  const selected = useIsSelected(userFunction);
+  const marks = useMarks(userFunction);
   const handleSelect = useHandleSelect(userFunction);
   const { UserFunction } = useContext(ThemeContext);
 
   return (
-    <UserFunction parameterNames={userFunction.parameters.map(param => param.identifier.name)} expressions={<DefinitionExpressionsView expressions={userFunction.expressions} />} selected={selected} onSelect={handleSelect} />
+    <UserFunction parameterNames={userFunction.parameters.map(param => param.identifier.name)} expressions={<DefinitionExpressionsView expressions={userFunction.expressions} />} marks={marks} onSelect={handleSelect} />
   );
 }
 
@@ -235,7 +248,7 @@ function NotEditingExpressionView({ expression }) {
 }
 
 function ExpressionView({ expression }) {
-  const selected = useIsSelected(expression);
+  const marks = useMarks(expression);
   const handleSelect = useHandleSelect(expression);
   const handleEdit = useHandleEdit(expression);
   const mainState = useContext(FullStateContext);
@@ -243,8 +256,8 @@ function ExpressionView({ expression }) {
   const dispatch = useContext(DispatchContext);
   const { Expression } = useContext(ThemeContext);
 
-  return <Expression identifier={expression.identifier ? <IdentifierView identifier={expression.identifier} /> : null} selected={selected} onSelect={handleSelect} onEdit={handleEdit} inside={
-    (selected && editingSelected)
+  return <Expression identifier={expression.identifier ? <IdentifierView identifier={expression.identifier} /> : null} marks={marks} onSelect={handleSelect} onEdit={handleEdit} inside={
+    (marks.includes('selected') && editingSelected)
       ? <ExpressionChooser node={expression} mainState={mainState} dispatch={dispatch} />
       : <NotEditingExpressionView expression={expression} />
   } />;
@@ -293,19 +306,25 @@ export default function Editor({ autoFocus }) {
     }
   };
 
+  const markedNodes = {
+    selectedNode: nodeFromPath(state.program, state.selectionPath),
+    clipboardTopNode: (state.clipboardStack.length > 0) ? state.derivedLookups.streamIdToNode.get(state.clipboardStack[state.clipboardStack.length-1].streamId) : null,
+    clipboardRestNodes: state.clipboardStack.slice(0, -1).map(frame => state.derivedLookups.streamIdToNode.get(frame.streamId)),
+  }
+
   return (
     <HotKeys keyMap={keyMap} handlers={handlers}>
       <ObserveKeys only={CATCH_IN_INPUTS}>
         <div className="Editor" onKeyDown={onKeyDown} tabIndex="0" ref={editorElem}>
           <div className="Editor-theme-controls"><ThemePicker onChange={newTheme => { setTheme(newTheme) }} /></div>
           <DispatchContext.Provider value={dispatch}>
-            <SelectedNodeContext.Provider value={nodeFromPath(state.program, state.selectionPath)}>
+            <MarkedNodesContext.Provider value={markedNodes}>
               <FullStateContext.Provider value={state}>
                 <ThemeContext.Provider value={theme}>
                   <UserFunctionView userFunction={state.program.mainDefinition} />
                 </ThemeContext.Provider>
               </FullStateContext.Provider>
-            </SelectedNodeContext.Provider>
+            </MarkedNodesContext.Provider>
           </DispatchContext.Provider>
         </div>
       </ObserveKeys>

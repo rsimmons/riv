@@ -1,15 +1,19 @@
 import React, { useState } from 'react';
 import './Simple.css';
 
-function Selectable({ selected, onSelect, onEdit, children, extraClassName }) {
+function Selectable({ marks, onSelect, onEdit, children, extraClassName }) {
   const [hovered, setHovered] = useState(false);
 
   let className = extraClassName || '';
   className += ' SimpleTheme-selectable';
-  if (selected) {
+  if (marks.includes('selected')) {
     className += ' SimpleTheme-selected';
   } else if (hovered) {
     className += ' SimpleTheme-hovered';
+  } else if (marks.includes('clipboard-top')) {
+    className += ' SimpleTheme-clipboard-top';
+  } else if (marks.includes('clipboard-rest')) {
+    className += ' SimpleTheme-clipboard-rest';
   }
 
   const handleClick = (e) => {
@@ -61,8 +65,8 @@ export const generateTheme = ({ expressionGrouping, applicationArguments }) => (
     );
   },
 
-  UserFunction: ({ parameterNames, expressions, selected, onSelect }) => (
-    <Selectable selected={selected} onSelect={onSelect} extraClassName={'SimpleTheme-user-function'}>
+  UserFunction: ({ parameterNames, expressions, marks, onSelect }) => (
+    <Selectable marks={marks} onSelect={onSelect} extraClassName={'SimpleTheme-user-function'}>
       <div>ƒ {parameterNames.join(', ')}</div>
       <div className="SimpleTheme-user-function-expressions">{expressions}</div>
     </Selectable>
@@ -72,7 +76,7 @@ export const generateTheme = ({ expressionGrouping, applicationArguments }) => (
     <div className="SimpleTheme-definition-expression">{expression}</div>
   ),
 
-  Expression: ({ identifier, selected, onSelect, onEdit, inside }) => {
+  Expression: ({ identifier, marks, onSelect, onEdit, inside }) => {
     let exprClass = 'SimpleTheme-expression';
 
     switch (expressionGrouping) {
@@ -90,7 +94,7 @@ export const generateTheme = ({ expressionGrouping, applicationArguments }) => (
     }
 
     return (
-      <Selectable selected={selected} onSelect={onSelect} onEdit={onEdit} extraClassName={exprClass}>
+      <Selectable marks={marks} onSelect={onSelect} onEdit={onEdit} extraClassName={exprClass}>
         { (() => {
           switch (expressionGrouping) {
             case 'line':
@@ -115,8 +119,8 @@ export const generateTheme = ({ expressionGrouping, applicationArguments }) => (
     );
   },
 
-  Identifier: ({ selected, onSelect, inside }) => (
-    <Selectable selected={selected} onSelect={onSelect} extraClassName={'SimpleTheme-identifier'}>{inside}</Selectable>
+  Identifier: ({ marks, onSelect, inside }) => (
+    <Selectable marks={marks} onSelect={onSelect} extraClassName={'SimpleTheme-identifier'}>{inside}</Selectable>
   ),
 
   StreamReference: ({ name }) => (

@@ -140,6 +140,11 @@ export interface UndoStackFrame {
   readonly selectionPath: Path;
 };
 
+export interface ClipboardStackFrame {
+  readonly mode: 'cut' | 'copy';
+  readonly streamId: StreamID;
+}
+
 export interface State {
   readonly program: ProgramNode;
   readonly selectionPath: Path;
@@ -156,4 +161,5 @@ export interface State {
     updateCompiledDefinition: (newDefinition: CompiledDefinition) => void;
   } | null;
   readonly undoStack: ReadonlyArray<UndoStackFrame>;
+  readonly clipboardStack: ReadonlyArray<ClipboardStackFrame>;
 }

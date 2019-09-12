@@ -431,6 +431,10 @@ const HANDLERS: Handler[] = [
     }
   }],
 
+  ['Any', ['SET_NODE'], ({action}) => {
+    return [action.newNode!, [], null];
+  }],
+
   ['Any', ['TOGGLE_EDIT'], (args) => {
     const {node, subpath, editingSelected} = args;
 
@@ -829,6 +833,116 @@ function applyActionToProgram(program: ProgramNode, selectionPath: Path, editing
   return [newProgram, newSelectionPath, newEditingSelected];
 }
 
+function cutExpressionNode(program: ProgramNode, selectionPath: Path): [ProgramNode, Path] {
+  let cutNode: ExpressionNode | undefined;
+  let holeNode: ExpressionNode | undefined; // the "hole" after we remove
+
+  let newProgram = traverseTree(program, {alongPath: selectionPath}, (node, path) => {
+    if (equiv(path, selectionPath)) {
+      // We are at the node to be cut
+      if (!isExpressionNode(node)) {
+        throw new Error();
+      }
+      if (cutNode) {
+        throw new Error(); // sanity check
+      }
+
+      cutNode = node;
+
+      holeNode = {
+        type: 'UndefinedExpression',
+        streamId: genuid(),
+        identifier: null,
+      };
+
+      return [false, holeNode];
+    } else if (isUserFunctionNode(node)) {
+      if (cutNode) {
+        // Move the node to the top level of this function definition
+        const selectionPathAfter = selectionPath.slice(path.length);
+        if ((selectionPathAfter.length < 2) || (selectionPathAfter[0] !== 'expressions')) {
+          throw new Error();
+        }
+        const idx = selectionPathAfter[1];
+        if (typeof(idx) !== 'number') {
+          throw new Error();
+        }
+
+        const newNode = {
+          ...node,
+          expressions: [
+            ...node.expressions.slice(0, idx),
+            cutNode,
+            ...node.expressions.slice(idx),
+          ],
+        };
+        cutNode = undefined;
+
+        return [false, newNode];
+      }
+    }
+
+    return [false, node];
+  });
+
+  if (newProgram.type !== 'Program') {
+    throw new Error(); // sanity check
+  }
+
+  if (!holeNode) {
+    throw new Error();
+  }
+
+  const nodeToPath = computeNodeToPathMap(newProgram);
+  const newSelectionPath = nodeToPath.get(holeNode);
+  if (!newSelectionPath) {
+    throw new Error();
+  }
+
+  return [newProgram, newSelectionPath];
+}
+
+function pasteExpressionNode(pasteNode: ExpressionNode, pasteStreamId: StreamID, program: ProgramNode, selectionPath: Path): [ProgramNode, Path] {
+  let newProgram = traverseTree(program, {}, (node, path) => {
+    if (equiv(path, selectionPath)) {
+      // We are at the node to be pasted over
+      if (!isExpressionNode(node)) {
+        throw new Error();
+      }
+
+      return [false, pasteNode];
+    } else if (isUserFunctionNode(node)) {
+      // NOTE: We assume that the node must be at the top level of a function definition.
+      let removeIdx;
+      node.expressions.forEach((expr, idx) => {
+        if (expr.streamId === pasteStreamId) {
+          // This is the node to remove
+          removeIdx = idx;
+        }
+      });
+
+      if (removeIdx !== undefined) {
+        const [newNode, , ] = deleteDefinitionExpression(node, removeIdx);
+        return [false, newNode];
+      }
+    }
+
+    return [false, node];
+  });
+
+  if (newProgram.type !== 'Program') {
+    throw new Error(); // sanity check
+  }
+
+  const nodeToPath = computeNodeToPathMap(newProgram);
+  const newSelectionPath = nodeToPath.get(pasteNode);
+  if (!newSelectionPath) {
+    throw new Error();
+  }
+
+  return [newProgram, newSelectionPath];
+}
+
 function addStateIdLookups(state: State): State {
   const streamIdToNode: Map<StreamID, ExpressionNode> = new Map();
   const functionIdToNode: Map<FunctionID, FunctionNode> = new Map();
@@ -865,19 +979,23 @@ function addStateIdLookups(state: State): State {
   };
 }
 
-function addStatePathLookup(state: State): State {
+function computeNodeToPathMap(program: ProgramNode): Map<Node, Path> {
   const nodeToPath: Map<Node, Path> = new Map();
 
-  traverseTree(state.program, {}, (node, path) => {
+  traverseTree(program, {}, (node, path) => {
     nodeToPath.set(node, path);
     return [false, node];
   });
 
+  return nodeToPath;
+}
+
+function addStatePathLookup(state: State): State {
   return {
     ...state,
     derivedLookups: {
       ...state.derivedLookups,
-      nodeToPath,
+      nodeToPath: computeNodeToPathMap(state.program),
     },
   };
 }
@@ -972,6 +1090,7 @@ export function reducer(state: State, action: Action): State {
   let newSelectionPath = state.selectionPath;
   let newEditingSelected = state.editingSelected;
   let newUndoStack = state.undoStack;
+  let newClipboardStack = state.clipboardStack;
 
   // Do an implicit confirm before certain actions
   if (['EDIT_NEXT_UNDEFINED', 'EDIT_AFTER', 'BEGIN_IDENTIFIER_EDIT'].includes(action.type)) {
@@ -984,6 +1103,23 @@ export function reducer(state: State, action: Action): State {
       newProgram = topFrame.program;
       newSelectionPath = topFrame.selectionPath;
       newUndoStack = newUndoStack.slice(0, newUndoStack.length-1);
+    }
+  } else if (action.type === 'CUT') {
+    const selectedNode = nodeFromPath(newProgram, newSelectionPath);
+    if (isExpressionNode(selectedNode)) {
+      newClipboardStack = newClipboardStack.concat([{
+        mode: 'cut',
+        streamId: selectedNode.streamId,
+      }]);
+      [newProgram, newSelectionPath] = cutExpressionNode(newProgram, newSelectionPath);
+    }
+  } else if (action.type === 'PASTE') {
+    const selectedNode = nodeFromPath(newProgram, newSelectionPath);
+    if ((newClipboardStack.length > 0) && isExpressionNode(selectedNode)) {
+      const topFrame = newClipboardStack[newClipboardStack.length-1];
+      newClipboardStack = newClipboardStack.slice(0, newClipboardStack.length-1);
+      const topNode = state.derivedLookups.streamIdToNode!.get(topFrame.streamId)!;
+      [newProgram, newSelectionPath] = pasteExpressionNode(topNode, topFrame.streamId, newProgram, newSelectionPath);
     }
   } else if (action.type === 'SET_PATH') {
     newSelectionPath = action.newPath!;
@@ -1003,7 +1139,7 @@ export function reducer(state: State, action: Action): State {
     [newProgram, newSelectionPath, newEditingSelected] = applyActionToProgram(newProgram, newSelectionPath, newEditingSelected, action);
   }
 
-  if ((newProgram !== state.program) || (newSelectionPath !== state.selectionPath) || (newEditingSelected !== state.editingSelected)) {
+  if ((newProgram !== state.program) || (newSelectionPath !== state.selectionPath) || (newEditingSelected !== state.editingSelected) || (newUndoStack !== state.undoStack) || (newClipboardStack !== state.clipboardStack)) {
     // console.log('handled! new prog', newProgram, 'new selectionPath is', newSelectionPath, 'newEditingSelected is', newEditingSelected);
     if (newProgram !== state.program) {
       console.log('program changed identity');
@@ -1029,6 +1165,7 @@ export function reducer(state: State, action: Action): State {
       },
       liveMain: null,
       undoStack: newUndoStack,
+      clipboardStack: newClipboardStack,
     });
   } else {
     // console.log('not handled');
@@ -1131,4 +1268,5 @@ export const initialState: State = addDerivedState(undefined, {
   },
   liveMain: null,
   undoStack: [],
+  clipboardStack: [],
 });

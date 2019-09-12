@@ -42,6 +42,16 @@
   outline-offset: 0;
 }
 
+.SimpleTheme-clipboard-top {
+  outline: rgba(0, 255, 0, 0.75) solid 1px;
+  outline-offset: 0;
+}
+
+.SimpleTheme-clipboard-rest {
+  outline: rgba(0, 255, 0, 0.25) solid 1px;
+  outline-offset: 0;
+}
+
 .SimpleTheme-definition-expression {
   padding: 0.2em 0;
 }
