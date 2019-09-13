@@ -1,4 +1,4 @@
-.Editor {
+.Editor-workspace {
   /* border: 1px solid #aaa; */
   font-size: 18px;
   background: #333;
@@ -7,7 +7,7 @@
   overflow: hidden;
 }
 
-.Editor:focus {
+.Editor-workspace:focus {
   outline-style: none;
   box-shadow: none;
 }
@@ -30,4 +30,11 @@
   font-size: inherit;
   font-family: inherit;
   margin-left: 0.3em;
+}
+
+.Editor-storage-panel-container {
+  margin-top: 1em;
+  background-color: #ccc;
+  padding: 1em;
+  width: fit-content;
 }

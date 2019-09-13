@@ -6,6 +6,8 @@ export type FunctionID = string;
 
 export interface ProgramNode {
   readonly type: 'Program';
+  readonly id: string;
+  readonly name: string;
   readonly mainDefinition: UserFunctionNode;
 }
 export function isProgramNode(node: Node): node is ProgramNode {

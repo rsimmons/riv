@@ -2,6 +2,7 @@ import React, { createContext, useContext, useReducer, useRef, useEffect, useSta
 import { HotKeys, ObserveKeys } from "react-hotkeys";
 import { initialState, reducer, nodeFromPath } from './EditReducer';
 import ExpressionChooser from './ExpressionChooser';
+import StoragePanel from './StoragePanel';
 import { INITIAL_THEME, ThemePicker } from './ThemePicker';
 import './Editor.css';
 
@@ -312,22 +313,35 @@ export default function Editor({ autoFocus }) {
     clipboardRestNodes: state.clipboardStack.slice(0, -1).map(frame => state.derivedLookups.streamIdToNode.get(frame.streamId)),
   }
 
+  const handleChangeProgramName = (newName) => {
+    dispatch({type: 'SET_PROGRAM_NAME', newName});
+  };
+
+  const handleLoadProgram = (program) => {
+    dispatch({type: 'LOAD_PROGRAM', program});
+  };
+
   return (
-    <HotKeys keyMap={keyMap} handlers={handlers}>
-      <ObserveKeys only={CATCH_IN_INPUTS}>
-        <div className="Editor" onKeyDown={onKeyDown} tabIndex="0" ref={editorElem}>
-          <div className="Editor-theme-controls"><ThemePicker onChange={newTheme => { setTheme(newTheme) }} /></div>
-          <DispatchContext.Provider value={dispatch}>
-            <MarkedNodesContext.Provider value={markedNodes}>
-              <FullStateContext.Provider value={state}>
-                <ThemeContext.Provider value={theme}>
-                  <UserFunctionView userFunction={state.program.mainDefinition} />
-                </ThemeContext.Provider>
-              </FullStateContext.Provider>
-            </MarkedNodesContext.Provider>
-          </DispatchContext.Provider>
-        </div>
-      </ObserveKeys>
-    </HotKeys>
+    <div className="Editor">
+      <HotKeys keyMap={keyMap} handlers={handlers}>
+        <ObserveKeys only={CATCH_IN_INPUTS}>
+          <div className="Editor-workspace" onKeyDown={onKeyDown} tabIndex="0" ref={editorElem}>
+            <div className="Editor-theme-controls"><ThemePicker onChange={newTheme => { setTheme(newTheme) }} /></div>
+            <DispatchContext.Provider value={dispatch}>
+              <MarkedNodesContext.Provider value={markedNodes}>
+                <FullStateContext.Provider value={state}>
+                  <ThemeContext.Provider value={theme}>
+                    <UserFunctionView userFunction={state.program.mainDefinition} />
+                  </ThemeContext.Provider>
+                </FullStateContext.Provider>
+              </MarkedNodesContext.Provider>
+            </DispatchContext.Provider>
+          </div>
+        </ObserveKeys>
+      </HotKeys>
+      <div className="Editor-storage-panel-container">
+        <StoragePanel currentProgram={state.program} onChangeName={handleChangeProgramName} onLoadProgram={handleLoadProgram} />
+      </div>
+    </div>
   );
 }

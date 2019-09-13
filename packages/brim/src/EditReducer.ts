@@ -14,6 +14,8 @@ interface Action {
   char?: string;
   newNode?: Node;
   newPath?: Path;
+  newName?: string;
+  program?: ProgramNode;
 }
 
 interface HandlerArgs {
@@ -387,6 +389,13 @@ function firstUndefinedNode(node: Node, after: Path | undefined = undefined): [N
 }
 
 const HANDLERS: Handler[] = [
+  ['Program', ['SET_PROGRAM_NAME'], ({node, subpath, editingSelected, action}) => {
+    return [{
+      ...node,
+      name: action.newName || '',
+    }, subpath, editingSelected];
+  }],
+
   ['UserFunction', ['MOVE_UP', 'MOVE_DOWN'], ({node, subpath, action}) => {
     if (!isUserFunctionNode(node)) {
       throw new Error();
@@ -1086,6 +1095,20 @@ function addDerivedState(oldState: State | undefined, newState: State): State {
 export function reducer(state: State, action: Action): State {
   // console.log('action', action);
 
+  if (action.type === 'LOAD_PROGRAM') {
+    if (!action.program) {
+      throw new Error();
+    }
+
+    // Terminate currently running main function
+    if (!state.liveMain) {
+      throw new Error();
+    }
+    state.liveMain.context.terminate();
+
+    return initialStateFromProgram(action.program);
+  }
+
   let newProgram = state.program;
   let newSelectionPath = state.selectionPath;
   let newEditingSelected = state.editingSelected;
@@ -1182,91 +1205,99 @@ globalNativeFunctions.forEach(([id, , , , jsFunc]) => {
   nativeFunctionEnvironment.set(id, jsFunc);
 });
 
-const mdId = genuid();
-export const initialState: State = addDerivedState(undefined, {
-  program: {
-    type: 'Program',
-    mainDefinition: {
-      type: 'UserFunction',
-      functionId: genuid(),
-      identifier: null,
-      signature: {
-        parameters: [],
-        functionParameters: [],
+function initialStateFromProgram(program: ProgramNode): State {
+  return addDerivedState(undefined, {
+    program,
+    selectionPath: ['mainDefinition'],
+    editingSelected: null,
+    nativeFunctions: globalNativeFunctions.map(([id, name, paramNames, funcParams, ]) => ({
+      type: 'NativeFunction',
+      functionId: id,
+      identifier: {
+        type: 'Identifier',
+        name,
       },
-      parameters: [],
-      functionParameterFunctionIds: [],
-      expressions: [
-        {
-          type: 'Application',
-          streamId: mdId,
-          identifier: {
-            type: 'Identifier',
-            name: 'md',
-          },
-          functionId: 'mouseDown',
-          arguments: [],
-          functionArguments: [],
-        },
-        {
-          type: 'Application',
-          streamId: genuid(),
-          identifier: null,
-          functionId: 'showString',
-          arguments: [
-            {
-              type: 'Application',
-              streamId: genuid(),
-              identifier: null,
-              functionId: 'ifte',
-              arguments: [
-                {
-                  type: 'StreamReference',
-                  streamId: genuid(),
-                  identifier: null,
-                  targetStreamId: mdId,
-                },
-                {
-                  type: 'IntegerLiteral',
-                  streamId: genuid(),
-                  identifier: null,
-                  value: 10,
-                },
-                {
-                  type: 'IntegerLiteral',
-                  streamId: genuid(),
-                  identifier: null,
-                  value: 20,
-                },
-              ],
-              functionArguments: [],
-            },
-          ],
-          functionArguments: [],
-        },
-      ],
+      signature: {
+        parameters: paramNames,
+        functionParameters: funcParams,
+      },
+    })),
+    derivedLookups: {
+      streamIdToNode: null,
+      functionIdToNode: null,
+      nodeToPath: null,
     },
-  },
-  selectionPath: ['mainDefinition', 'expressions', 0],
-  editingSelected: null,
-  nativeFunctions: globalNativeFunctions.map(([id, name, paramNames, funcParams, ]) => ({
-    type: 'NativeFunction',
-    functionId: id,
-    identifier: {
-      type: 'Identifier',
-      name,
-    },
+    liveMain: null,
+    undoStack: [],
+    clipboardStack: [],
+  });
+}
+
+const mdId = genuid();
+const INITIAL_PROGRAM: ProgramNode = {
+  type: 'Program',
+  id: genuid(),
+  name: 'my program',
+  mainDefinition: {
+    type: 'UserFunction',
+    functionId: genuid(),
+    identifier: null,
     signature: {
-      parameters: paramNames,
-      functionParameters: funcParams,
+      parameters: [],
+      functionParameters: [],
     },
-  })),
-  derivedLookups: {
-    streamIdToNode: null,
-    functionIdToNode: null,
-    nodeToPath: null,
+    parameters: [],
+    functionParameterFunctionIds: [],
+    expressions: [
+      {
+        type: 'Application',
+        streamId: mdId,
+        identifier: {
+          type: 'Identifier',
+          name: 'md',
+        },
+        functionId: 'mouseDown',
+        arguments: [],
+        functionArguments: [],
+      },
+      {
+        type: 'Application',
+        streamId: genuid(),
+        identifier: null,
+        functionId: 'showString',
+        arguments: [
+          {
+            type: 'Application',
+            streamId: genuid(),
+            identifier: null,
+            functionId: 'ifte',
+            arguments: [
+              {
+                type: 'StreamReference',
+                streamId: genuid(),
+                identifier: null,
+                targetStreamId: mdId,
+              },
+              {
+                type: 'IntegerLiteral',
+                streamId: genuid(),
+                identifier: null,
+                value: 10,
+              },
+              {
+                type: 'IntegerLiteral',
+                streamId: genuid(),
+                identifier: null,
+                value: 20,
+              },
+            ],
+            functionArguments: [],
+          },
+        ],
+        functionArguments: [],
+      },
+    ],
   },
-  liveMain: null,
-  undoStack: [],
-  clipboardStack: [],
-});
+};
+
+export const initialState: State = initialStateFromProgram(INITIAL_PROGRAM);
