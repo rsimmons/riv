@@ -130,6 +130,20 @@ export function isNode(node: any): node is Node {
   return isProgramNode(node) || isIdentifierNode(node) || isExpressionNode(node) || isFunctionNode(node);
 }
 
+export function pathIsPrefix(a: Path, b: Path): boolean {
+  if (a.length > b.length) {
+    return false;
+  }
+
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 export type Path = ReadonlyArray<string | number>;
 
 export type NodeEditState = {

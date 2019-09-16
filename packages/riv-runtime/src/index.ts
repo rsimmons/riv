@@ -195,10 +195,18 @@ export function enqueueBatchedUpdate(callback: () => void) {
 }
 
 export function createNullaryVoidRootExecutionContext(streamFunc: Function): ExecutionContext {
+  let updateCount = 0;
+
+  const updateCtx = () => {
+    const t0 = performance.now();
+    ctx.update();
+    const dt = performance.now() - t0;
+    updateCount++;
+    console.log('root update', 'count', updateCount, 'time', dt.toFixed(2) + 'ms');
+  };
+
   const onRequestUpdate = () => {
-    enqueueBatchedUpdate(() => {
-      ctx.update();
-    });
+    enqueueBatchedUpdate(updateCtx);
   };
 
   const ctx = new ExecutionContext(streamFunc, onRequestUpdate)

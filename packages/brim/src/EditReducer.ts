@@ -1,8 +1,10 @@
-import { State, Path, StreamID, FunctionID, Node, ExpressionNode, isExpressionNode, IdentifierNode, ArrayLiteralNode, isArrayLiteralNode, FunctionNode, isApplicationNode, UserFunctionNode, isUserFunctionNode, ProgramNode, NodeEditState, UndefinedExpressionNode, isIdentifierNode, isFunctionNode, ParameterNode, isParameterNode } from './State';
+import { State, Path, StreamID, FunctionID, Node, ExpressionNode, isExpressionNode, IdentifierNode, ArrayLiteralNode, isArrayLiteralNode, FunctionNode, isApplicationNode, UserFunctionNode, isUserFunctionNode, ProgramNode, NodeEditState, UndefinedExpressionNode, isIdentifierNode, isParameterNode, pathIsPrefix } from './State';
 import genuid from './uid';
-import { compileUserDefinition, CompilationError, CompiledDefinition } from './Compiler';
+import { compileGlobalUserDefinition, CompilationError, CompiledDefinition } from './Compiler';
 import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
-import { createLiveFunction, Environment } from './LiveFunction';
+import { createLiveFunction } from './LiveFunction';
+import Environment from './Environment';
+import { traverseTree } from './Traversal';
 import globalNativeFunctions from './globalNatives';
 
 const REALIZE_TENTATIVE_EXPRESSION_EDITS = false;
@@ -58,185 +60,6 @@ function nodeSplitPath(node: Node, root: Node, path: Path): [Path, Path] {
   } else {
     throw new Error('node was not in path');
   }
-}
-
-function pathIsPrefix(a: Path, b: Path): boolean {
-  if (a.length > b.length) {
-    return false;
-  }
-
-  for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i]) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-type TraversalVisitor = (node: Node, path: Path) => [boolean, Node];
-
-interface TraversalOptions {
-  onlyLocal?: true; // do not traverse into contained function definitions
-  alongPath?: Path;
-}
-
-// Returns [exit, newNode]. exit indicates an early end to traversal. newNode returns replacement node, which may be the same node
-// Warning: This is a juicy-ass function that demands respect.
-function recursiveTraverseTree(node: Node, path: Path, options: TraversalOptions, visit: TraversalVisitor): [boolean, Node] {
-  if (options.alongPath && !pathIsPrefix(path, options.alongPath)) {
-    return [false, node];
-  }
-
-  // Recurse
-  let exited = false;
-  let newNode: Node = node;
-
-  if ((isExpressionNode(newNode) || isFunctionNode(newNode)) && newNode.identifier) {
-    const [exit, newIdentifier] = recursiveTraverseTree(newNode.identifier, path.concat(['identifier']), options, visit);
-    if (exit) exited = true;
-    if (newIdentifier !== newNode.identifier) {
-      newNode = {
-        ...newNode,
-        identifier: newIdentifier,
-      } as Node;
-    };
-  }
-
-  switch (newNode.type) {
-    case 'Program': {
-      const [exit, newMainDefinition] = recursiveTraverseTree(newNode.mainDefinition, path.concat(['mainDefinition']), options, visit);
-      if (exit) exited = true;
-      if (newMainDefinition !== newNode.mainDefinition) {
-        newNode = {
-          ...newNode,
-          mainDefinition: newMainDefinition as UserFunctionNode,
-        };
-      }
-      break;
-    }
-
-    case 'UserFunction': {
-      const newParameters: Array<ParameterNode> = [];
-      const newExpressions: Array<ExpressionNode> = [];
-      let anyNewChildren = false;
-
-      newNode.parameters.forEach((parameter, idx) => {
-        if (exited) {
-          newParameters.push(parameter);
-        } else {
-          const [exit, newParameter] = recursiveTraverseTree(parameter, path.concat(['parameters', idx]), options, visit);
-          if (exit) exited = true;
-          newParameters.push(newParameter as ParameterNode);
-          if (newParameter !== parameter) anyNewChildren = true;
-        }
-      });
-
-      newNode.expressions.forEach((expression, idx) => {
-        if (exited) {
-          newExpressions.push(expression);
-        } else {
-          const [exit, newExpression] = recursiveTraverseTree(expression, path.concat(['expressions', idx]), options, visit);
-          if (exit) exited = true;
-          newExpressions.push(newExpression as ExpressionNode);
-          if (newExpression !== expression) anyNewChildren = true;
-        }
-      });
-
-      if (anyNewChildren) {
-        newNode = {
-          ...newNode,
-          parameters: newParameters,
-          expressions: newExpressions,
-        };
-      }
-      break;
-    }
-
-    case 'Application': {
-      const newArguments: Array<ExpressionNode> = [];
-      const newFunctionArguments: Array<UserFunctionNode> = [];
-      let anyNewChildren = false;
-
-      newNode.arguments.forEach((argument, idx) => {
-        if (exited) {
-          newArguments.push(argument);
-        } else {
-          const [exit, newArgument] = recursiveTraverseTree(argument, path.concat(['arguments', idx]), options, visit);
-          if (exit) exited = true;
-          newArguments.push(newArgument as ExpressionNode);
-          if (newArgument !== argument) anyNewChildren = true;
-        }
-      });
-
-      newNode.functionArguments.forEach((functionArgument, idx) => {
-        if (exited || options.onlyLocal) {
-          newFunctionArguments.push(functionArgument);
-        } else {
-          const [exit, newFunctionArgument] = recursiveTraverseTree(functionArgument, path.concat(['functionArguments', idx]), options, visit);
-          if (exit) exited = true;
-          newFunctionArguments.push(newFunctionArgument as UserFunctionNode);
-          if (newFunctionArgument !== functionArgument) anyNewChildren = true;
-        }
-      });
-
-      if (anyNewChildren) {
-        newNode = {
-          ...newNode,
-          arguments: newArguments,
-          functionArguments: newFunctionArguments,
-        };
-      }
-      break;
-    }
-
-    case 'ArrayLiteral': {
-      let newItems: Array<ExpressionNode> = [];
-      let anyNewChildren = false;
-
-      newNode.items.forEach((item, idx) => {
-        if (exited) {
-          newItems.push(item);
-        } else {
-          const [exit, newItem] = recursiveTraverseTree(item, path.concat(['items', idx]), options, visit);
-          if (exit) exited = true;
-          newItems.push(newItem as ExpressionNode);
-          if (newItem !== item) anyNewChildren = true;
-        }
-      });
-
-      if (anyNewChildren) {
-        newNode = {
-          ...newNode,
-          items: newItems,
-        };
-      }
-      break;
-    }
-
-    case 'Identifier':
-    case 'IntegerLiteral':
-    case 'StreamReference':
-    case 'UndefinedExpression':
-    case 'Parameter':
-      // Nothing else to recurse into
-      break;
-
-    default:
-      throw new Error();
-  }
-
-  if (exited) {
-    return [exited, newNode];
-  }
-
-  return visit(newNode, path);
-}
-
-// Post-order traversal. Avoids returning new node unless something has changed.
-function traverseTree(node: Node, options: TraversalOptions, visit: TraversalVisitor): Node {
-  const [, newNode] = recursiveTraverseTree(node, [], options, visit);
-  return newNode;
 }
 
 function addUserFunctionLocalEnvironment(func: UserFunctionNode, namedStreams: Array<[string, ExpressionNode]>, namedFunctions: Array<[string, FunctionNode]>) {
@@ -1036,10 +859,17 @@ function addStateCompiled(oldState: State | undefined, newState: State): State {
     applications: [],
     containedDefinitions: [],
     yieldStream: null,
+    externalReferencedStreamIds: new Set(),
   };
 
   try {
-    newCompiledDefinition = compileUserDefinition(newState.program.mainDefinition, newState);
+    // NOTE: We could avoid repeating this work, but this is sort of temporary anyways
+    const globalFunctionEnvironment: Environment<FunctionNode> = new Environment();
+    for (const nf of newState.nativeFunctions) {
+      globalFunctionEnvironment.set(nf.functionId, nf);
+    }
+
+    newCompiledDefinition = compileGlobalUserDefinition(newState.program.mainDefinition, globalFunctionEnvironment);
     // console.log('compiled to', newCompiledDefinition);
   } catch (e) {
     if (e instanceof CompilationError) {
@@ -1055,7 +885,7 @@ function addStateCompiled(oldState: State | undefined, newState: State): State {
     const { context, updateCompiledDefinition } = oldState.liveMain!;
 
     // console.log('updating compiled definition to', newCompiledDefinition);
-    beginBatch(); // batch thing is not necessary yet, but will be in the future
+    beginBatch();
     updateCompiledDefinition(newCompiledDefinition);
     endBatch();
 

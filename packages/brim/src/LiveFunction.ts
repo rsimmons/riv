@@ -1,6 +1,7 @@
 import { ExecutionContext, useVar, useInitialize, useRequestUpdate } from 'riv-runtime';
 import { CompiledDefinition } from './Compiler';
 import { StreamID, FunctionID } from './State';
+import Environment from './Environment';
 
 function arraysShallowEqual(a: Array<any>, b: Array<any>): boolean {
   if (a.length !== b.length) {
@@ -14,27 +15,6 @@ function arraysShallowEqual(a: Array<any>, b: Array<any>): boolean {
   }
 
   return true;
-}
-
-// TODO: We could just make this an alias for {[key: string]: V}, use plain funcs instead of methods
-export class Environment<V> {
-  private obj: {[key: string]: V};
-
-  constructor(outer: Environment<V> | undefined = undefined) {
-    this.obj = Object.create(outer ? outer.obj : null);
-  }
-
-  get(name: string): V | undefined {
-    return this.obj[name];
-  }
-
-  set(name: string, value: V) {
-    this.obj[name] = value;
-  }
-
-  delete(name: string): void {
-    delete this.obj[name];
-  }
 }
 
 /**
