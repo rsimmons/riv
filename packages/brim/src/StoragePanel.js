@@ -77,6 +77,7 @@ export default function StoragePanel({ currentProgram, onChangeName, onLoadProgr
 
   return (
     <div className="StoragePanel">
+      <h2>Storage</h2>
       <div>
         <span>Current Program:</span>{' '}
         <label>UID: <span>{currentProgram.id}</span></label>{' '}

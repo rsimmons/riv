@@ -1,8 +1,0 @@
-.ThemePicker {
-  background-color: #555;
-  padding: 0.5em;
-}
-
-.ThemePicker-option:not(:last-child) {
-  margin-bottom: 0.5em;
-}

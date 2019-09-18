@@ -27,6 +27,7 @@ export function ThemePicker({ onChange }) {
 
   return (
     <div className="ThemePicker">
+      <h2>Display</h2>
       <div className="ThemePicker-option"><label>Expression Grouping: <Select keyLabels={[
         ['none', 'None'],
         ['line', 'Line'],

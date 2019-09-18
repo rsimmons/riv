@@ -326,7 +326,6 @@ export default function Editor({ autoFocus }) {
       <HotKeys keyMap={keyMap} handlers={handlers}>
         <ObserveKeys only={CATCH_IN_INPUTS}>
           <div className="Editor-workspace" onKeyDown={onKeyDown} tabIndex="0" ref={editorElem}>
-            <div className="Editor-theme-controls"><ThemePicker onChange={newTheme => { setTheme(newTheme) }} /></div>
             <DispatchContext.Provider value={dispatch}>
               <MarkedNodesContext.Provider value={markedNodes}>
                 <FullStateContext.Provider value={state}>
@@ -339,7 +338,8 @@ export default function Editor({ autoFocus }) {
           </div>
         </ObserveKeys>
       </HotKeys>
-      <div className="Editor-storage-panel-container">
+      <div className="Editor-theme-controls Editor-panel"><ThemePicker onChange={newTheme => { setTheme(newTheme) }} /></div>
+      <div className="Editor-storage-panel-container Editor-panel">
         <StoragePanel currentProgram={state.program} onChangeName={handleChangeProgramName} onLoadProgram={handleLoadProgram} />
       </div>
     </div>
