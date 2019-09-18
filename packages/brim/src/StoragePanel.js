@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import genuid from './uid';
 import './StoragePanel.css';
 
@@ -9,7 +9,7 @@ export default function StoragePanel({ currentProgram, onChangeName, onLoadProgr
   const [selectedProgramId, setSelectedProgramId] = useState();
   const [savedPrograms, setSavedPrograms] = useState([]);
 
-  const refreshSavedPrograms = (setProgramId) => {
+  const refreshSavedPrograms = useCallback((setProgramId) => {
     let newProgramId = setProgramId === undefined ? selectedProgramId : setProgramId;
 
     const sp = [];
@@ -28,11 +28,11 @@ export default function StoragePanel({ currentProgram, onChangeName, onLoadProgr
     }
 
     setSelectedProgramId(newProgramId);
-  };
+  }, [selectedProgramId, ls]);
 
   useEffect(() => {
     refreshSavedPrograms();
-  }, []);
+  }, [refreshSavedPrograms]);
 
   const handleChangeName = (e) => {
     if (onChangeName) {
