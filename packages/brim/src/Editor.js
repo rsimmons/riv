@@ -181,7 +181,7 @@ function StreamReferenceView({ streamReference }) {
   }
 
   const { StreamReference } = useContext(ThemeContext);
-  return <StreamReference name={(targetExpressionNode.identifier && targetExpressionNode.identifier.name) ? targetExpressionNode.identifier.name : '<stream ' + streamReference.targetStreamId + '>'} />;
+  return <StreamReference name={targetExpressionNode.name ? targetExpressionNode.name : '<stream ' + streamReference.targetStreamId + '>'} />;
 }
 
 function UserFunctionView({ userFunction }) {
@@ -205,7 +205,7 @@ function ApplicationView({ application }) {
     throw new Error('params and args length mismatch');
   }
 
-  const functionName = (functionNode.identifier && functionNode.identifier.name) ? functionNode.identifier.name : '<function ' + application.functionId + '>';
+  const functionName = functionNode.name ? functionNode.name : '<function ' + application.functionId + '>';
   const args = functionNode.signature.parameters.map((param, idx) => ({
     key: param.name,
     name: param.name.startsWith('_') ? undefined : param.name,
