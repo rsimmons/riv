@@ -12,9 +12,6 @@ const keyMap = {
   MOVE_LEFT: 'left',
   MOVE_RIGHT: 'right',
 
-  ZOOM_IN: 'shift+right',
-  ZOOM_OUT: 'shift+left',
-
   TOGGLE_EDIT: 'enter',
   ABORT_EDIT: 'escape',
 
