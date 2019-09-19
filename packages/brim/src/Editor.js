@@ -165,7 +165,7 @@ function ArrayLiteralView({ arrayLiteral }) {
 return <ArrayLiteral keyedItems={arrayLiteral.items.map(item => [item.streamId, <ExpressionView expression={item} />])} />
 }
 
-function UndefinedExpressionView({ undefinedExpression }) {
+function UndefinedLiteralView({ undefinedLiteral }) {
   const { UndefinedExpression } = useContext(ThemeContext);
   return <UndefinedExpression />
 }
@@ -222,8 +222,8 @@ function NotEditingExpressionView({ expression }) {
     case 'ArrayLiteral':
       return <ArrayLiteralView arrayLiteral={expression} />
 
-    case 'UndefinedExpression':
-      return <UndefinedExpressionView undefinedExpression={expression} />
+    case 'UndefinedLiteral':
+      return <UndefinedLiteralView undefinedLiteral={expression} />
 
     case 'StreamReference':
       return <StreamReferenceView streamReference={expression} />

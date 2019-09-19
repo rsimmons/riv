@@ -185,7 +185,7 @@ function compileUserDefinition(definition: UserFunctionDefinitionNode, outerStre
 
   for (const expr of definition.children[1].children) {
     if (isStreamExpressionNode(expr)) {
-      traverseFromStreamExpression(expr, {
+      const sid = traverseFromStreamExpression(expr, {
         streamEnvironment,
         functionEnvironment,
         localStreamIds,
@@ -194,7 +194,7 @@ function compileUserDefinition(definition: UserFunctionDefinitionNode, outerStre
         permanentMarkedStreamIds,
         essentialDefinition,
       });
-      essentialDefinition.yieldStreamId = expr.id; // yield the last stream expression
+      essentialDefinition.yieldStreamId = sid; // yield the last stream expression
     }
   }
 

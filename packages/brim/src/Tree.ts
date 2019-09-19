@@ -49,7 +49,6 @@ export function isLiteralNode(node: Node): node is LiteralNode {
  */
 export interface StreamReferenceNode {
   readonly type: 'StreamReference';
-  readonly id: null;
   readonly children: [];
   readonly targetStreamId: StreamID;
 }
@@ -59,7 +58,6 @@ export function isStreamReferenceNode(node: Node): node is StreamReferenceNode {
 
 export interface FunctionReferenceNode {
   readonly type: 'FunctionReference';
-  readonly id: null;
   readonly children: [];
   readonly targetFunctionId: FunctionID;
 }
@@ -156,7 +154,6 @@ export function isParameterNode(node: Node): node is ParameterNode {
 
 export interface UserFunctionDefinitionParametersNode {
   readonly type: 'UserFunctionDefinitionParameters';
-  readonly id: null;
   readonly children: ReadonlyArray<ParameterNode>;
 }
 export function isUserFunctionDefinitionParametersNode(node: Node): node is UserFunctionDefinitionParametersNode {
@@ -165,7 +162,6 @@ export function isUserFunctionDefinitionParametersNode(node: Node): node is User
 
 export interface UserFunctionDefinitionExpressionsNode {
   readonly type: 'UserFunctionDefinitionExpressions';
-  readonly id: null;
   readonly children: ReadonlyArray<ExpressionNode>;
 }
 export function isUserFunctionDefinitionExpressionsNode(node: Node): node is UserFunctionDefinitionExpressionsNode {
@@ -210,7 +206,7 @@ export function isFunctionDefinitionNode(node: Node): node is FunctionDefinition
  */
 export interface ProgramNode {
   readonly type: 'Program';
-  readonly id: null;
+  readonly programId: string;
   readonly children: [UserFunctionDefinitionNode];
   readonly name: string;
 }

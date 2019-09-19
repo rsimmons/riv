@@ -22,7 +22,7 @@ export default function StoragePanel({ currentProgram, onChangeName, onLoadProgr
     }
     setSavedPrograms(sp);
 
-    const savedProgramIds = sp.map(prog => prog.id);
+    const savedProgramIds = sp.map(prog => prog.programId);
     if (!savedProgramIds.includes(newProgramId)) {
       newProgramId = undefined;
     }
@@ -41,10 +41,10 @@ export default function StoragePanel({ currentProgram, onChangeName, onLoadProgr
   };
 
   const handleSave = () => {
-    const k = KEY_PREFIX + currentProgram.id;
+    const k = KEY_PREFIX + currentProgram.programId;
     const json = JSON.stringify(currentProgram);
     ls.setItem(k, json);
-    refreshSavedPrograms(currentProgram.id);
+    refreshSavedPrograms(currentProgram.programId);
   };
 
   const handleClone = () => {
@@ -80,7 +80,7 @@ export default function StoragePanel({ currentProgram, onChangeName, onLoadProgr
       <h2>Storage</h2>
       <div>
         <span>Current Program:</span>{' '}
-        <label>UID: <span>{currentProgram.id}</span></label>{' '}
+        <label>UID: <span>{currentProgram.programId}</span></label>{' '}
         <label>Name: <input value={currentProgram.name} onChange={handleChangeName} /></label>{' '}
         <button onClick={handleSave}>Save</button>{' '}
         <button onClick={handleClone}>Clone</button>{' '}
@@ -90,7 +90,7 @@ export default function StoragePanel({ currentProgram, onChangeName, onLoadProgr
       <div>
         <span>Saved Programs:</span>{' '}
         <select ref={selectRef} value={selectedProgramId} onChange={handleSetProgramId}>{savedPrograms.map((prog) => (
-          <option key={prog.id} value={prog.id}>{prog.name} &lt;{prog.id}&gt;</option>
+          <option key={prog.programId} value={prog.programId}>{prog.name} &lt;{prog.programId}&gt;</option>
         ))}
         </select>{' '}
         <button onClick={handleLoad} disabled={savedPrograms.length === 0}>Load</button>{' '}

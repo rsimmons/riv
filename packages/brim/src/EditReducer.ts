@@ -1,6 +1,7 @@
+import genuid from './uid';
 import { StreamID, FunctionID, generateStreamId, generateFunctionId } from './Identifier';
 import { State, Path, NodeEditState, pathIsPrefix } from './State';
-import { Node, ProgramNode, UserFunctionDefinitionNode, StreamDefinitionNode, FunctionDefinitionNode, isStreamDefinitionNode, isFunctionDefinitionNode, isUserFunctionDefinitionExpressionsNode, isUserFunctionDefinitionParametersNode, isProgramNode, isUserFunctionDefinitionNode } from './Tree';
+import { Node, ProgramNode, UserFunctionDefinitionNode, StreamDefinitionNode, FunctionDefinitionNode, isStreamDefinitionNode, isFunctionDefinitionNode, isUserFunctionDefinitionExpressionsNode, isUserFunctionDefinitionParametersNode, isProgramNode, isUserFunctionDefinitionNode, isStreamExpressionNode, isStreamReferenceNode, UndefinedLiteralNode } from './Tree';
 import { EssentialDefinition } from './EssentialDefinition';
 import { compileGlobalUserDefinition, CompilationError } from './Compiler';
 import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
@@ -66,7 +67,7 @@ function addEnvironmentAlongPath(root: Node, path: Path, namedStreams: Array<[st
     if (cur.type === 'UserFunctionDefinition') {
       addUserFunctionLocalEnvironment(cur, namedStreams, namedFunctions);
     }
-    cur = (cur as any)[seg];
+    cur = cur.children[seg];
   }
 }
 
@@ -779,6 +780,53 @@ function pasteExpressionNode(pasteNode: ExpressionNode, pasteStreamId: StreamID,
 }
 */
 
+function replaceNodeAtPath(program: ProgramNode, atPath: Path, newNode: Node): ProgramNode {
+  const newProgram = traverseTree(program, {alongPath: atPath}, (node, path) => {
+    if (equiv(path, atPath)) {
+      return [false, newNode];
+    } else {
+      return [false, node];
+    }
+  });
+
+  if (!isProgramNode(newProgram)) {
+    throw new Error();
+  }
+
+  return newProgram;
+}
+
+function endEdit(st: CoreState, confirm: boolean): CoreState {
+  if (!st.editingSelected) {
+    throw new Error(); // sanity check
+  }
+
+  const newNode = confirm ? st.editingSelected.tentativeNode : st.editingSelected.originalNode;
+
+  let newSelectionPath: Path = st.selectionPath;
+  let newEditingSelected = null;
+
+  /*
+  if (confirm) {
+    const hit = firstUndefinedNode(newNode);
+    if (hit) {
+      const [hitNode, hitPath] = hit;
+      if (hitNode !== newNode) { // need to check this otherwise we can't confirm edit of undefined node
+        newSubpath = hitPath;
+        newEditingSelected = {originalNode: hitNode, tentativeNode: hitNode};
+      }
+    }
+  }
+  */
+
+  return {
+    ...st,
+    program: replaceNodeAtPath(st.program, st.selectionPath, newNode),
+    selectionPath: newSelectionPath,
+    editingSelected: newEditingSelected,
+  };
+}
+
 function isNodeSelectable(node: Node): boolean {
   return !(isProgramNode(node) || isUserFunctionDefinitionParametersNode(node) || isUserFunctionDefinitionExpressionsNode(node));
 }
@@ -796,6 +844,16 @@ interface HandlerArgs {
 type Handler = [Array<string>, (args: HandlerArgs) => CoreState | void];
 
 const HANDLERS: Handler[] = [
+  [['SET_PROGRAM_NAME'], ({action, st}) => {
+    return {
+      ...st,
+      program: {
+        ...st.program,
+        name: action.newName || '',
+      }
+    };
+  }],
+
   [['SET_PATH'], ({action, st}) => {
     return {
       ...st,
@@ -858,6 +916,85 @@ const HANDLERS: Handler[] = [
           selectionPath: st.selectionPath.slice(0, -1).concat([lastIdx+1]),
         }
       }
+    }
+  }],
+
+  [['ABORT_EDIT'], ({st}) => {
+    if (st.editingSelected) {
+      return endEdit(st, false);
+    }
+  }],
+
+  [['CONFIRM_EDIT'], ({st}) => {
+    if (st.editingSelected) {
+      return endEdit(st, true);
+    }
+  }],
+
+  [['TOGGLE_EDIT'], ({st}) => {
+    if (st.editingSelected) {
+      return endEdit(st, true);
+    } else {
+      const node = nodeFromPath(st.program, st.selectionPath);
+      switch (node.type) {
+        case 'NumberLiteral':
+        case 'UndefinedLiteral':
+        case 'StreamReference':
+        case 'Application':
+          return {
+            ...st,
+            editingSelected: {originalNode: node, tentativeNode: node},
+          };
+
+        case 'ArrayLiteral':
+          // Can't directly edit
+          break;
+
+        default:
+          throw new Error();
+      }
+    }
+  }],
+
+  [['BEGIN_OVERWRITE_EDIT'], ({st}) => {
+    const node = nodeFromPath(st.program, st.selectionPath);
+    if (isStreamExpressionNode(node)) {
+      const newNode: UndefinedLiteralNode = isStreamReferenceNode(node) ? {
+        type: 'UndefinedLiteral',
+        id: generateStreamId(),
+        name: null,
+        children: [],
+      } : {
+        type: 'UndefinedLiteral',
+        id: node.id,
+        name: node.name,
+        children: [],
+      };
+      return {
+        ...st,
+        editingSelected: {originalNode: node, tentativeNode: newNode},
+      };
+    }
+  }],
+
+  [['UPDATE_EDITING_TENTATIVE_NODE'], ({st, action}) => {
+    if (!action.newNode) {
+      throw new Error();
+    }
+    if (!st.editingSelected) {
+      throw new Error();
+    }
+
+    const node = nodeFromPath(st.program, st.selectionPath);
+    if (isStreamExpressionNode(node)) {
+      let newNode = REALIZE_TENTATIVE_EXPRESSION_EDITS ? action.newNode : node;
+      return {
+        ...st,
+        program: replaceNodeAtPath(st.program, st.selectionPath, newNode),
+        editingSelected: {...st.editingSelected, tentativeNode: action.newNode},
+      };
+    } else {
+      throw new Error();
     }
   }],
 ];
@@ -1179,7 +1316,7 @@ function initialStateFromProgram(program: ProgramNode): State {
 const mdId = generateStreamId();
 const INITIAL_PROGRAM: ProgramNode = {
   type: 'Program',
-  id: null,
+  programId: genuid(),
   name: 'my program',
   children: [{
     type: 'UserFunctionDefinition',
@@ -1192,12 +1329,10 @@ const INITIAL_PROGRAM: ProgramNode = {
     children: [
       {
         type: 'UserFunctionDefinitionParameters',
-        id: null,
         children: [],
       },
       {
         type: 'UserFunctionDefinitionExpressions',
-        id: null,
         children: [
           {
             type: 'Application',
@@ -1220,7 +1355,6 @@ const INITIAL_PROGRAM: ProgramNode = {
                 children: [
                   {
                     type: 'StreamReference',
-                    id: null,
                     targetStreamId: mdId,
                     children: [],
                   },

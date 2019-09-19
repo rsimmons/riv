@@ -3,6 +3,7 @@ import './ExpressionChooser.css';
 import { fuzzy_match } from './vendor/fts_fuzzy_match';
 import genuid from './uid';
 import { environmentForSelectedNode } from './EditReducer';
+import { generateStreamId } from './Identifier';
 
 function fuzzySearch(query, items) {
   const results = [];
@@ -79,13 +80,10 @@ function Choice({ choice }) {
       return <span>{choice.value}</span>
 
     case 'streamref':
-      return <span><em>S</em> {choice.node.identifier.name} <small>(id {choice.node.streamId})</small></span>
+      return <span><em>S</em> {choice.node.name} <small>(id {choice.node.id})</small></span>
 
     case 'function':
-      return <span><em>F</em> {choice.node.identifier.name}({[].concat([
-        choice.node.signature.parameters.map(n => (n.startsWith('_') ? '\u25A1' : n)), // parameters
-        choice.node.signature.functionParameters.map(([n, ]) => 'F ' + ((n.startsWith('_') ? '\u25A1' : n))), // function parameters
-      ]).join(', ')})</span>
+      return <span><em>F</em> {choice.node.name}({[].concat(choice.node.signature.parameters.map(param => (param.name.startsWith('_') ? '\u25A1' : param.name))).join(', ')})</span>
 
     default:
       throw new Error();
@@ -105,10 +103,10 @@ export default function ExpressionChooser({ node, mainState, dispatch }) {
 
     // Initialize text based on node
     switch (initFromNode.type) {
-      case 'UndefinedExpression':
+      case 'UndefinedLiteral':
         return '';
 
-      case 'IntegerLiteral':
+      case 'NumberLiteral':
         return initFromNode.value.toString();
 
       case 'StreamReference':
@@ -135,17 +133,24 @@ export default function ExpressionChooser({ node, mainState, dispatch }) {
   const realizeChoice = (state) => {
     const choice = state.choices[state.index];
 
+    const tentativeNode = mainState.editingSelected.tentativeNode;
     let newNode;
     switch (choice.type) {
       case 'undefined':
         newNode = {
-          type: 'UndefinedExpression',
+          type: 'UndefinedLiteral',
+          id: tentativeNode.id,
+          name: tentativeNode.name,
+          children: [],
         }
         break;
 
       case 'number':
         newNode = {
-          type: 'IntegerLiteral',
+          type: 'NumberLiteral',
+          id: tentativeNode.id,
+          name: tentativeNode.name,
+          children: [],
           value: choice.value,
         };
         break;
@@ -153,50 +158,60 @@ export default function ExpressionChooser({ node, mainState, dispatch }) {
       case 'streamref':
         newNode = {
           type: 'StreamReference',
-          targetStreamId: choice.node.streamId,
+          name: tentativeNode.name,
+          children: [],
+          targetStreamId: choice.node.id,
         };
         break;
 
       case 'function':
         newNode = {
           type: 'Application',
-          functionId: choice.node.functionId,
-          arguments: choice.node.signature.parameters.map(paramName => ({
-            type: 'UndefinedExpression',
-            streamId: genuid(),
-            identifier: null,
-          })),
-          functionArguments: choice.node.signature.functionParameters.map(([, signature]) => ({
-            type: 'UserFunction',
-            functionId: genuid(),
-            identifier: null,
-            signature, // TODO: do we need to defensively copy this?
-            parameters: signature.parameters.map(pn => ({
-              type: 'Parameter',
-              streamId: genuid(),
-              identifier: {
-                type: 'Identifier',
-                name: pn,
-              },
-            })),
-            functionParameterFunctionIds: signature.functionParameters.map(([pn, sig]) => genuid()),
-            expressions: [
-              {
-                type: 'UndefinedExpression',
-                streamId: genuid(),
+          id: tentativeNode.id,
+          name: tentativeNode.name,
+          functionId: choice.node.id,
+          children: choice.node.signature.parameters.map(param => {
+            if (param.type === 'stream') {
+              return {
+                type: 'UndefinedLiteral',
+                id: generateStreamId(),
+                name: null,
+                children: [],
+              };
+            } else {
+              throw new Error('not yet implemented');
+              /*
+              return {
+                type: 'UserFunction',
+                functionId: genuid(),
                 identifier: null,
-              },
-            ],
-          })),
+                signature, // TODO: do we need to defensively copy this?
+                parameters: signature.parameters.map(pn => ({
+                  type: 'Parameter',
+                  streamId: genuid(),
+                  identifier: {
+                    type: 'Identifier',
+                    name: pn,
+                  },
+                })),
+                functionParameterFunctionIds: signature.functionParameters.map(([pn, sig]) => genuid()),
+                expressions: [
+                  {
+                    type: 'UndefinedExpression',
+                    streamId: genuid(),
+                    identifier: null,
+                  },
+                ],
+              };
+              */
+            }
+          }),
         };
         break;
 
       default:
         throw new Error();
     }
-
-    newNode.streamId = mainState.editingSelected.tentativeNode.streamId;
-    newNode.identifier = mainState.editingSelected.tentativeNode.identifier;
 
     dispatch({type: 'UPDATE_EDITING_TENTATIVE_NODE', newNode});
   };
