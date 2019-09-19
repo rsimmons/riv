@@ -1,6 +1,6 @@
 import { StreamID, FunctionID, generateStreamId, generateFunctionId } from './Identifier';
 import { State, Path, NodeEditState, pathIsPrefix } from './State';
-import { Node, ProgramNode, UserFunctionDefinitionNode, StreamDefinitionNode, FunctionDefinitionNode, isStreamDefinitionNode, isFunctionDefinitionNode } from './Tree';
+import { Node, ProgramNode, UserFunctionDefinitionNode, StreamDefinitionNode, FunctionDefinitionNode, isStreamDefinitionNode, isFunctionDefinitionNode, isUserFunctionDefinitionExpressionsNode, isUserFunctionDefinitionParametersNode, isProgramNode, isUserFunctionDefinitionNode } from './Tree';
 import { EssentialDefinition } from './EssentialDefinition';
 import { compileGlobalUserDefinition, CompilationError } from './Compiler';
 import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
@@ -20,22 +20,6 @@ interface Action {
   newPath?: Path;
   newName?: string;
   program?: ProgramNode;
-}
-
-interface HandlerArgs {
-  node: Node,
-  subpath: Path,
-  editingSelected: NodeEditState,
-  action: Action;
-}
-type HandlerResult = (undefined | [Node, Path, NodeEditState]);
-type Handler = [string, string[], (args: HandlerArgs) => HandlerResult];
-
-// TODO: If we want to include other classes in the lists, generate an expansion over the closure
-// TODO: Instead of this, we could have handlers provide predicate functions, and use isExpressionNode, etc.
-const SCHEMA_CLASSES: {[nodeType: string]: string[]} = {
-  Expression: ['UndefinedExpression', 'IntegerLiteral', 'ArrayLiteral', 'StreamReference', 'Application', 'Parameter'],
-  Any: ['Program', 'Identifier', 'UndefinedExpression', 'IntegerLiteral', 'ArrayLiteral', 'StreamReference', 'Application', 'NativeFunction', 'UserFunction'],
 }
 
 export function nodeFromPath(root: Node, path: Path): Node {
@@ -107,6 +91,22 @@ export function environmentForSelectedNode(state: State) {
 const equiv = (a: any, b: any): boolean => JSON.stringify(a) === JSON.stringify(b);
 
 /*
+interface HandlerArgs {
+  node: Node,
+  subpath: Path,
+  editingSelected: NodeEditState,
+  action: Action;
+}
+type HandlerResult = (undefined | [Node, Path, NodeEditState]);
+type Handler = [string, string[], (args: HandlerArgs) => HandlerResult];
+
+// TODO: If we want to include other classes in the lists, generate an expansion over the closure
+// TODO: Instead of this, we could have handlers provide predicate functions, and use isExpressionNode, etc.
+const SCHEMA_CLASSES: {[nodeType: string]: string[]} = {
+  Expression: ['UndefinedExpression', 'IntegerLiteral', 'ArrayLiteral', 'StreamReference', 'Application', 'Parameter'],
+  Any: ['Program', 'Identifier', 'UndefinedExpression', 'IntegerLiteral', 'ArrayLiteral', 'StreamReference', 'Application', 'NativeFunction', 'UserFunction'],
+}
+
 function deleteDefinitionExpression(node: UserFunctionDefinitionNode, removeIdx: number): [UserFunctionDefinitionNode, Path, NodeEditState] {
   // TODO: Handle case where we delete all expressions
   if (typeof(removeIdx) !== 'number') {
@@ -779,6 +779,107 @@ function pasteExpressionNode(pasteNode: ExpressionNode, pasteStreamId: StreamID,
 }
 */
 
+function isNodeSelectable(node: Node): boolean {
+  return !(isProgramNode(node) || isUserFunctionDefinitionParametersNode(node) || isUserFunctionDefinitionExpressionsNode(node));
+}
+
+interface CoreState {
+  readonly program: ProgramNode;
+  readonly selectionPath: Path;
+  readonly editingSelected: NodeEditState;
+}
+
+interface HandlerArgs {
+  action: Action;
+  st: CoreState;
+}
+type Handler = [Array<string>, (args: HandlerArgs) => CoreState | void];
+
+const HANDLERS: Handler[] = [
+  [['SET_PATH'], ({action, st}) => {
+    return {
+      ...st,
+      selectionPath: action.newPath!,
+      editingSelected: null,
+    };
+  }],
+
+  [['MOVE_LEFT'], ({st}) => {
+    let newSelectionPath = st.selectionPath;
+
+    while (newSelectionPath.length > 0) {
+      newSelectionPath = newSelectionPath.slice(0, -1);
+      const node = nodeFromPath(st.program, newSelectionPath);
+      if (isNodeSelectable(node)) {
+        return {
+          ...st,
+          selectionPath: newSelectionPath,
+        };
+      }
+    }
+  }],
+
+  [['MOVE_RIGHT'], ({st}) => {
+    const node = nodeFromPath(st.program, st.selectionPath);
+    if (isUserFunctionDefinitionNode(node)) {
+      if (node.children[1].children.length > 0) {
+        return {
+          ...st,
+          selectionPath: st.selectionPath.concat([1, 0]),
+        }
+      }
+    } else if (node.children.length > 0) {
+      return {
+        ...st,
+        selectionPath: st.selectionPath.concat([0]),
+      }
+    }
+  }],
+
+  [['MOVE_UP'], ({st}) => {
+    if (st.selectionPath.length > 0) {
+      const lastIdx = st.selectionPath[st.selectionPath.length-1];
+      if (lastIdx > 0) {
+        return {
+          ...st,
+          selectionPath: st.selectionPath.slice(0, -1).concat([lastIdx-1]),
+        }
+      }
+    }
+  }],
+
+  [['MOVE_DOWN'], ({st}) => {
+    if (st.selectionPath.length > 0) {
+      const lastIdx = st.selectionPath[st.selectionPath.length-1];
+      const parentNode = nodeFromPath(st.program, st.selectionPath.slice(0, -1));
+      if (lastIdx < (parentNode.children.length-1)) {
+        return {
+          ...st,
+          selectionPath: st.selectionPath.slice(0, -1).concat([lastIdx+1]),
+        }
+      }
+    }
+  }],
+];
+
+function applyActionToCoreState(action: Action, coreState: CoreState): CoreState {
+  let newCoreState = coreState;
+
+  for (const [acts, hfunc] of HANDLERS) {
+    if (acts.includes(action.type)) {
+      const hresult = hfunc({
+        action,
+        st: coreState,
+      });
+      if (hresult !== undefined) {
+        newCoreState = hresult;
+      }
+    }
+  }
+
+  return newCoreState;
+}
+
 function addStateIdLookups(state: State): State {
   const streamIdToNode: Map<StreamID, StreamDefinitionNode> = new Map();
   const functionIdToNode: Map<FunctionID, FunctionDefinitionNode> = new Map();
@@ -929,7 +1030,7 @@ function addDerivedState(oldState: State | undefined, newState: State): State {
 }
 
 export function reducer(state: State, action: Action): State {
-  // console.log('action', action);
+  console.log('action', action);
 
   if (action.type === 'LOAD_PROGRAM') {
     if (!action.program) {
@@ -984,13 +1085,6 @@ export function reducer(state: State, action: Action): State {
       [newProgram, newSelectionPath] = pasteExpressionNode(topNode, topFrame.streamId, newProgram, newSelectionPath);
     }
     */
-  } else if (action.type === 'SET_PATH') {
-    /*
-    newSelectionPath = action.newPath!;
-    const newSelectedNode = nodeFromPath(newProgram, newSelectionPath);
-    const beginEdit = (newSelectedNode.type === 'Identifier');
-    newEditingSelected = beginEdit ? {originalNode: newSelectedNode, tentativeNode: newSelectedNode} : null;
-    */
   } else if (action.type === 'EDIT_NEXT_UNDEFINED') {
     /*
     const hit = firstUndefinedNode(newProgram, newSelectionPath);
@@ -1003,13 +1097,21 @@ export function reducer(state: State, action: Action): State {
     }
     */
   } else {
+    const newCoreState = applyActionToCoreState(action, {
+      program: newProgram,
+      selectionPath: newSelectionPath,
+      editingSelected: newEditingSelected,
+    });
+    newProgram = newCoreState.program;
+    newSelectionPath = newCoreState.selectionPath;
+    newEditingSelected = newCoreState.editingSelected;
     /*
     [newProgram, newSelectionPath, newEditingSelected] = applyActionToProgram(newProgram, newSelectionPath, newEditingSelected, action);
     */
   }
 
   if ((newProgram !== state.program) || (newSelectionPath !== state.selectionPath) || (newEditingSelected !== state.editingSelected) || (newUndoStack !== state.undoStack) || (newClipboardStack !== state.clipboardStack)) {
-    // console.log('handled! new prog', newProgram, 'new selectionPath is', newSelectionPath, 'newEditingSelected is', newEditingSelected);
+    console.log('handled! new prog', newProgram, 'new selectionPath is', newSelectionPath, 'newEditingSelected is', newEditingSelected);
     if (newProgram !== state.program) {
       console.log('program changed identity');
 
@@ -1037,7 +1139,7 @@ export function reducer(state: State, action: Action): State {
       clipboardStack: newClipboardStack,
     });
   } else {
-    // console.log('not handled');
+    console.log('not handled');
     return state;
   }
 }
