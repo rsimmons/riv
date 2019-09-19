@@ -47,18 +47,15 @@ function Selectable({ marks, onSelect, onEdit, children, extraClassName }) {
 }
 
 export const generateTheme = ({ expressionGrouping, applicationArguments }) => ({
-  Application: ({ functionName, streamArgs, functionArgs }) => {
+  Application: ({ functionName, args, functionArgs }) => {
     const appClass = ((applicationArguments === 'right') || (applicationArguments === 'right-centered')) ? 'SimpleTheme-application-flex' : '';
     const nameClass = 'SimpleTheme-application-function-name' + ((applicationArguments === 'right-centered') ? ' SimpleTheme-application-function-name-centered' : '');
     return (
       <div className={appClass}>
         <div className={nameClass}>{functionName}</div>
         <div className="SimpleTheme-application-arguments">
-          {streamArgs.map(({key, name, expression}) => (
+          {args.map(({key, name, expression}) => (
             <div className="SimpleTheme-application-argument" key={key}>{name ? <span className="SimpleTheme-application-argument-name">{name}:</span> : null}<span className="SimpleTheme-application-argument-expression">{expression}</span></div>
-          ))}
-          {functionArgs.map(({key, name, functionExpression}) => (
-            <div className="SimpleTheme-application-argument" key={key}>{functionExpression}</div>
           ))}
         </div>
       </div>

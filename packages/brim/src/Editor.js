@@ -112,7 +112,7 @@ function DefinitionExpressionsView({ expressions }) {
   return (
     <>
       {expressions.map((expression) => (
-        <div key={expression.streamId}>
+        <div key={expression.id}>
           <DefinitionExpression expression={<ExpressionView expression={expression} />} />
         </div>
       ))}
@@ -158,8 +158,8 @@ function IdentifierView({ identifier }) {
   } />;
 }
 
-function IntegerLiteralView({ integerLiteral }) {
-  return <div>{integerLiteral.value}</div>;
+function NumberLiteralView({ numberLiteral }) {
+  return <div>{numberLiteral.value}</div>;
 }
 
 function ArrayLiteralView({ arrayLiteral }) {
@@ -190,7 +190,7 @@ function UserFunctionView({ userFunction }) {
   const { UserFunction } = useContext(ThemeContext);
 
   return (
-    <UserFunction parameterNames={userFunction.parameters.map(param => param.identifier.name)} expressions={<DefinitionExpressionsView expressions={userFunction.expressions} />} marks={marks} onSelect={handleSelect} />
+    <UserFunction parameterNames={userFunction.children[0].children.map(param => param.identifier.name)} expressions={<DefinitionExpressionsView expressions={userFunction.children[1].children} />} marks={marks} onSelect={handleSelect} />
   );
 }
 
@@ -201,35 +201,26 @@ function ApplicationView({ application }) {
     throw new Error();
   }
 
-  if (functionNode.signature.parameters.length !== application.arguments.length) {
+  if (functionNode.signature.parameters.length !== application.children.length) {
     throw new Error('params and args length mismatch');
   }
 
-  if (functionNode.signature.functionParameters.length !== application.functionArguments.length) {
-    throw new Error('function params and args length mismatch');
-  }
-
   const functionName = (functionNode.identifier && functionNode.identifier.name) ? functionNode.identifier.name : '<function ' + application.functionId + '>';
-  const streamArgs = functionNode.signature.parameters.map((paramName, idx) => ({
-    key: paramName,
-    name: paramName.startsWith('_') ? undefined : paramName,
-    expression: <ExpressionView expression={application.arguments[idx]} />
-  }));
-  const functionArgs = functionNode.signature.functionParameters.map(([paramName, signature], idx) => ({
-    key: paramName,
-    name: 'dunno',
-    functionExpression: <UserFunctionView userFunction={application.functionArguments[idx]} />
+  const args = functionNode.signature.parameters.map((param, idx) => ({
+    key: param.name,
+    name: param.name.startsWith('_') ? undefined : param.name,
+    expression: <ExpressionView expression={application.children[idx]} />
   }));
 
   const { Application } = useContext(ThemeContext);
 
-  return <Application functionName={functionName} streamArgs={streamArgs} functionArgs={functionArgs} />;
+  return <Application functionName={functionName} args={args} />;
 }
 
 function NotEditingExpressionView({ expression }) {
   switch (expression.type) {
-    case 'IntegerLiteral':
-      return <IntegerLiteralView integerLiteral={expression} />
+    case 'NumberLiteral':
+      return <NumberLiteralView numberLiteral={expression} />
 
     case 'ArrayLiteral':
       return <ArrayLiteralView arrayLiteral={expression} />
@@ -330,7 +321,7 @@ export default function Editor({ autoFocus }) {
               <MarkedNodesContext.Provider value={markedNodes}>
                 <FullStateContext.Provider value={state}>
                   <ThemeContext.Provider value={theme}>
-                    <UserFunctionView userFunction={state.program.mainDefinition} />
+                    <UserFunctionView userFunction={state.program.children[0]} />
                   </ThemeContext.Provider>
                 </FullStateContext.Provider>
               </MarkedNodesContext.Provider>

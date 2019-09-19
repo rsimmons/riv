@@ -1,6 +1,6 @@
 import { ExecutionContext, useVar, useInitialize, useRequestUpdate } from 'riv-runtime';
-import { CompiledDefinition } from './Compiler';
-import { StreamID, FunctionID } from './State';
+import { EssentialDefinition } from './EssentialDefinition';
+import { StreamID, FunctionID, AnyID } from './Identifier';
 import Environment from './Environment';
 
 function arraysShallowEqual(a: Array<any>, b: Array<any>): boolean {
@@ -18,35 +18,33 @@ function arraysShallowEqual(a: Array<any>, b: Array<any>): boolean {
 }
 
 /**
- * Function environments may have names added or removed, but the value for a name must never change.
+ * I think that functions in outer environment are not allowed to change identity.
  */
-export function createLiveFunction(initialDefinition: CompiledDefinition, outerStreamEnvironment: Environment<any>, outerFunctionEnvironment: Environment<Function>): [Function, (newDefinition: CompiledDefinition) => void] {
+export function createLiveFunction(initialDefinition: EssentialDefinition, outerEnvironment: Environment<any>): [Function, (newDefinition: EssentialDefinition) => void] {
   interface Activation {
-    streamEnvironment: Environment<any>;
-    functionEnvironment: Environment<Function>;
+    environment: Environment<any>;
     applicationContext: Map<string, ExecutionContext>;
-    updateContainedDefinition: Map<FunctionID, (newDefinition: CompiledDefinition) => void>;
+    updateContainedDefinition: Map<FunctionID, (newDefinition: EssentialDefinition) => void>;
     requestUpdate: () => void;
   }
 
   const activations: Set<Activation> = new Set();
-  let compiledDefinition = initialDefinition;
+  let currentDefinition = initialDefinition;
 
   function streamFunc() { // NOTE: this can't be an arrow function because we use "arguments"
     /* eslint-disable react-hooks/rules-of-hooks */
     const requestUpdate = useRequestUpdate();
 
     const activation = useVar<Activation>(() => {
-      const streamEnvironment = new Environment(outerStreamEnvironment);
-      const functionEnvironment = new Environment(outerFunctionEnvironment);
+      const environment = new Environment(outerEnvironment);
 
-      for (const [sid, value] of compiledDefinition.literalStreamValues) {
-        streamEnvironment.set(sid, value);
+      for (const {streamId, value} of currentDefinition.constantStreamValues) {
+        environment.set(streamId, value);
       }
 
       const applicationContext: Map<StreamID, ExecutionContext> = new Map();
-      for (const [sid, fid, ] of compiledDefinition.applications) {
-        const func = functionEnvironment.get(fid);
+      for (const {resultStreamId: sid, appliedFunction: fid} of currentDefinition.applications) {
+        const func = environment.get(fid);
         if (!func) {
           console.log(fid);
           throw Error();
@@ -54,16 +52,15 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerS
         applicationContext.set(sid, new ExecutionContext(func, requestUpdate));
       }
 
-      const updateContainedDefinition: Map<FunctionID, (newDefinition: CompiledDefinition) => void> = new Map();
-      for (const [fid, def] of compiledDefinition.containedDefinitions) {
-        const [sf, updateDef] = createLiveFunction(def, streamEnvironment, functionEnvironment);
-        functionEnvironment.set(fid, sf);
+      const updateContainedDefinition: Map<FunctionID, (newDefinition: EssentialDefinition) => void> = new Map();
+      for (const {id: fid, definition: def} of currentDefinition.containedFunctionDefinitions) {
+        const [sf, updateDef] = createLiveFunction(def, environment);
+        environment.set(fid, sf);
         updateContainedDefinition.set(fid, updateDef);
       }
 
       return {
-        streamEnvironment,
-        functionEnvironment,
+        environment,
         applicationContext,
         updateContainedDefinition,
         requestUpdate,
@@ -80,19 +77,20 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerS
       };
     });
 
-    const {streamEnvironment: streamEnv, functionEnvironment: funcEnv, applicationContext: appCtx} = activation.current;
+    const {environment, applicationContext: appCtx} = activation.current;
 
-    if (arguments.length !== compiledDefinition.parameterStreams.length) {
-      throw new Error('wrong number of arguments to live function, got ' + arguments.length + ' expected ' + compiledDefinition.parameterStreams.length);
+    if (arguments.length !== currentDefinition.parameters.length) {
+      throw new Error('wrong number of arguments to live function, got ' + arguments.length + ' expected ' + currentDefinition.parameters.length);
     }
     let idx = 0;
-    for (const sid of compiledDefinition.parameterStreams) {
-      streamEnv.set(sid, arguments[idx]);
+    for (const {id: sid} of currentDefinition.parameters) {
+      environment.set(sid, arguments[idx]);
       idx++;
     }
 
-    for (const [sid, , argIds, fargIds] of compiledDefinition.applications) {
-      const argVals = [...argIds.map(sid => streamEnv.get(sid)), ...fargIds.map(fid => funcEnv.get(fid))];
+    for (const {resultStreamId: sid, argumentIds: argIds} of currentDefinition.applications) {
+      const argVals = argIds.map(id => environment.get(id));
+
       const context = appCtx.get(sid);
       if (!context) { throw new Error(); }
       let appVal;
@@ -101,18 +99,18 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerS
       } catch (e) {
         console.log('application error');
       }
-      streamEnv.set(sid, appVal);
+      environment.set(sid, appVal);
     }
 
-    if (compiledDefinition.yieldStream) {
-      return streamEnv.get(compiledDefinition.yieldStream);
+    if (currentDefinition.yieldStreamId) {
+      return environment.get(currentDefinition.yieldStreamId);
     } else {
       return undefined;
     }
   };
 
-  const updateCompiledDefinition = (newDefinition: CompiledDefinition): void => {
-    if (JSON.stringify(newDefinition) === JSON.stringify(compiledDefinition)) {
+  const updateDefinition = (newDefinition: EssentialDefinition): void => {
+    if (JSON.stringify(newDefinition) === JSON.stringify(currentDefinition)) {
       return;
     }
 
@@ -122,25 +120,25 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerS
     const oldLiteralMap: Map<string, any> = new Map();
     const newLiteralMap: Map<string, any> = new Map();
 
-    for (const [sid, val] of compiledDefinition.literalStreamValues) {
+    for (const {streamId: sid, value: val} of currentDefinition.constantStreamValues) {
       oldLiteralMap.set(sid, val);
     }
-    for (const [sid, val] of newDefinition.literalStreamValues) {
+    for (const {streamId: sid, value: val} of newDefinition.constantStreamValues) {
       newLiteralMap.set(sid, val);
     }
 
-    for (const [sid, ] of compiledDefinition.literalStreamValues) {
+    for (const {streamId: sid} of currentDefinition.constantStreamValues) {
       if (!newLiteralMap.has(sid)) {
         activations.forEach(activation => {
-          activation.streamEnvironment.delete(sid);
+          activation.environment.delete(sid);
         });
       }
     }
 
-    for (const [sid, val] of newDefinition.literalStreamValues) {
+    for (const {streamId: sid, value: val} of newDefinition.constantStreamValues) {
       if (!oldLiteralMap.has(sid) || (oldLiteralMap.get(sid) !== val)) {
         activations.forEach(activation => {
-          activation.streamEnvironment.set(sid, val);
+          activation.environment.set(sid, val);
         });
       }
     }
@@ -148,17 +146,17 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerS
     //
     // RECONCILE APPLICATIONS
     //
-    const oldAppMap: Map<string, [FunctionID, Array<string>]> = new Map();
-    const newAppMap: Map<string, [FunctionID, Array<string>]> = new Map();
+    const oldAppMap: Map<string, [FunctionID, Array<AnyID>]> = new Map();
+    const newAppMap: Map<string, [FunctionID, Array<AnyID>]> = new Map();
 
-    for (const [sid, func, args] of compiledDefinition.applications) {
+    for (const {resultStreamId: sid, appliedFunction: func, argumentIds: args} of currentDefinition.applications) {
       oldAppMap.set(sid, [func, args]);
     }
-    for (const [sid, func, args] of newDefinition.applications) {
+    for (const {resultStreamId: sid, appliedFunction: func, argumentIds: args} of newDefinition.applications) {
       newAppMap.set(sid, [func, args]);
     }
 
-    for (const [sid, , ] of compiledDefinition.applications) {
+    for (const {resultStreamId: sid} of currentDefinition.applications) {
       if (!newAppMap.has(sid)) {
         activations.forEach(activation => {
           activation.applicationContext.get(sid)!.terminate();
@@ -166,7 +164,7 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerS
       }
     }
 
-    for (const [sid, funcId, args] of newDefinition.applications) {
+    for (const {resultStreamId: sid, appliedFunction: funcId, argumentIds: args} of newDefinition.applications) {
       let createNew = false;
 
       const oldApp = oldAppMap.get(sid);
@@ -186,7 +184,7 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerS
 
       if (createNew) {
         activations.forEach(activation => {
-          const func = activation.functionEnvironment.get(funcId);
+          const func = activation.environment.get(funcId);
           if (!func) {
             throw Error();
           }
@@ -198,30 +196,30 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerS
     //
     // RECONCILE CONTAINED DEFINITIONS
     //
-    const oldDefMap: Map<FunctionID, CompiledDefinition> = new Map();
-    const newDefMap: Map<FunctionID, CompiledDefinition> = new Map();
+    const oldDefMap: Map<FunctionID, EssentialDefinition> = new Map();
+    const newDefMap: Map<FunctionID, EssentialDefinition> = new Map();
 
-    for (const [fid, def] of compiledDefinition.containedDefinitions) {
+    for (const {id: fid, definition: def} of currentDefinition.containedFunctionDefinitions) {
       oldDefMap.set(fid, def);
     }
-    for (const [fid, def] of newDefinition.containedDefinitions) {
+    for (const {id: fid, definition: def} of newDefinition.containedFunctionDefinitions) {
       newDefMap.set(fid, def);
     }
 
-    for (const [fid, ] of compiledDefinition.containedDefinitions) {
+    for (const {id: fid} of currentDefinition.containedFunctionDefinitions) {
       if (!newDefMap.has(fid)) {
         activations.forEach(activation => {
-          activation.functionEnvironment.delete(fid);
+          activation.environment.delete(fid);
           activation.updateContainedDefinition.delete(fid);
         });
       }
     }
 
-    for (const [fid, def] of newDefinition.containedDefinitions) {
+    for (const {id: fid, definition: def} of newDefinition.containedFunctionDefinitions) {
       if (!oldDefMap.has(fid)) {
         activations.forEach(activation => {
-          const [sf, updateDef] = createLiveFunction(def, activation.streamEnvironment, activation.functionEnvironment);
-          activation.functionEnvironment.set(fid, sf);
+          const [sf, updateDef] = createLiveFunction(def, activation.environment);
+          activation.environment.set(fid, sf);
           activation.updateContainedDefinition.set(fid, updateDef);
         });
       } else {
@@ -234,12 +232,12 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerS
     //
     // FINISH UP
     //
-    compiledDefinition = newDefinition;
+    currentDefinition = newDefinition;
 
     activations.forEach(activation => {
       activation.requestUpdate();
     });
   };
 
-  return [streamFunc, updateCompiledDefinition];
+  return [streamFunc, updateDefinition];
 }
