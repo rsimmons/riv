@@ -11,8 +11,7 @@ type Name = string | null;
 export interface UndefinedLiteralNode {
   readonly type: 'UndefinedLiteral';
   readonly id: StreamID;
-  readonly children: [];
-  readonly name: Name;
+  readonly children: readonly [];
 }
 export function isUndefinedLiteralNode(node: Node): node is UndefinedLiteralNode {
   return node.type === 'UndefinedLiteral';
@@ -21,8 +20,7 @@ export function isUndefinedLiteralNode(node: Node): node is UndefinedLiteralNode
 export interface NumberLiteralNode {
   readonly type: 'NumberLiteral';
   readonly id: StreamID;
-  readonly children: [];
-  readonly name: Name;
+  readonly children: readonly [];
   readonly value: number;
 }
 export function isNumberLiteralNode(node: Node): node is NumberLiteralNode {
@@ -33,7 +31,6 @@ export interface ArrayLiteralNode {
   readonly type: 'ArrayLiteral';
   readonly id: StreamID;
   readonly children: ReadonlyArray<StreamExpressionNode>;
-  readonly name: Name;
 }
 export function isArrayLiteralNode(node: Node): node is ArrayLiteralNode {
   return node.type === 'ArrayLiteral';
@@ -50,8 +47,7 @@ export function isLiteralNode(node: Node): node is LiteralNode {
 export interface StreamReferenceNode {
   readonly type: 'StreamReference';
   readonly id: StreamID;
-  readonly children: [];
-  readonly name: Name;
+  readonly children: readonly [];
   readonly targetStreamId: StreamID;
 }
 export function isStreamReferenceNode(node: Node): node is StreamReferenceNode {
@@ -61,8 +57,7 @@ export function isStreamReferenceNode(node: Node): node is StreamReferenceNode {
 export interface FunctionReferenceNode {
   readonly type: 'FunctionReference';
   readonly id: FunctionID;
-  readonly children: [];
-  readonly name: Name;
+  readonly children: readonly [];
   readonly targetFunctionId: FunctionID;
 }
 export function isFunctionReferenceNode(node: Node): node is FunctionReferenceNode {
@@ -70,14 +65,27 @@ export function isFunctionReferenceNode(node: Node): node is FunctionReferenceNo
 }
 
 /**
+ * INDIRECTION
+ */
+export interface StreamIndirectionNode {
+  readonly type: 'StreamIndirection';
+  readonly id: StreamID;
+  readonly children: readonly [StreamExpressionNode];
+  readonly name: Name;
+}
+export function isStreamIndirectionNode(node: Node): node is StreamIndirectionNode {
+  return node.type === 'StreamIndirection';
+}
+
+/**
  * EXPRESSIONS
  *
- * An expression is a user-editable node that _identifies_ a stream/function, but does not
- * necessarily create/define a new stream/function. Since parameters are "fixed" they are excluded.
+ * An expression is a user-editable node that defines a stream/function.
+ * Since parameters are "fixed" they are excluded.
  */
-export type StreamExpressionNode = LiteralNode |  ApplicationNode | StreamReferenceNode;
+export type StreamExpressionNode = LiteralNode |  ApplicationNode | StreamReferenceNode | StreamIndirectionNode;
 export function isStreamExpressionNode(node: Node): node is StreamExpressionNode {
-  return isLiteralNode(node) || isApplicationNode(node) || isStreamReferenceNode(node);
+  return isLiteralNode(node) || isApplicationNode(node) || isStreamReferenceNode(node) || isStreamIndirectionNode(node);
 }
 
 export type FunctionExpressionNode = FunctionDefinitionNode | FunctionReferenceNode;
@@ -107,7 +115,6 @@ export interface ApplicationNode {
   readonly type: 'Application';
   readonly id: StreamID;
   readonly children: ReadonlyArray<ExpressionNode>;
-  readonly name: Name;
   readonly functionId: FunctionID;
 }
 export function isApplicationNode(node: Node): node is ApplicationNode {
@@ -134,7 +141,7 @@ export interface FunctionSignature {
 export interface StreamParameterNode {
   readonly type: 'StreamParameter';
   readonly id: StreamID;
-  readonly children: [];
+  readonly children: readonly [];
   readonly name: Name;
 }
 export function isStreamParameterNode(node: Node): node is StreamParameterNode {
@@ -144,7 +151,7 @@ export function isStreamParameterNode(node: Node): node is StreamParameterNode {
 export interface FunctionParameterNode {
   readonly type: 'FunctionParameter';
   readonly id: FunctionID;
-  readonly children: [];
+  readonly children: readonly [];
   readonly name: Name;
 }
 export function isFunctionParameterNode(node: Node): node is FunctionParameterNode {
@@ -175,7 +182,7 @@ export function isUserFunctionDefinitionExpressionsNode(node: Node): node is Use
 export interface UserFunctionDefinitionNode {
   readonly type: 'UserFunctionDefinition';
   readonly id: FunctionID;
-  readonly children: [UserFunctionDefinitionParametersNode, UserFunctionDefinitionExpressionsNode];
+  readonly children: readonly [UserFunctionDefinitionParametersNode, UserFunctionDefinitionExpressionsNode];
   readonly name: Name;
   readonly signature: FunctionSignature;
 }
@@ -189,7 +196,7 @@ export function isUserFunctionDefinitionNode(node: Node): node is UserFunctionDe
 export interface NativeFunctionDefinitionNode {
   readonly type: 'NativeFunctionDefinition';
   readonly id: FunctionID;
-  readonly children: [];
+  readonly children: readonly [];
   readonly name: Name;
   readonly signature: FunctionSignature;
 }
@@ -211,7 +218,7 @@ export function isFunctionDefinitionNode(node: Node): node is FunctionDefinition
 export interface ProgramNode {
   readonly type: 'Program';
   readonly programId: string;
-  readonly children: [UserFunctionDefinitionNode];
+  readonly children: readonly [UserFunctionDefinitionNode];
   readonly name: string;
 }
 export function isProgramNode(node: Node): node is ProgramNode {
@@ -226,7 +233,12 @@ export function isNode(node: Node): node is Node {
   return isProgramNode(node) || isExpressionNode(node) || isParameterNode(node) || isUserFunctionDefinitionParametersNode(node) || isUserFunctionDefinitionExpressionsNode(node);
 }
 
-export type NodeWithIdName = ExpressionNode | ParameterNode;
-export function isNodeWithIdName(node: Node): node is NodeWithIdName {
+export type IDedNode = ExpressionNode | ParameterNode;
+export function isIDedNode(node: Node): node is IDedNode {
   return isExpressionNode(node) || isParameterNode(node);
+}
+
+export type NamedNode = ParameterNode | StreamIndirectionNode;
+export function isNamedNode(node: Node): node is NamedNode {
+  return isParameterNode(node) || isStreamIndirectionNode(node);
 }

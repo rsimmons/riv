@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './ExpressionChooser.css';
-import { Node, FunctionDefinitionNode, UserFunctionDefinitionNode, isStreamCreationNode, StreamCreationNode } from './Tree';
+import { Node, FunctionDefinitionNode, UserFunctionDefinitionNode, isStreamCreationNode, StreamCreationNode, isNamedNode } from './Tree';
 import { fuzzy_match } from './vendor/fts_fuzzy_match';
 import { environmentForSelectedNode } from './EditReducer';
 import { generateStreamId, generateFunctionId } from './Identifier';
@@ -117,7 +117,7 @@ function Choice({ choice }: ChoiceProps) {
       return <span>{choice.value}</span>
 
     case 'streamref':
-      return <span><em>S</em> {choice.node.name} <small>(id {choice.node.id})</small></span>
+      return <span><em>S</em> {isNamedNode(choice.node) ? choice.node.name : <em>unnamed</em>} <small>(id {choice.node.id})</small></span>
 
     case 'function':
       return <span><em>F</em> {choice.node.name}({choice.node.signature.parameters.map(param => (param.name.startsWith('_') ? '\u25A1' : param.name)).join(', ')})</span>
@@ -192,8 +192,7 @@ const ExpressionChooser: React.FC<{mainState: State, dispatch: (action: any) => 
       case 'undefined':
         newNode = {
           type: 'UndefinedLiteral',
-          id: originalNode.id,
-          name: originalNode.name,
+          id: generateStreamId(),
           children: [],
         }
         break;
@@ -201,8 +200,7 @@ const ExpressionChooser: React.FC<{mainState: State, dispatch: (action: any) => 
       case 'number':
         newNode = {
           type: 'NumberLiteral',
-          id: originalNode.id,
-          name: originalNode.name,
+          id: generateStreamId(),
           children: [],
           value: choice.value,
         };
@@ -211,8 +209,7 @@ const ExpressionChooser: React.FC<{mainState: State, dispatch: (action: any) => 
       case 'streamref':
         newNode = {
           type: 'StreamReference',
-          id: originalNode.id,
-          name: originalNode.name,
+          id: generateStreamId(),
           children: [],
           targetStreamId: choice.node.id,
         };
@@ -221,8 +218,7 @@ const ExpressionChooser: React.FC<{mainState: State, dispatch: (action: any) => 
       case 'function':
         newNode = {
           type: 'Application',
-          id: originalNode.id,
-          name: originalNode.name,
+          id: generateStreamId(),
           functionId: choice.node.id,
           children: choice.node.signature.parameters.map(param => {
             if (param.type === 'stream') {
@@ -261,7 +257,6 @@ const ExpressionChooser: React.FC<{mainState: State, dispatch: (action: any) => 
                       {
                         type: 'UndefinedLiteral',
                         id: generateStreamId(),
-                        name: null,
                         children: [],
                       },
                     ]

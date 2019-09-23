@@ -5,6 +5,7 @@ import ExpressionChooser from './ExpressionChooser';
 import StoragePanel from './StoragePanel';
 import { INITIAL_THEME, ThemePicker } from './ThemePicker';
 import './Editor.css';
+import { isNamedNode } from './Tree';
 
 const keyMap = {
   MOVE_UP: 'up',
@@ -18,8 +19,6 @@ const keyMap = {
   EDIT_AFTER: ['shift+enter', ','],
 
   DELETE: 'backspace',
-
-  BEGIN_IDENTIFIER_EDIT: '=',
 
   EDIT_NEXT_UNDEFINED: 'tab',
 
@@ -117,20 +116,6 @@ function DefinitionExpressionsView({ expressions }) {
   )
 }
 
-function NameChooser({ initialName, onUpdateName }) {
-  const [text, setText] = useState(initialName || '');
-
-  const handleChange = e => {
-    const newText = e.target.value;
-    setText(newText);
-    if (onUpdateName) {
-      onUpdateName(newText);
-    }
-  };
-
-  return <input className="Editor-text-edit-input" value={text} onChange={handleChange} autoFocus />;
-}
-
 function NumberLiteralView({ numberLiteral }) {
   return <div>{numberLiteral.value}</div>;
 }
@@ -154,7 +139,12 @@ function StreamReferenceView({ streamReference }) {
   }
 
   const { StreamReference } = useContext(ThemeContext);
-  return <StreamReference name={targetExpressionNode.name ? targetExpressionNode.name : '<stream ' + streamReference.targetStreamId + '>'} />;
+  return <StreamReference name={isNamedNode(targetExpressionNode) ? targetExpressionNode.name : '<stream ' + streamReference.targetStreamId + '>'} />;
+}
+
+function StreamIndirectionView({ streamIndirection }) {
+  const { StreamIndirection } = useContext(ThemeContext);
+  return <StreamIndirection name={streamIndirection.name} child={<ExpressionView expression={streamIndirection.children[0]} />} />;
 }
 
 function UserFunctionView({ userFunction }) {
@@ -204,6 +194,9 @@ function NotEditingExpressionView({ expression }) {
     case 'StreamReference':
       return <StreamReferenceView streamReference={expression} />
 
+    case 'StreamIndirection':
+      return <StreamIndirectionView streamIndirection={expression} />
+
     case 'Application':
       return <ApplicationView application={expression} />
 
@@ -224,7 +217,7 @@ function ExpressionView({ expression }) {
   const dispatch = useContext(DispatchContext);
   const { Expression } = useContext(ThemeContext);
 
-  return <Expression name={expression.name} marks={marks} onSelect={handleSelect} onEdit={handleEdit} inside={
+  return <Expression marks={marks} onSelect={handleSelect} onEdit={handleEdit} inside={
     (marks.includes('selected') && editingSelected)
       ? <ExpressionChooser node={expression} mainState={mainState} dispatch={dispatch} />
       : <NotEditingExpressionView expression={expression} />

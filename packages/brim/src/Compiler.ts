@@ -84,6 +84,19 @@ function traverseFromStreamCreation(node: StreamCreationNode, context: Traversal
       });
       break;
 
+    case 'StreamIndirection':
+      temporaryMarkedStreamIds.add(node.id);
+      traverseFromStreamCreation(node.children[0], context);
+      temporaryMarkedStreamIds.delete(node.id);
+
+      // For now, we do an inefficient copy rather than being smart
+      essentialDefinition.applications.push({
+        resultStreamId: node.id,
+        appliedFunction: 'id',
+        argumentIds: [node.children[0].id],
+      });
+      break;
+
     case 'Application':
       /*
       const functionNode = functionEnvironment.get(node.functionId);

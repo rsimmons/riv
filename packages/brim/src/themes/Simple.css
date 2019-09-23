@@ -1,13 +1,13 @@
 
-.SimpleTheme-array-items, .SimpleTheme-application-arguments, .SimpleTheme-user-function-expressions {
+.SimpleTheme-array-items, .SimpleTheme-application-arguments, .SimpleTheme-user-function-expressions, .SimpleTheme-indirection-child-outer {
   padding-left: 1em;
 }
 
-.SimpleTheme-array-item, .SimpleTheme-application-argument {
+.SimpleTheme-array-item, .SimpleTheme-application-argument, .SimpleTheme-indirection-child-inner {
   padding: 0.05em 0;
 }
 
-.SimpleTheme-definition-expression, .SimpleTheme-array-item, .SimpleTheme-application-argument, .SimpleTheme-expression-name {
+.SimpleTheme-definition-expression, .SimpleTheme-array-item, .SimpleTheme-application-argument, .SimpleTheme-indirection-child-inner {
   width: fit-content;
 }
 
@@ -56,14 +56,6 @@
   padding: 0.2em 0;
 }
 
-.SimpleTheme-expression-name {
-  font-size: 0.8em;
-  padding: 0.1em 0.3em;
-  background: #aaa;
-  border-radius: 0.1em;
-  color: #333;
-}
-
 .SimpleTheme-expression {
   display: flex;
 }
@@ -92,8 +84,17 @@
   box-shadow: 0 0 5px 0px rgba(0,0,0,0.5);
 }
 
-.SimpleTheme-stream-reference, .SimpleTheme-name {
+.SimpleTheme-stream-reference {
   font-style: italic;
+  color: lightblue;
+}
+
+.SimpleTheme-stream-indirection {
+  display: flex;
+}
+
+.SimpleTheme-stream-indirection-name {
+  color: lightblue;
 }
 
 .SimpleTheme-undefined-expression {

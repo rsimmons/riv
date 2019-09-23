@@ -73,7 +73,7 @@ export const generateTheme = ({ expressionGrouping, applicationArguments }) => (
     <div className="SimpleTheme-definition-expression">{expression}</div>
   ),
 
-  Expression: ({ name, marks, onSelect, onEdit, inside }) => {
+  Expression: ({ marks, onSelect, onEdit, inside }) => {
     let exprClass = 'SimpleTheme-expression';
 
     switch (expressionGrouping) {
@@ -109,19 +109,25 @@ export const generateTheme = ({ expressionGrouping, applicationArguments }) => (
           }
         })() }
         <div>
-          {name ? <div className="SimpleTheme-expression-name">{name}</div> : null}
           <div className="SimpleTheme-expression-main">{inside}</div>
         </div>
       </Selectable>
     );
   },
 
-  Name: ({ marks, onSelect, inside }) => (
-    <Selectable marks={marks} onSelect={onSelect} extraClassName={'SimpleTheme-name'}>{inside}</Selectable>
-  ),
-
   StreamReference: ({ name }) => (
     <div><span className="SimpleTheme-stream-reference">{name}</span></div>
+  ),
+
+  StreamIndirection: ({ name, child }) => (
+    <div className="SimpleTheme-stream-indirection">
+      <div className="SimpleTheme-stream-indirection-name">{name}</div>
+      <div className="SimpleTheme-indirection-child-outer">
+        <div className="SimpleTheme-indirection-child-inner">
+          {child}
+        </div>
+      </div>
+    </div>
   ),
 
   UndefinedExpression: () => (
