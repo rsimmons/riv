@@ -815,7 +815,7 @@ function beginEdit(st: CoreState, overwrite: boolean): CoreState | void {
     case 'StreamIndirection':
       return {
         ...st,
-        editingSelected: {originalNode: node, tentativeNode: node},
+        editingSelected: {originalNode: node, tentativeNode: node, overwrite},
       };
 
     case 'ArrayLiteral':

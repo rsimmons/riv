@@ -161,6 +161,10 @@ const ExpressionChooser: React.FC<{mainState: State, dispatch: (action: any) => 
     }
     const initFromNode = mainState.editingSelected.tentativeNode;
 
+    if (mainState.editingSelected.overwrite) {
+      return '';
+    }
+
     // Initialize text based on node
     switch (initFromNode.type) {
       case 'UndefinedLiteral':

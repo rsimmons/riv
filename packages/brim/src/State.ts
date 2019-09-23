@@ -24,6 +24,7 @@ export type Path = ReadonlyArray<number>;
 export type NodeEditState = {
   readonly originalNode: Node,
   readonly tentativeNode: Node,
+  readonly overwrite: boolean,
 } | null;
 
 export interface UndoStackFrame {
