@@ -76,6 +76,13 @@ function generateChoices(text: string, mainState: State) {
     });
   }
 
+  if (FLOAT_REGEX.test(text)) {
+    choices.push({
+      type: 'number',
+      value: Number(text),
+    });
+  }
+
   const { namedStreams, namedFunctions } = environmentForSelectedNode(mainState);
 
   const streamSearchResults = fuzzySearch(text, namedStreams);
@@ -98,13 +105,6 @@ function generateChoices(text: string, mainState: State) {
     choices.push({
       type: 'streamind',
       name: text.trim(),
-    });
-  }
-
-  if (FLOAT_REGEX.test(text)) {
-    choices.push({
-      type: 'number',
-      value: Number(text),
     });
   }
 
