@@ -49,7 +49,9 @@ export function isLiteralNode(node: Node): node is LiteralNode {
  */
 export interface StreamReferenceNode {
   readonly type: 'StreamReference';
+  readonly id: StreamID;
   readonly children: [];
+  readonly name: Name;
   readonly targetStreamId: StreamID;
 }
 export function isStreamReferenceNode(node: Node): node is StreamReferenceNode {
@@ -58,7 +60,9 @@ export function isStreamReferenceNode(node: Node): node is StreamReferenceNode {
 
 export interface FunctionReferenceNode {
   readonly type: 'FunctionReference';
+  readonly id: FunctionID;
   readonly children: [];
+  readonly name: Name;
   readonly targetFunctionId: FunctionID;
 }
 export function isFunctionReferenceNode(node: Node): node is FunctionReferenceNode {
@@ -69,9 +73,9 @@ export function isFunctionReferenceNode(node: Node): node is FunctionReferenceNo
  * EXPRESSIONS
  *
  * An expression is a user-editable node that _identifies_ a stream/function, but does not
- * necessarily define a new stream/function. Since parameters are "fixed" they are excluded.
+ * necessarily create/define a new stream/function. Since parameters are "fixed" they are excluded.
  */
-export type StreamExpressionNode = LiteralNode | ApplicationNode | StreamReferenceNode;
+export type StreamExpressionNode = LiteralNode |  ApplicationNode | StreamReferenceNode;
 export function isStreamExpressionNode(node: Node): node is StreamExpressionNode {
   return isLiteralNode(node) || isApplicationNode(node) || isStreamReferenceNode(node);
 }
@@ -87,13 +91,13 @@ export function isExpressionNode(node: Node): node is ExpressionNode {
 }
 
 /**
- * STREAM DEFINITION
+ * STREAM CREATION
  *
- * A stream definition defines a new stream id (which means stream references are excluded).
+ * A stream creation defines a new stream id.
  */
-export type StreamDefinitionNode = LiteralNode | ApplicationNode | ParameterNode;
-export function isStreamDefinitionNode(node: Node): node is StreamDefinitionNode {
-  return isLiteralNode(node) || isApplicationNode(node) || isParameterNode(node);
+export type StreamCreationNode = StreamExpressionNode | StreamParameterNode;
+export function isStreamCreationNode(node: Node): node is StreamCreationNode {
+  return isStreamExpressionNode(node) || isStreamParameterNode(node);
 }
 
 /**
@@ -220,4 +224,9 @@ export function isProgramNode(node: Node): node is ProgramNode {
 export type Node = ProgramNode | ExpressionNode | ParameterNode | UserFunctionDefinitionParametersNode | UserFunctionDefinitionExpressionsNode;
 export function isNode(node: Node): node is Node {
   return isProgramNode(node) || isExpressionNode(node) || isParameterNode(node) || isUserFunctionDefinitionParametersNode(node) || isUserFunctionDefinitionExpressionsNode(node);
+}
+
+export type NodeWithIdName = ExpressionNode | ParameterNode;
+export function isNodeWithIdName(node: Node): node is NodeWithIdName {
+  return isExpressionNode(node) || isParameterNode(node);
 }

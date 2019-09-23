@@ -1,5 +1,5 @@
 import { StreamID, FunctionID, AnyID } from './Identifier';
-import { UserFunctionDefinitionNode, StreamExpressionNode, StreamDefinitionNode, FunctionDefinitionNode, isStreamDefinitionNode, isUserFunctionDefinitionNode, isStreamExpressionNode } from './Tree';
+import { UserFunctionDefinitionNode, StreamCreationNode, FunctionDefinitionNode, isStreamCreationNode, isUserFunctionDefinitionNode, isStreamExpressionNode } from './Tree';
 import { EssentialDefinition } from './EssentialDefinition';
 import Environment from './Environment';
 import { traverseTree } from './Traversal';
@@ -8,7 +8,7 @@ export class CompilationError extends Error {
 };
 
 interface TraversalContext {
-  streamEnvironment: Environment<StreamDefinitionNode>;
+  streamEnvironment: Environment<StreamCreationNode>;
   functionEnvironment: Environment<FunctionDefinitionNode>;
   localStreamIds: Set<StreamID>;
   localFunctionIds: Set<FunctionID>;
@@ -17,7 +17,7 @@ interface TraversalContext {
   essentialDefinition: EssentialDefinition;
 }
 
-function traverseFromStreamDefinition(node: StreamDefinitionNode, context: TraversalContext): void {
+function traverseFromStreamCreation(node: StreamCreationNode, context: TraversalContext) {
   const {streamEnvironment, functionEnvironment, localStreamIds, temporaryMarkedStreamIds, permanentMarkedStreamIds, essentialDefinition} = context;
 
   if (permanentMarkedStreamIds.has(node.id)) {
@@ -33,7 +33,7 @@ function traverseFromStreamDefinition(node: StreamDefinitionNode, context: Trave
       // Nothing to do
       break;
 
-      case 'UndefinedLiteral':
+    case 'UndefinedLiteral':
       essentialDefinition.constantStreamValues.push({streamId: node.id, value: undefined});
       break;
 
@@ -46,7 +46,8 @@ function traverseFromStreamDefinition(node: StreamDefinitionNode, context: Trave
 
       temporaryMarkedStreamIds.add(node.id);
       for (const item of node.children) {
-        itemStreamIds.push(traverseFromStreamExpression(item, context));
+        traverseFromStreamCreation(item, context);
+        itemStreamIds.push(item.id);
       }
       temporaryMarkedStreamIds.delete(node.id);
 
@@ -55,6 +56,31 @@ function traverseFromStreamDefinition(node: StreamDefinitionNode, context: Trave
         resultStreamId: node.id,
         appliedFunction: 'Array_of',
         argumentIds: itemStreamIds,
+      });
+      break;
+
+    case 'StreamReference':
+      if (localStreamIds.has(node.targetStreamId)) {
+        const targetExpressionNode = streamEnvironment.get(node.targetStreamId);
+        if (!targetExpressionNode) {
+          throw Error();
+        }
+
+        temporaryMarkedStreamIds.add(node.id);
+        traverseFromStreamCreation(targetExpressionNode, context);
+        temporaryMarkedStreamIds.delete(node.id);
+      } else {
+        if (streamEnvironment.get(node.targetStreamId) === undefined) {
+          throw new Error();
+        }
+        essentialDefinition.externalReferencedStreamIds.add(node.targetStreamId);
+      }
+
+      // For now, we do an inefficient copy rather than being smart
+      essentialDefinition.applications.push({
+        resultStreamId: node.id,
+        appliedFunction: 'id',
+        argumentIds: [node.targetStreamId],
       });
       break;
 
@@ -72,7 +98,8 @@ function traverseFromStreamDefinition(node: StreamDefinitionNode, context: Trave
 
       for (const argument of node.children) {
         if (isStreamExpressionNode(argument)) {
-          argumentIds.push(traverseFromStreamExpression(argument, context));
+          traverseFromStreamCreation(argument, context);
+          argumentIds.push(argument.id);
         } else if (isUserFunctionDefinitionNode(argument)) {
           const compiledContainedDef = compileUserDefinition(argument, streamEnvironment, functionEnvironment);
 
@@ -89,7 +116,7 @@ function traverseFromStreamDefinition(node: StreamDefinitionNode, context: Trave
               if (depLocalExprNode === undefined) {
                 throw new Error();
               }
-              traverseFromStreamDefinition(depLocalExprNode, context);
+              traverseFromStreamCreation(depLocalExprNode, context);
             }
           });
 
@@ -121,41 +148,15 @@ function traverseFromStreamDefinition(node: StreamDefinitionNode, context: Trave
   permanentMarkedStreamIds.add(node.id);
 }
 
-function traverseFromStreamExpression(node: StreamExpressionNode, context: TraversalContext): StreamID {
-  const {streamEnvironment, localStreamIds, essentialDefinition} = context;
-
-  if (node.type === 'StreamReference') {
-    if (localStreamIds.has(node.targetStreamId)) {
-      const targetExpressionNode = streamEnvironment.get(node.targetStreamId);
-      if (!targetExpressionNode) {
-        throw Error();
-      }
-
-      traverseFromStreamDefinition(targetExpressionNode, context);
-    } else {
-      if (streamEnvironment.get(node.targetStreamId) === undefined) {
-        throw new Error();
-      }
-      essentialDefinition.externalReferencedStreamIds.add(node.targetStreamId);
-    }
-
-    return node.targetStreamId;
-  } else {
-    traverseFromStreamDefinition(node, context);
-
-    return node.id;
-  }
-}
-
-function compileUserDefinition(definition: UserFunctionDefinitionNode, outerStreamEnvironment: Environment<StreamDefinitionNode>, outerFunctionEnvironment: Environment<FunctionDefinitionNode>): EssentialDefinition {
-  const streamEnvironment: Environment<StreamDefinitionNode> = new Environment(outerStreamEnvironment);
+function compileUserDefinition(definition: UserFunctionDefinitionNode, outerStreamEnvironment: Environment<StreamCreationNode>, outerFunctionEnvironment: Environment<FunctionDefinitionNode>): EssentialDefinition {
+  const streamEnvironment: Environment<StreamCreationNode> = new Environment(outerStreamEnvironment);
   const functionEnvironment: Environment<FunctionDefinitionNode> = new Environment(outerFunctionEnvironment);
   const localStreamIds: Set<StreamID> = new Set();
   const localFunctionIds: Set<FunctionID> = new Set();
 
   // Traverse (just local scope) to find defined streams/functions
   traverseTree(definition, {onlyWithinFunctionId: definition.id}, (node, ) => {
-    if (isStreamDefinitionNode(node)) {
+    if (isStreamCreationNode(node)) {
       if (streamEnvironment.get(node.id) !== undefined) {
         throw new Error('must be unique');
       }
@@ -189,7 +190,7 @@ function compileUserDefinition(definition: UserFunctionDefinitionNode, outerStre
 
   for (const expr of definition.children[1].children) {
     if (isStreamExpressionNode(expr)) {
-      const sid = traverseFromStreamExpression(expr, {
+      traverseFromStreamCreation(expr, {
         streamEnvironment,
         functionEnvironment,
         localStreamIds,
@@ -198,7 +199,10 @@ function compileUserDefinition(definition: UserFunctionDefinitionNode, outerStre
         permanentMarkedStreamIds,
         essentialDefinition,
       });
-      essentialDefinition.yieldStreamId = sid; // yield the last stream expression
+      essentialDefinition.yieldStreamId = expr.id; // yield the last stream expression
+    } else {
+      // TODO: eventually, this could also be a function expression
+      throw new Error();
     }
   }
 
@@ -206,7 +210,7 @@ function compileUserDefinition(definition: UserFunctionDefinitionNode, outerStre
 }
 
 export function compileGlobalUserDefinition(definition: UserFunctionDefinitionNode, globalFunctionEnvironment: Environment<FunctionDefinitionNode>): EssentialDefinition {
-  const streamEnvironment: Environment<StreamDefinitionNode> = new Environment();
+  const streamEnvironment: Environment<StreamCreationNode> = new Environment();
   const functionEnvironment: Environment<FunctionDefinitionNode> = new Environment(globalFunctionEnvironment);
 
   return compileUserDefinition(definition, streamEnvironment, functionEnvironment);

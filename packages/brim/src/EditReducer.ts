@@ -1,7 +1,7 @@
 import genuid from './uid';
 import { StreamID, FunctionID, generateStreamId, generateFunctionId } from './Identifier';
-import { State, Path, NodeEditState, pathIsPrefix } from './State';
-import { Node, ProgramNode, UserFunctionDefinitionNode, StreamDefinitionNode, FunctionDefinitionNode, isStreamDefinitionNode, isFunctionDefinitionNode, isUserFunctionDefinitionExpressionsNode, isUserFunctionDefinitionParametersNode, isProgramNode, isUserFunctionDefinitionNode, isStreamExpressionNode, isStreamReferenceNode, UndefinedLiteralNode } from './Tree';
+import { State, Path, NodeEditState } from './State';
+import { Node, ProgramNode, UserFunctionDefinitionNode, StreamCreationNode, FunctionDefinitionNode, isStreamCreationNode, isFunctionDefinitionNode, isProgramNode, isUserFunctionDefinitionNode, isStreamExpressionNode, isStreamReferenceNode, UndefinedLiteralNode, isNodeWithIdName } from './Tree';
 import { EssentialDefinition } from './EssentialDefinition';
 import { compileGlobalUserDefinition, CompilationError } from './Compiler';
 import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
@@ -11,7 +11,7 @@ import { traverseTree } from './Traversal';
 import globalNativeFunctions from './globalNatives';
 
 const REALIZE_TENTATIVE_EXPRESSION_EDITS = false;
-const REALIZE_TENTATIVE_IDENTIFIER_EDITS = true;
+// const REALIZE_TENTATIVE_IDENTIFIER_EDITS = true;
 
 // We don't make a discriminated union of specific actions, but maybe we could
 interface Action {
@@ -31,6 +31,7 @@ export function nodeFromPath(root: Node, path: Path): Node {
   return cur;
 }
 
+/*
 function nodeSplitPath(node: Node, root: Node, path: Path): [Path, Path] {
   let cur: any = root;
   let idx = 0;
@@ -48,10 +49,11 @@ function nodeSplitPath(node: Node, root: Node, path: Path): [Path, Path] {
     throw new Error('node was not in path');
   }
 }
+*/
 
-function addUserFunctionLocalEnvironment(func: UserFunctionDefinitionNode, namedStreams: Array<[string, StreamDefinitionNode]>, namedFunctions: Array<[string, FunctionDefinitionNode]>) {
+function addUserFunctionLocalEnvironment(func: UserFunctionDefinitionNode, namedStreams: Array<[string, StreamCreationNode]>, namedFunctions: Array<[string, FunctionDefinitionNode]>) {
   traverseTree(func, {onlyWithinFunctionId: func.id}, (node, path) => {
-    if (isStreamDefinitionNode(node) && node.name) {
+    if (isStreamCreationNode(node) && node.name) {
       namedStreams.push([node.name, node]);
     }
     if (isFunctionDefinitionNode(node) && node.name) {
@@ -61,7 +63,7 @@ function addUserFunctionLocalEnvironment(func: UserFunctionDefinitionNode, named
   });
 }
 
-function addEnvironmentAlongPath(root: Node, path: Path, namedStreams: Array<[string, StreamDefinitionNode]>, namedFunctions: Array<[string, FunctionDefinitionNode]>) {
+function addEnvironmentAlongPath(root: Node, path: Path, namedStreams: Array<[string, StreamCreationNode]>, namedFunctions: Array<[string, FunctionDefinitionNode]>) {
   let cur: Node = root;
   for (const seg of path) {
     if (cur.type === 'UserFunctionDefinition') {
@@ -72,7 +74,7 @@ function addEnvironmentAlongPath(root: Node, path: Path, namedStreams: Array<[st
 }
 
 export function environmentForSelectedNode(state: State) {
-  const namedStreams: Array<[string, StreamDefinitionNode]> = [];
+  const namedStreams: Array<[string, StreamCreationNode]> = [];
   const namedFunctions: Array<[string, FunctionDefinitionNode]> = [];
 
   for (const extFunc of state.nativeFunctions) {
@@ -827,10 +829,6 @@ function endEdit(st: CoreState, confirm: boolean): CoreState {
   };
 }
 
-function isNodeSelectable(node: Node): boolean {
-  return !(isProgramNode(node) || isUserFunctionDefinitionParametersNode(node) || isUserFunctionDefinitionExpressionsNode(node));
-}
-
 interface CoreState {
   readonly program: ProgramNode;
   readonly selectionPath: Path;
@@ -868,7 +866,7 @@ const HANDLERS: Handler[] = [
     while (newSelectionPath.length > 0) {
       newSelectionPath = newSelectionPath.slice(0, -1);
       const node = nodeFromPath(st.program, newSelectionPath);
-      if (isNodeSelectable(node)) {
+      if (isNodeWithIdName(node)) {
         return {
           ...st,
           selectionPath: newSelectionPath,
@@ -1018,7 +1016,7 @@ function applyActionToCoreState(action: Action, coreState: CoreState): CoreState
 }
 
 function addStateIdLookups(state: State): State {
-  const streamIdToNode: Map<StreamID, StreamDefinitionNode> = new Map();
+  const streamIdToNode: Map<StreamID, StreamCreationNode> = new Map();
   const functionIdToNode: Map<FunctionID, FunctionDefinitionNode> = new Map();
 
   for (const extFunc of state.nativeFunctions) {
@@ -1026,7 +1024,7 @@ function addStateIdLookups(state: State): State {
   }
 
   traverseTree(state.program, {}, (node, ) => {
-    if (isStreamDefinitionNode(node)) {
+    if (isStreamCreationNode(node)) {
       if (streamIdToNode.has(node.id)) {
         throw new Error('stream ids must be unique');
       }
@@ -1355,6 +1353,8 @@ const INITIAL_PROGRAM: ProgramNode = {
                 children: [
                   {
                     type: 'StreamReference',
+                    id: generateStreamId(),
+                    name: null,
                     targetStreamId: mdId,
                     children: [],
                   },

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './ExpressionChooser.css';
-import { Node, StreamDefinitionNode, FunctionDefinitionNode, UserFunctionDefinitionNode, isStreamDefinitionNode } from './Tree';
+import { Node, FunctionDefinitionNode, UserFunctionDefinitionNode, isStreamCreationNode, StreamCreationNode } from './Tree';
 import { fuzzy_match } from './vendor/fts_fuzzy_match';
 import { environmentForSelectedNode } from './EditReducer';
 import { generateStreamId, generateFunctionId } from './Identifier';
@@ -12,7 +12,7 @@ interface UndefinedChoice {
 
 interface StreamRefChoice {
   readonly type: 'streamref';
-  readonly node: StreamDefinitionNode;
+  readonly node: StreamCreationNode;
 }
 
 interface NumberChoice {
@@ -183,7 +183,7 @@ const ExpressionChooser: React.FC<{mainState: State, dispatch: (action: any) => 
     }
 
     const originalNode = mainState.editingSelected.originalNode;
-    if (!isStreamDefinitionNode(originalNode)) {
+    if (!isStreamCreationNode(originalNode)) {
       throw new Error(); // TODO: this is not quite right, could be stream ref
     }
 
@@ -211,7 +211,8 @@ const ExpressionChooser: React.FC<{mainState: State, dispatch: (action: any) => 
       case 'streamref':
         newNode = {
           type: 'StreamReference',
-          // name: originalNode.name,
+          id: originalNode.id,
+          name: originalNode.name,
           children: [],
           targetStreamId: choice.node.id,
         };

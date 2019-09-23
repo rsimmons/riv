@@ -3,7 +3,7 @@ import { EssentialDefinition } from './EssentialDefinition';
 
 import { StreamID, FunctionID } from './Identifier';
 
-import { Node, ProgramNode, NativeFunctionDefinitionNode, StreamDefinitionNode, FunctionDefinitionNode } from './Tree';
+import { Node, ProgramNode, NativeFunctionDefinitionNode, StreamCreationNode, FunctionDefinitionNode } from './Tree';
 
 export function pathIsPrefix(a: Path, b: Path): boolean {
   if (a.length > b.length) {
@@ -42,7 +42,7 @@ export interface State {
   readonly editingSelected: NodeEditState;
   readonly nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>;
   readonly derivedLookups: {
-    streamIdToNode: ReadonlyMap<StreamID, StreamDefinitionNode> | null;
+    streamIdToNode: ReadonlyMap<StreamID, StreamCreationNode> | null;
     functionIdToNode: ReadonlyMap<FunctionID, FunctionDefinitionNode> | null;
     nodeToPath: ReadonlyMap<Node, Path> | null;
   };
