@@ -7,7 +7,7 @@
   padding: 0.05em 0;
 }
 
-.SimpleTheme-definition-expression, .SimpleTheme-array-item, .SimpleTheme-application-argument, .SimpleTheme-expression-identifier {
+.SimpleTheme-definition-expression, .SimpleTheme-array-item, .SimpleTheme-application-argument, .SimpleTheme-expression-name {
   width: fit-content;
 }
 
@@ -56,7 +56,7 @@
   padding: 0.2em 0;
 }
 
-.SimpleTheme-expression-identifier {
+.SimpleTheme-expression-name {
   font-size: 0.8em;
   padding: 0.1em 0.3em;
   background: #aaa;
@@ -92,7 +92,7 @@
   box-shadow: 0 0 5px 0px rgba(0,0,0,0.5);
 }
 
-.SimpleTheme-stream-reference, .SimpleTheme-identifier {
+.SimpleTheme-stream-reference, .SimpleTheme-name {
   font-style: italic;
 }
 

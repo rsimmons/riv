@@ -117,7 +117,7 @@ function DefinitionExpressionsView({ expressions }) {
   )
 }
 
-function IdentifierChooser({ initialName, onUpdateName, onEndEdit }) {
+function NameChooser({ initialName, onUpdateName }) {
   const [text, setText] = useState(initialName || '');
 
   const handleChange = e => {
@@ -129,30 +129,6 @@ function IdentifierChooser({ initialName, onUpdateName, onEndEdit }) {
   };
 
   return <input className="Editor-text-edit-input" value={text} onChange={handleChange} autoFocus />;
-}
-
-function IdentifierView({ identifier }) {
-  const marks = useMarks(identifier);
-  const handleSelect = useHandleSelect(identifier);
-  const {editingSelected} = useContext(FullStateContext);
-  const dispatch = useContext(DispatchContext);
-
-  const handleUpdateName = (name) => {
-    dispatch({
-      type: 'UPDATE_EDITING_TENTATIVE_NODE',
-      newNode: {
-        type: 'Identifier',
-        name,
-      },
-    });
-  };
-
-  const { Identifier } = useContext(ThemeContext);
-
-  return <Identifier marks={marks} onSelect={handleSelect} inside={(marks.includes('selected') && editingSelected)
-    ? <IdentifierChooser initialName={identifier.name} onUpdateName={handleUpdateName} />
-    : identifier.name
-  } />;
 }
 
 function NumberLiteralView({ numberLiteral }) {
@@ -248,7 +224,7 @@ function ExpressionView({ expression }) {
   const dispatch = useContext(DispatchContext);
   const { Expression } = useContext(ThemeContext);
 
-  return <Expression identifier={expression.identifier ? <IdentifierView identifier={expression.identifier} /> : null} marks={marks} onSelect={handleSelect} onEdit={handleEdit} inside={
+  return <Expression name={expression.name} marks={marks} onSelect={handleSelect} onEdit={handleEdit} inside={
     (marks.includes('selected') && editingSelected)
       ? <ExpressionChooser node={expression} mainState={mainState} dispatch={dispatch} />
       : <NotEditingExpressionView expression={expression} />
