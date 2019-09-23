@@ -1,6 +1,6 @@
 import genuid from './uid';
 import { StreamID, FunctionID, generateStreamId, generateFunctionId } from './Identifier';
-import { State, Path, NodeEditState } from './State';
+import { State, Path, NodeEditState, pathIsPrefix } from './State';
 import { Node, ProgramNode, UserFunctionDefinitionNode, StreamCreationNode, FunctionDefinitionNode, isStreamCreationNode, isFunctionDefinitionNode, isProgramNode, isUserFunctionDefinitionNode, isStreamExpressionNode, isIDedNode, isNamedNode, isApplicationNode, isArrayLiteralNode, isUserFunctionDefinitionExpressionsNode, isStreamIndirectionNode } from './Tree';
 import { EssentialDefinition } from './EssentialDefinition';
 import { compileGlobalUserDefinition, CompilationError } from './Compiler';
@@ -197,27 +197,6 @@ function endEdit({node, subpath, editingSelected}: HandlerArgs, confirm: boolean
   }
 
   return [newNode, newSubpath, newEditingSelected];
-}
-
-function firstUndefinedNode(node: Node, after: Path | undefined = undefined): [Node, Path] | undefined {
-  let passed = false; // have we passed the "after" path?
-  let result: [Node, Path] | undefined;
-
-  traverseTree(node, {}, (node, path) => {
-    if (after && pathIsPrefix(after, path)) {
-      passed = true;
-    }
-
-    if (node.type === 'UndefinedExpression') {
-      if (passed || !after) {
-        result = [node, path];
-        return [true, node];
-      }
-    }
-    return [false, node];
-  });
-
-  return result;
 }
 
 const HANDLERS: Handler[] = [
@@ -785,6 +764,27 @@ function pasteExpressionNode(pasteNode: ExpressionNode, pasteStreamId: StreamID,
 }
 */
 
+function firstUndefinedNode(node: Node, after: Path | undefined = undefined): [Node, Path] | undefined {
+  let passed = false; // have we passed the "after" path?
+  let result: [Node, Path] | undefined;
+
+  traverseTree(node, {}, (node, path) => {
+    if (after && pathIsPrefix(after, path)) {
+      passed = true;
+    }
+
+    if (node.type === 'UndefinedLiteral') {
+      if (passed || !after) {
+        result = [node, path];
+        return [true, node];
+      }
+    }
+    return [false, node];
+  });
+
+  return result;
+}
+
 function tryMoveSelectionOut(program: ProgramNode, selectionPath: Path): Path {
   let p = selectionPath;
   while (p.length > 0) {
@@ -899,18 +899,16 @@ function endEdit(st: CoreState, confirm: boolean): CoreState {
   let newSelectionPath: Path = st.selectionPath;
   let newEditingSelected = null;
 
-  /*
   if (confirm) {
     const hit = firstUndefinedNode(newNode);
     if (hit) {
       const [hitNode, hitPath] = hit;
       if (hitNode !== newNode) { // need to check this otherwise we can't confirm edit of undefined node
-        newSubpath = hitPath;
-        newEditingSelected = {originalNode: hitNode, tentativeNode: hitNode};
+        newSelectionPath = st.selectionPath.concat(hitPath);
+        newEditingSelected = {originalNode: hitNode, tentativeNode: hitNode, overwrite: true};
       }
     }
   }
-  */
 
   return {
     ...st,
@@ -1043,6 +1041,22 @@ const HANDLERS: Handler[] = [
     } else {
       throw new Error();
     }
+  }],
+
+  [['EDIT_NEXT_UNDEFINED'], ({st}) => {
+    let newSt = applyActionToCoreState({type: 'CONFIRM_EDIT'}, st);
+
+    const hit = firstUndefinedNode(newSt.program, newSt.selectionPath);
+    if (hit) {
+      const [hitNode, hitPath] = hit;
+      newSt = {
+        ...newSt,
+        selectionPath: hitPath,
+        editingSelected: {originalNode: hitNode, tentativeNode: hitNode, overwrite: false},
+      }
+    }
+
+    return newSt;
   }],
 
   [['DELETE_SUBTREE'], ({st}) => {
@@ -1245,11 +1259,6 @@ export function reducer(state: State, action: Action): State {
   let newUndoStack = state.undoStack;
   let newClipboardStack = state.clipboardStack;
 
-  // Do an implicit confirm before certain actions
-  if (['EDIT_NEXT_UNDEFINED', 'EDIT_AFTER', 'BEGIN_IDENTIFIER_EDIT'].includes(action.type)) {
-    // [newProgram, newSelectionPath, newEditingSelected] = applyActionToProgram(newProgram, newSelectionPath, newEditingSelected, {type: 'CONFIRM_EDIT'});
-  }
-
   if (action.type === 'UNDO') {
     if (state.undoStack.length > 0) {
       const topFrame = newUndoStack[newUndoStack.length-1];
@@ -1276,17 +1285,6 @@ export function reducer(state: State, action: Action): State {
       newClipboardStack = newClipboardStack.slice(0, newClipboardStack.length-1);
       const topNode = state.derivedLookups.streamIdToNode!.get(topFrame.streamId)!;
       [newProgram, newSelectionPath] = pasteExpressionNode(topNode, topFrame.streamId, newProgram, newSelectionPath);
-    }
-    */
-  } else if (action.type === 'EDIT_NEXT_UNDEFINED') {
-    /*
-    const hit = firstUndefinedNode(newProgram, newSelectionPath);
-    if (hit) {
-      const [hitNode, hitPath] = hit;
-      newSelectionPath = hitPath;
-      newEditingSelected = {originalNode: hitNode, tentativeNode: hitNode};
-    } else {
-      newEditingSelected = null;
     }
     */
   } else {
