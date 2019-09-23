@@ -15,6 +15,11 @@ interface StreamRefChoice {
   readonly node: StreamCreationNode;
 }
 
+interface StreamIndChoice {
+  readonly type: 'streamind';
+  readonly name: string;
+}
+
 interface NumberChoice {
   readonly type: 'number';
   readonly value: number;
@@ -25,7 +30,7 @@ interface FunctionChoice {
   readonly node: FunctionDefinitionNode;
 }
 
-type Choice = UndefinedChoice | StreamRefChoice | NumberChoice | FunctionChoice;
+type Choice = UndefinedChoice | StreamRefChoice | StreamIndChoice | NumberChoice | FunctionChoice;
 
 interface SearchResult<T> {
   score: number;
@@ -89,6 +94,13 @@ function generateChoices(text: string, mainState: State) {
     });
   }
 
+  if (text.trim() !== '') {
+    choices.push({
+      type: 'streamind',
+      name: text.trim(),
+    });
+  }
+
   if (FLOAT_REGEX.test(text)) {
     choices.push({
       type: 'number',
@@ -118,6 +130,9 @@ function Choice({ choice }: ChoiceProps) {
 
     case 'streamref':
       return <span><em>S</em> {isNamedNode(choice.node) ? choice.node.name : <em>unnamed</em>} <small>(id {choice.node.id})</small></span>
+
+    case 'streamind':
+      return <span><em>I</em> {choice.name}</span>
 
     case 'function':
       return <span><em>F</em> {choice.node.name}({choice.node.signature.parameters.map(param => (param.name.startsWith('_') ? '\u25A1' : param.name)).join(', ')})</span>
@@ -157,6 +172,9 @@ const ExpressionChooser: React.FC<{mainState: State, dispatch: (action: any) => 
       case 'StreamReference':
       case 'Application':
         return ''; // Don't prefill with text, but in case we change our mind, old code is below
+
+      case 'StreamIndirection':
+        return initFromNode.name || '';
 /*
       case 'StreamReference': {
         const targetExpressionNode = mainState.derivedLookups.streamIdToNode.get(initFromNode.targetStreamId);
@@ -215,6 +233,21 @@ const ExpressionChooser: React.FC<{mainState: State, dispatch: (action: any) => 
         };
         break;
 
+      case 'streamind':
+        newNode = {
+          type: 'StreamIndirection',
+          id: generateStreamId(),
+          children: [
+            {
+              type: 'UndefinedLiteral',
+              id: generateStreamId(),
+              children: [],
+            }
+          ],
+          name: choice.name,
+        };
+        break;
+
       case 'function':
         newNode = {
           type: 'Application',
@@ -225,7 +258,6 @@ const ExpressionChooser: React.FC<{mainState: State, dispatch: (action: any) => 
               return {
                 type: 'UndefinedLiteral',
                 id: generateStreamId(),
-                name: null,
                 children: [],
               };
             } else {

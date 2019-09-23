@@ -812,6 +812,7 @@ function beginEdit(st: CoreState, overwrite: boolean): CoreState | void {
     case 'UndefinedLiteral':
     case 'StreamReference':
     case 'Application':
+    case 'StreamIndirection':
       return {
         ...st,
         editingSelected: {originalNode: node, tentativeNode: node},
