@@ -187,7 +187,7 @@ function UserFunctionView({ userFunction }) {
   const { UserFunction } = useContext(ThemeContext);
 
   return (
-    <UserFunction parameterNames={userFunction.children[0].children.map(param => param.identifier.name)} expressions={<DefinitionExpressionsView expressions={userFunction.children[1].children} />} marks={marks} onSelect={handleSelect} />
+    <UserFunction parameterNames={userFunction.children[0].children.map(param => param.name)} expressions={<DefinitionExpressionsView expressions={userFunction.children[1].children} />} marks={marks} onSelect={handleSelect} />
   );
 }
 
@@ -230,6 +230,9 @@ function NotEditingExpressionView({ expression }) {
 
     case 'Application':
       return <ApplicationView application={expression} />
+
+    case 'UserFunctionDefinition':
+      return <UserFunctionView userFunction={expression} />
 
     default:
       throw new Error();

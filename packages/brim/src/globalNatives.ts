@@ -33,35 +33,78 @@ function simpleSig(pnames: Array<string>, yields: boolean): FunctionSignature {
 }
 
 const nativeFunctions: Array<[string, string, FunctionSignature, Function]> = [
+  // simple
   ['ifte', 'if', simpleSig(['cond', 'then', 'else'], true), (cond: any, _then: any, _else: any) => (cond ? _then : _else)],
 
+  // events
   ['changeCount', 'change count', simpleSig(['_stream'], true), changeCount],
   ['latestValue', 'latest event value', simpleSig(['event stream', 'initial value'], true), latestValue],
 
+  // math
   ['add', 'add', simpleSig(['_a', '_b'], true), (a: number, b: number) => a + b],
   ['sub', 'subtract', simpleSig(['_a', '_b'], true), (a: number, b: number) => a - b],
   ['mult', 'multiply', simpleSig(['_a', '_b'], true), (a: number, b: number) => a * b],
   ['div', 'divide', simpleSig(['_a', '_b'], true), (a: number, b: number) => a / b],
   ['cos', 'cosine', simpleSig(['_v'], true), Math.cos],
 
+  // dom/browser
   ['showString', 'show value', simpleSig(['_v'], true), showString],
   ['animationTime', 'animation time', simpleSig([], true), animationTime],
   ['mouseDown', 'is mouse down', simpleSig([], true), mouseDown],
   ['mousePosition', 'mouse position', simpleSig([], true), mousePosition],
   ['mouseClickEvts', 'mouse click', simpleSig([], true), mouseClickEvts],
   ['redCircle', 'draw red circle', simpleSig(['position', 'radius'], false), redCircle],
+  ['random', 'random', simpleSig(['repick'], true), random],
 
-/*
-  ['streamMap', 'map', ['_array'], [['_func', {parameters: ['value'], functionParameters: []}]], (arr: Array<any>, f: (v: any) => any) => streamMap(f, arr)],
-  ['audioDriver', 'play computed audio', [], [['_func', {parameters: ['audio time', 'next frame', 'sample rate'], functionParameters: []}]], audioDriver],
-  ['random', 'random', ['repick'], [], random],
-*/
-
+  // vec2
   ['vec2zero', 'zero 2d vector', simpleSig([], true), () => ({x: 0, y: 0})],
   ['vec2add', 'add 2d vectors', simpleSig(['_a', '_b'], true), (a: Vec2d, b: Vec2d) => ({x: a.x+b.x, y: a.y+b.y})],
   ['vec2sub', 'subtract 2d vectors', simpleSig(['_a', '_b'], true), (a: Vec2d, b: Vec2d) => ({x: a.x-b.x, y: a.y-b.y})],
   ['vec2len', 'length of 2d vector', simpleSig(['_v'], true), vec2dlen],
   ['vec2sqgrid', 'square grid of 2d vectors', simpleSig(['count', 'size'], true), vec2sqgrid],
+
+  // higher-order
+  ['streamMap', 'map', {parameters: [
+    {
+      name: 'array',
+      type: 'stream',
+    },
+    {
+      name: 'func',
+      type: {
+        parameters: [
+          {
+            name: 'value',
+            type: 'stream',
+          }
+        ],
+        yields: true,
+      },
+    },
+  ], yields: true}, (arr: Array<any>, f: (v: any) => any) => streamMap(f, arr)],
+
+  ['audioDriver', 'play computed audio', {parameters: [
+    {
+      name: '_func',
+      type: {
+        parameters: [
+          {
+            name: 'audio time',
+            type: 'stream',
+          },
+          {
+            name: 'next frame',
+            type: 'stream',
+          },
+          {
+            name: 'sample rate',
+            type: 'stream',
+          },
+        ],
+        yields: true,
+      },
+    },
+  ], yields: false}, audioDriver],
 ];
 
 export default nativeFunctions;

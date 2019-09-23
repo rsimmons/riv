@@ -50,7 +50,7 @@ function nodeSplitPath(node: Node, root: Node, path: Path): [Path, Path] {
 }
 
 function addUserFunctionLocalEnvironment(func: UserFunctionDefinitionNode, namedStreams: Array<[string, StreamDefinitionNode]>, namedFunctions: Array<[string, FunctionDefinitionNode]>) {
-  traverseTree(func, {onlyLocal: true}, (node, path) => {
+  traverseTree(func, {onlyWithinFunctionId: func.id}, (node, path) => {
     if (isStreamDefinitionNode(node) && node.name) {
       namedStreams.push([node.name, node]);
     }

@@ -1,15 +1,49 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './ExpressionChooser.css';
+import { Node, StreamDefinitionNode, FunctionDefinitionNode, UserFunctionDefinitionNode, isStreamDefinitionNode } from './Tree';
 import { fuzzy_match } from './vendor/fts_fuzzy_match';
-import genuid from './uid';
 import { environmentForSelectedNode } from './EditReducer';
-import { generateStreamId } from './Identifier';
+import { generateStreamId, generateFunctionId } from './Identifier';
+import { State } from './State';
 
-function fuzzySearch(query, items) {
-  const results = [];
+interface UndefinedChoice {
+  readonly type: 'undefined';
+}
+
+interface StreamRefChoice {
+  readonly type: 'streamref';
+  readonly node: StreamDefinitionNode;
+}
+
+interface NumberChoice {
+  readonly type: 'number';
+  readonly value: number;
+}
+
+interface FunctionChoice {
+  readonly type: 'function';
+  readonly node: FunctionDefinitionNode;
+}
+
+type Choice = UndefinedChoice | StreamRefChoice | NumberChoice | FunctionChoice;
+
+interface SearchResult<T> {
+  score: number;
+  formattedStr: string;
+  name: string;
+  data: T;
+}
+function fuzzySearch<T>(query: string, items: ReadonlyArray<[string, T]>): Array<SearchResult<T>> {
+  const results: Array<SearchResult<T>> = [];
 
   for (const [name, data] of items) {
     const [hit, score, formattedStr] = fuzzy_match(query, name);
+    if (typeof score !== 'number') {
+      throw new Error();
+    }
+    if (typeof formattedStr !== 'string') {
+      throw new Error();
+    }
     if (hit) {
       results.push({
         score,
@@ -27,8 +61,8 @@ function fuzzySearch(query, items) {
 
 const FLOAT_REGEX = /^[-+]?(?:\d*\.?\d+|\d+\.?\d*)(?:[eE][-+]?\d+)?$/;
 
-function generateChoices(text, mainState) {
-  const choices = [];
+function generateChoices(text: string, mainState: State) {
+  const choices: Array<Choice> = [];
 
   // If there is no text, put this first as a sort of default
   if (text === '') {
@@ -71,7 +105,10 @@ function generateChoices(text, mainState) {
   return choices;
 }
 
-function Choice({ choice }) {
+interface ChoiceProps {
+  choice: Choice;
+}
+function Choice({ choice }: ChoiceProps) {
   switch (choice.type) {
     case 'undefined':
       return <em>undefined</em>
@@ -83,15 +120,20 @@ function Choice({ choice }) {
       return <span><em>S</em> {choice.node.name} <small>(id {choice.node.id})</small></span>
 
     case 'function':
-      return <span><em>F</em> {choice.node.name}({[].concat(choice.node.signature.parameters.map(param => (param.name.startsWith('_') ? '\u25A1' : param.name))).join(', ')})</span>
+      return <span><em>F</em> {choice.node.name}({choice.node.signature.parameters.map(param => (param.name.startsWith('_') ? '\u25A1' : param.name)).join(', ')})</span>
 
     default:
       throw new Error();
   }
 }
 
-export default function ExpressionChooser({ node, mainState, dispatch }) {
-  const selectedListElem = useRef();
+interface DropdownState {
+  choices: ReadonlyArray<Choice>;
+  index: number;
+}
+
+const ExpressionChooser: React.FC<{mainState: State, dispatch: (action: any) => void}> = ({ mainState, dispatch }) => {
+  const selectedListElem = useRef<HTMLLIElement>(null);
   useEffect(() => {
     if (selectedListElem.current) {
       selectedListElem.current.scrollIntoView({block: 'nearest', inline: 'nearest'});
@@ -99,6 +141,9 @@ export default function ExpressionChooser({ node, mainState, dispatch }) {
   });
 
   const [text, setText] = useState(() => {
+    if (!mainState.editingSelected) {
+      throw new Error();
+    }
     const initFromNode = mainState.editingSelected.tentativeNode;
 
     // Initialize text based on node
@@ -130,17 +175,25 @@ export default function ExpressionChooser({ node, mainState, dispatch }) {
   });
 
   // Update the expression node to reflect the current choice
-  const realizeChoice = (state) => {
+  const realizeChoice = (state: DropdownState): void => {
     const choice = state.choices[state.index];
 
-    const tentativeNode = mainState.editingSelected.tentativeNode;
-    let newNode;
+    if (!mainState.editingSelected) {
+      throw new Error();
+    }
+
+    const originalNode = mainState.editingSelected.originalNode;
+    if (!isStreamDefinitionNode(originalNode)) {
+      throw new Error(); // TODO: this is not quite right, could be stream ref
+    }
+
+    let newNode: Node;
     switch (choice.type) {
       case 'undefined':
         newNode = {
           type: 'UndefinedLiteral',
-          id: tentativeNode.id,
-          name: tentativeNode.name,
+          id: originalNode.id,
+          name: originalNode.name,
           children: [],
         }
         break;
@@ -148,8 +201,8 @@ export default function ExpressionChooser({ node, mainState, dispatch }) {
       case 'number':
         newNode = {
           type: 'NumberLiteral',
-          id: tentativeNode.id,
-          name: tentativeNode.name,
+          id: originalNode.id,
+          name: originalNode.name,
           children: [],
           value: choice.value,
         };
@@ -158,7 +211,7 @@ export default function ExpressionChooser({ node, mainState, dispatch }) {
       case 'streamref':
         newNode = {
           type: 'StreamReference',
-          name: tentativeNode.name,
+          // name: originalNode.name,
           children: [],
           targetStreamId: choice.node.id,
         };
@@ -167,8 +220,8 @@ export default function ExpressionChooser({ node, mainState, dispatch }) {
       case 'function':
         newNode = {
           type: 'Application',
-          id: tentativeNode.id,
-          name: tentativeNode.name,
+          id: originalNode.id,
+          name: originalNode.name,
           functionId: choice.node.id,
           children: choice.node.signature.parameters.map(param => {
             if (param.type === 'stream') {
@@ -179,31 +232,42 @@ export default function ExpressionChooser({ node, mainState, dispatch }) {
                 children: [],
               };
             } else {
-              throw new Error('not yet implemented');
-              /*
-              return {
-                type: 'UserFunction',
-                functionId: genuid(),
-                identifier: null,
-                signature, // TODO: do we need to defensively copy this?
-                parameters: signature.parameters.map(pn => ({
-                  type: 'Parameter',
-                  streamId: genuid(),
-                  identifier: {
-                    type: 'Identifier',
-                    name: pn,
-                  },
-                })),
-                functionParameterFunctionIds: signature.functionParameters.map(([pn, sig]) => genuid()),
-                expressions: [
+              const psig = param.type;
+              const fdef: UserFunctionDefinitionNode = {
+                type: 'UserFunctionDefinition',
+                id: generateFunctionId(),
+                name: null,
+                signature: psig,
+                children: [
                   {
-                    type: 'UndefinedExpression',
-                    streamId: genuid(),
-                    identifier: null,
+                    type: 'UserFunctionDefinitionParameters',
+                    children: psig.parameters.map(param => {
+                      if (param.type === 'stream') {
+                        return {
+                          type: 'StreamParameter',
+                          id: generateStreamId(),
+                          name: param.name,
+                          children: [],
+                        };
+                      } else {
+                        throw new Error('unimplemented');
+                      }
+                    }),
                   },
+                  {
+                    type: 'UserFunctionDefinitionExpressions',
+                    children: [
+                      {
+                        type: 'UndefinedLiteral',
+                        id: generateStreamId(),
+                        name: null,
+                        children: [],
+                      },
+                    ]
+                  }
                 ],
               };
-              */
+              return fdef;
             }
           }),
         };
@@ -216,8 +280,8 @@ export default function ExpressionChooser({ node, mainState, dispatch }) {
     dispatch({type: 'UPDATE_EDITING_TENTATIVE_NODE', newNode});
   };
 
-  const recomputeDropdownChoices = (text) => {
-    const newState = {
+  const recomputeDropdownChoices = (text: string): DropdownState => {
+    const newState: DropdownState = {
       choices: generateChoices(text, mainState),
       index: 0, // reset index to 0
     };
@@ -225,7 +289,7 @@ export default function ExpressionChooser({ node, mainState, dispatch }) {
     return newState;
   };
 
-  const adjustDropdownIndex = (amount) => {
+  const adjustDropdownIndex = (amount: number): void => {
     setDropdownState(oldState => {
       const newState = {
         ...oldState,
@@ -236,9 +300,9 @@ export default function ExpressionChooser({ node, mainState, dispatch }) {
     });
   };
 
-  const [dropdownState, setDropdownState] = useState(() => recomputeDropdownChoices(text));
+  const [dropdownState, setDropdownState] = useState<DropdownState>(() => recomputeDropdownChoices(text));
 
-  const onChange = e => {
+  const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newText = e.target.value;
 
     if (newText === '[') {
@@ -251,7 +315,7 @@ export default function ExpressionChooser({ node, mainState, dispatch }) {
     }
   };
 
-  const onKeyDown = e => {
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     switch (e.key) {
       case 'ArrowUp':
         e.preventDefault(); // we don't want the default behavior of moving the cursor
@@ -280,3 +344,4 @@ export default function ExpressionChooser({ node, mainState, dispatch }) {
     </div>
   );
 }
+export default ExpressionChooser;

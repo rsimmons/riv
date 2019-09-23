@@ -29,13 +29,17 @@ function traverseFromStreamDefinition(node: StreamDefinitionNode, context: Trave
   }
 
   switch (node.type) {
-    case 'UndefinedLiteral':
+    case 'StreamParameter':
+      // Nothing to do
+      break;
+
+      case 'UndefinedLiteral':
       essentialDefinition.constantStreamValues.push({streamId: node.id, value: undefined});
       break;
 
     case 'NumberLiteral':
-        essentialDefinition.constantStreamValues.push({streamId: node.id, value: node.value});
-        break;
+      essentialDefinition.constantStreamValues.push({streamId: node.id, value: node.value});
+      break;
 
     case 'ArrayLiteral':
       const itemStreamIds: Array<StreamID> = [];
@@ -150,7 +154,7 @@ function compileUserDefinition(definition: UserFunctionDefinitionNode, outerStre
   const localFunctionIds: Set<FunctionID> = new Set();
 
   // Traverse (just local scope) to find defined streams/functions
-  traverseTree(definition, {onlyLocal: true}, (node, ) => {
+  traverseTree(definition, {onlyWithinFunctionId: definition.id}, (node, ) => {
     if (isStreamDefinitionNode(node)) {
       if (streamEnvironment.get(node.id) !== undefined) {
         throw new Error('must be unique');
@@ -159,7 +163,7 @@ function compileUserDefinition(definition: UserFunctionDefinitionNode, outerStre
       localStreamIds.add(node.id);
     }
 
-    if (isUserFunctionDefinitionNode(node)) {
+    if (isUserFunctionDefinitionNode(node) && (node.id !== definition.id)) {
       if (functionEnvironment.get(node.id) !== undefined) {
         throw new Error('must be unique');
       }

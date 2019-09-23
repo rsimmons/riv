@@ -1,10 +1,11 @@
 import { Path, pathIsPrefix } from './State';
-import { Node } from './Tree';
+import { Node, isUserFunctionDefinitionNode } from './Tree';
+import { FunctionID } from './Identifier';
 
 type TraversalVisitor = (node: Node, path: Path) => [boolean, Node];
 
 interface TraversalOptions {
-  onlyLocal?: true; // do not traverse into contained function definitions
+  onlyWithinFunctionId?: FunctionID; // so as to not traverse into contained function definitions
   alongPath?: Path;
 }
 
@@ -14,35 +15,38 @@ function recursiveTraverseTree(node: Node, path: Path, options: TraversalOptions
     return [false, node];
   }
 
-  // Recurse
-  let exited = false;
   let newNode: Node = node;
 
-  let newChildren: Array<Node> = [];
-  let anyNewChildren = false;
+  // Recurse
+  if (!(options.onlyWithinFunctionId && (isUserFunctionDefinitionNode(node) && (node.id !== options.onlyWithinFunctionId)))) {
+    let exited = false;
 
-  newNode.children.forEach((child: Node, idx: number) => {
-    if (exited) {
-      newChildren.push(child);
-    } else {
-      const [exit, newChild] = recursiveTraverseTree(child, path.concat([idx]), options, visit);
-      if (exit) exited = true;
-      newChildren.push(newChild);
-      if (newChild !== child) {
-        anyNewChildren = true;
+    let newChildren: Array<Node> = [];
+    let anyNewChildren = false;
+
+    newNode.children.forEach((child: Node, idx: number) => {
+      if (exited) {
+        newChildren.push(child);
+      } else {
+        const [exit, newChild] = recursiveTraverseTree(child, path.concat([idx]), options, visit);
+        if (exit) exited = true;
+        newChildren.push(newChild);
+        if (newChild !== child) {
+          anyNewChildren = true;
+        }
       }
+    });
+
+    if (anyNewChildren) {
+      newNode = {
+        ...newNode,
+        children: newChildren,
+      } as Node;
     }
-  });
 
-  if (anyNewChildren) {
-    newNode = {
-      ...newNode,
-      children: newChildren,
-    } as Node;
-  }
-
-  if (exited) {
-    return [exited, newNode];
+    if (exited) {
+      return [exited, newNode];
+    }
   }
 
   return visit(newNode, path);
