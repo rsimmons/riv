@@ -18,7 +18,7 @@ const keyMap = {
 
   EDIT_AFTER: ['shift+enter', ','],
 
-  DELETE: 'backspace',
+  DELETE_SUBTREE: 'backspace',
 
   EDIT_NEXT_UNDEFINED: 'tab',
 

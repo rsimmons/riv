@@ -1,7 +1,7 @@
 import genuid from './uid';
 import { StreamID, FunctionID, generateStreamId, generateFunctionId } from './Identifier';
 import { State, Path, NodeEditState } from './State';
-import { Node, ProgramNode, UserFunctionDefinitionNode, StreamCreationNode, FunctionDefinitionNode, isStreamCreationNode, isFunctionDefinitionNode, isProgramNode, isUserFunctionDefinitionNode, isStreamExpressionNode, isIDedNode, isNamedNode } from './Tree';
+import { Node, ProgramNode, UserFunctionDefinitionNode, StreamCreationNode, FunctionDefinitionNode, isStreamCreationNode, isFunctionDefinitionNode, isProgramNode, isUserFunctionDefinitionNode, isStreamExpressionNode, isIDedNode, isNamedNode, isApplicationNode, isArrayLiteralNode, isUserFunctionDefinitionExpressionsNode, isStreamIndirectionNode } from './Tree';
 import { EssentialDefinition } from './EssentialDefinition';
 import { compileGlobalUserDefinition, CompilationError } from './Compiler';
 import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
@@ -785,6 +785,68 @@ function pasteExpressionNode(pasteNode: ExpressionNode, pasteStreamId: StreamID,
 }
 */
 
+function tryMoveSelectionOut(program: ProgramNode, selectionPath: Path): Path {
+  let p = selectionPath;
+  while (p.length > 0) {
+    p = p.slice(0, -1);
+    const node = nodeFromPath(program, p);
+    if (isIDedNode(node)) {
+      return p;
+    }
+  }
+
+  return selectionPath;
+}
+
+/**
+ * "Maybe" because if the node is not OK to delete, we just return program unchanged.
+ */
+function maybeDeleteSubtreeAtPath(program: ProgramNode, atPath: Path): [ProgramNode, Path] {
+  let newProgram = program;
+  let newPath = atPath;
+
+  if (atPath.length > 0) {
+    const node = nodeFromPath(program, atPath);
+    const parentNode = nodeFromPath(program, atPath.slice(0, -1));
+
+    if (isStreamExpressionNode(node)) {
+      if (isApplicationNode(parentNode) || isStreamIndirectionNode(parentNode)) {
+        newProgram = replaceNodeAtPath(program, atPath, {
+          type: 'UndefinedLiteral',
+          id: node.id,
+          children: [],
+        });
+      } else {
+        if (!(isArrayLiteralNode(parentNode) || isUserFunctionDefinitionExpressionsNode(parentNode))) {
+          throw new Error();
+        }
+        const removeIdx = atPath[atPath.length-1];
+        const parentPath = atPath.slice(0, -1);
+        const newChildren = [
+          ...parentNode.children.slice(0, removeIdx),
+          ...parentNode.children.slice(removeIdx+1),
+        ];
+        const newParentNode = {
+          ...parentNode,
+          children: newChildren,
+        } as Node;
+        newProgram = replaceNodeAtPath(program, parentPath, newParentNode);
+        if (newChildren.length === 0) {
+          newPath = tryMoveSelectionOut(newProgram, atPath);
+        } else if (removeIdx >= newChildren.length) {
+          newPath = parentPath.concat([removeIdx-1]);
+        }
+      }
+    }
+  }
+
+  if (!isProgramNode(newProgram)) {
+    throw new Error();
+  }
+
+  return [newProgram, newPath];
+}
+
 function replaceNodeAtPath(program: ProgramNode, atPath: Path, newNode: Node): ProgramNode {
   const newProgram = traverseTree(program, {alongPath: atPath}, (node, path) => {
     if (equiv(path, atPath)) {
@@ -890,17 +952,9 @@ const HANDLERS: Handler[] = [
   }],
 
   [['MOVE_LEFT'], ({st}) => {
-    let newSelectionPath = st.selectionPath;
-
-    while (newSelectionPath.length > 0) {
-      newSelectionPath = newSelectionPath.slice(0, -1);
-      const node = nodeFromPath(st.program, newSelectionPath);
-      if (isIDedNode(node)) {
-        return {
-          ...st,
-          selectionPath: newSelectionPath,
-        };
-      }
+    return {
+      ...st,
+      selectionPath: tryMoveSelectionOut(st.program, st.selectionPath),
     }
   }],
 
@@ -989,6 +1043,15 @@ const HANDLERS: Handler[] = [
     } else {
       throw new Error();
     }
+  }],
+
+  [['DELETE_SUBTREE'], ({st}) => {
+    const [newProgram, newPath] = maybeDeleteSubtreeAtPath(st.program, st.selectionPath);
+    return {
+      ...st,
+      program: newProgram,
+      selectionPath: newPath,
+    };
   }],
 ];
 
