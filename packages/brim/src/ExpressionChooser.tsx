@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './ExpressionChooser.css';
-import { Node, FunctionDefinitionNode, UserFunctionDefinitionNode, isStreamCreationNode, StreamCreationNode, isNamedNode } from './Tree';
+import { Node, FunctionDefinitionNode, UserFunctionDefinitionNode, isStreamCreationNode, StreamCreationNode, isNamedNode, isStreamIndirectionNode } from './Tree';
 import { fuzzy_match } from './vendor/fts_fuzzy_match';
 import { environmentForSelectedNode } from './EditReducer';
 import { generateStreamId, generateFunctionId } from './Identifier';
@@ -202,7 +202,7 @@ const ExpressionChooser: React.FC<{mainState: State, dispatch: (action: any) => 
 
     const originalNode = mainState.editingSelected.originalNode;
     if (!isStreamCreationNode(originalNode)) {
-      throw new Error(); // TODO: this is not quite right, could be stream ref
+      throw new Error();
     }
 
     let newNode: Node;
@@ -210,7 +210,7 @@ const ExpressionChooser: React.FC<{mainState: State, dispatch: (action: any) => 
       case 'undefined':
         newNode = {
           type: 'UndefinedLiteral',
-          id: generateStreamId(),
+          id: originalNode.id,
           children: [],
         }
         break;
@@ -218,7 +218,7 @@ const ExpressionChooser: React.FC<{mainState: State, dispatch: (action: any) => 
       case 'number':
         newNode = {
           type: 'NumberLiteral',
-          id: generateStreamId(),
+          id: originalNode.id,
           children: [],
           value: choice.value,
         };
@@ -227,7 +227,7 @@ const ExpressionChooser: React.FC<{mainState: State, dispatch: (action: any) => 
       case 'streamref':
         newNode = {
           type: 'StreamReference',
-          id: generateStreamId(),
+          id: originalNode.id,
           children: [],
           targetStreamId: choice.node.id,
         };
@@ -236,8 +236,8 @@ const ExpressionChooser: React.FC<{mainState: State, dispatch: (action: any) => 
       case 'streamind':
         newNode = {
           type: 'StreamIndirection',
-          id: generateStreamId(),
-          children: [
+          id: originalNode.id,
+          children: (originalNode && isStreamIndirectionNode(originalNode)) ? originalNode.children : [
             {
               type: 'UndefinedLiteral',
               id: generateStreamId(),
@@ -251,7 +251,7 @@ const ExpressionChooser: React.FC<{mainState: State, dispatch: (action: any) => 
       case 'function':
         newNode = {
           type: 'Application',
-          id: generateStreamId(),
+          id: originalNode.id,
           functionId: choice.node.id,
           children: choice.node.signature.parameters.map(param => {
             if (param.type === 'stream') {
