@@ -1,7 +1,7 @@
 import genuid from './uid';
 import { StreamID, FunctionID, generateStreamId, generateFunctionId } from './Identifier';
 import { State, Path, NodeEditState, pathIsPrefix } from './State';
-import { Node, ProgramNode, UserFunctionDefinitionNode, StreamCreationNode, FunctionDefinitionNode, isStreamCreationNode, isFunctionDefinitionNode, isProgramNode, isUserFunctionDefinitionNode, isStreamExpressionNode, isIDedNode, isNamedNode, isApplicationNode, isArrayLiteralNode, isUserFunctionDefinitionExpressionsNode, isStreamIndirectionNode } from './Tree';
+import { Node, ProgramNode, UserFunctionDefinitionNode, StreamCreationNode, FunctionDefinitionNode, isStreamCreationNode, isFunctionDefinitionNode, isProgramNode, isUserFunctionDefinitionNode, isStreamExpressionNode, isIDedNode, isNamedNode, isApplicationNode, isArrayLiteralNode, isUserFunctionDefinitionExpressionsNode, isStreamIndirectionNode, ArrayLiteralNode } from './Tree';
 import { EssentialDefinition } from './EssentialDefinition';
 import { compileGlobalUserDefinition, CompilationError } from './Compiler';
 import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
@@ -1066,6 +1066,29 @@ const HANDLERS: Handler[] = [
       program: newProgram,
       selectionPath: newPath,
     };
+  }],
+
+  [['CREATE_ARRAY'], ({st}) => {
+    const node = nodeFromPath(st.program, st.selectionPath);
+    if (isStreamExpressionNode(node)) {
+      const newNode: ArrayLiteralNode = {
+        type: 'ArrayLiteral',
+        id: generateStreamId(),
+        children: [
+          {
+            type: 'UndefinedLiteral',
+            id: generateStreamId(),
+            children: [],
+          },
+        ],
+      };
+
+      return {
+        ...st,
+        program: replaceNodeAtPath(st.program, st.selectionPath, newNode),
+        selectionPath: st.selectionPath.concat([0]),
+      };
+    }
   }],
 ];
 

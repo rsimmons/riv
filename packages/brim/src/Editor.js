@@ -123,7 +123,7 @@ function NumberLiteralView({ numberLiteral }) {
 function ArrayLiteralView({ arrayLiteral }) {
   const { ArrayLiteral } = useContext(ThemeContext);
 
-return <ArrayLiteral keyedItems={arrayLiteral.items.map(item => [item.streamId, <ExpressionView expression={item} />])} />
+return <ArrayLiteral keyedItems={arrayLiteral.children.map(item => [item.id, <ExpressionView expression={item} />])} />
 }
 
 function UndefinedLiteralView({ undefinedLiteral }) {
