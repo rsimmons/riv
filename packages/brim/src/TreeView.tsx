@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState } from 'react';
-import { Node, StreamCreationNode, FunctionDefinitionNode, isNamedNode } from './Tree';
+import { Node, StreamCreationNode, FunctionDefinitionNode, isNamedNode, UserFunctionDefinitionNode } from './Tree';
 import ExpressionChooser from './ExpressionChooser';
 import './TreeView.css';
 import { StreamID, FunctionID } from './Identifier';
@@ -16,27 +16,36 @@ export interface TreeViewContextData {
 const TreeViewContext = createContext<TreeViewContextData | null>(null);
 export const TreeViewContextProvider = TreeViewContext.Provider;
 
-interface AppishNodeProps {
-  mainText: React.ReactNode;
-  boxColor: string;
-  selected: boolean;
-  childCxns?: boolean;
-  onSelect: () => void;
-  children?: ReadonlyArray<{
-    key: string | number | undefined,
-    name: string | null,
-    child: React.ReactNode}
-  >;
+interface UseSelectableResult {
+  classes: ReadonlyArray<string>;
+  handlers: {
+    onClick?: (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => void,
+    onMouseOver?: (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => void,
+    onMouseOut?: (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => void,
+  };
 }
 
-const AppishNode: React.FC<AppishNodeProps> = ({mainText, boxColor, selected, childCxns = true, onSelect, children = []}) => {
-  const boxClasses: Array<string> = [];
+function useSelectable(node: Node | null): UseSelectableResult {
   const [hovered, setHovered] = useState(false);
 
+  const ctxData = useContext(TreeViewContext);
+  if (!ctxData) {
+    throw new Error();
+  }
+
+  if (!node) {
+    return {
+      classes: [],
+      handlers: {},
+    };
+  }
+
+  const selected = (ctxData.selectedNode === node);
+
   const handleClick = (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
-    if (onSelect && ((e.target as Element).tagName !== 'INPUT')) {
+    if ((e.target as Element).tagName !== 'INPUT') {
       e.stopPropagation();
-      onSelect();
+      ctxData.onSelectNode(node);
     }
   };
 
@@ -49,14 +58,40 @@ const AppishNode: React.FC<AppishNodeProps> = ({mainText, boxColor, selected, ch
     setHovered(false);
   };
 
+  const classes: Array<string> = [];
+
   if (selected) {
-    boxClasses.push('TreeView-selected');
+    classes.push('TreeView-selected');
   }
   if (hovered) {
-    boxClasses.push('TreeView-hovered');
+    classes.push('TreeView-hovered');
   }
-
   // TODO: handle clipboard-top, clipboard-rest?
+
+  return {
+    classes,
+    handlers: {
+      onClick: handleClick,
+      onMouseOver: handleMouseOver,
+      onMouseOut: handleMouseOut,
+    }
+  };
+}
+
+interface AppishNodeProps {
+  selectableNode: Node | null;
+  mainText: React.ReactNode;
+  boxColor: string;
+  childCxns?: boolean;
+  children?: ReadonlyArray<{
+    key: string | number | undefined,
+    name: string | null,
+    child: React.ReactNode}
+  >;
+}
+
+const AppishNode: React.FC<AppishNodeProps> = ({selectableNode, mainText, boxColor, childCxns = true, children = []}) => {
+  const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(selectableNode);
 
   if (children.length > 0) {
     const rows = 2*children.length - 1;
@@ -75,19 +110,25 @@ const AppishNode: React.FC<AppishNodeProps> = ({mainText, boxColor, selected, ch
           </React.Fragment>
         ))}
         </>
-        <div className={boxClasses.join(' ')} style={{gridRowStart: 1, gridRowEnd: rows+1, gridColumnStart: 1, gridColumnEnd: 3}} onClick={handleClick} onMouseOver={handleMouseOver} onMouseOut={handleMouseOut} />
+        <div className={selectionClasses.join(' ')} style={{gridRowStart: 1, gridRowEnd: rows+1, gridColumnStart: 1, gridColumnEnd: 3}} {...selectionHandlers} />
       </div>
     );
   } else {
     return (
       <div className="TreeView-appish-node">
-        <div className={boxClasses.concat(['TreeView-appish-node-padding']).join(' ')} style={{backgroundColor: boxColor}} onClick={handleClick} onMouseOver={handleMouseOver} onMouseOut={handleMouseOut}>
+        <div className={selectionClasses.concat(['TreeView-appish-node-padding']).join(' ')} style={{backgroundColor: boxColor}} {...selectionHandlers}>
           {mainText}
         </div>
       </div>
     );
   }
 };
+
+const UserFunctionDefinitionView: React.FC<{node: UserFunctionDefinitionNode}> = ({ node }) => {
+  return (
+    <div />
+  );
+}
 
 export const NodeView: React.FC<{node: Node}> = ({ node }) => {
   const ctxData = useContext(TreeViewContext);
@@ -102,15 +143,6 @@ export const NodeView: React.FC<{node: Node}> = ({ node }) => {
     return <ExpressionChooser mainState={ctxData.mainState} dispatch={ctxData.dispatch} />
   }
 
-  const handleSelect = () => {
-    ctxData.onSelectNode(node);
-  };
-
-  const commonProps = {
-    selected,
-    onSelect: handleSelect,
-  };
-
   const normalBoxColor = '#d8d8d8';
   const streamNameishColor = '#ccd9e8';
 
@@ -122,13 +154,13 @@ export const NodeView: React.FC<{node: Node}> = ({ node }) => {
 
   switch (node.type) {
     case 'UndefinedLiteral':
-      return <AppishNode mainText={<span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>} boxColor={'red'} {...commonProps} />
+      return <AppishNode selectableNode={node} mainText={<span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>} boxColor={'red'} />
 
     case 'NumberLiteral':
-      return <AppishNode mainText={node.value.toString()} boxColor="#cce8cc" {...commonProps} />
+      return <AppishNode selectableNode={node} mainText={node.value.toString()} boxColor="#cce8cc" />
 
     case 'ArrayLiteral':
-      return <AppishNode mainText="[ ]" boxColor={normalBoxColor} children={makeAnonChildrenViews()} {...commonProps} />
+      return <AppishNode selectableNode={node} mainText="[ ]" boxColor={normalBoxColor} children={makeAnonChildrenViews()} />
 
     case 'Application': {
       const functionNode = ctxData.functionIdToNode.get(node.functionId);
@@ -146,7 +178,7 @@ export const NodeView: React.FC<{node: Node}> = ({ node }) => {
         child: <NodeView node={node.children[idx]} />
       }));
 
-      return <AppishNode mainText={<strong>{displayedName}</strong>} boxColor={normalBoxColor} children={childrenViews} {...commonProps} />
+      return <AppishNode selectableNode={node} mainText={<strong>{displayedName}</strong>} boxColor={normalBoxColor} children={childrenViews} />
     }
 
     case 'StreamReference': {
@@ -155,23 +187,23 @@ export const NodeView: React.FC<{node: Node}> = ({ node }) => {
         throw new Error();
       }
       const displayedName = isNamedNode(targetExpressionNode) ? targetExpressionNode.name : ('<stream ' + node.targetStreamId + '>');
-      return <AppishNode mainText={displayedName} boxColor={streamNameishColor} {...commonProps} />
+      return <AppishNode selectableNode={node} mainText={displayedName} boxColor={streamNameishColor} />
     }
 
     case 'StreamIndirection':
-      return <AppishNode mainText={<em>{node.name}</em>} boxColor={streamNameishColor} children={makeAnonChildrenViews()} {...commonProps} />
+      return <AppishNode selectableNode={node} mainText={<em>{node.name}</em>} boxColor={streamNameishColor} children={makeAnonChildrenViews()} />
 
     case 'StreamParameter':
-      return <AppishNode mainText={<em>{node.name}</em>} boxColor={streamNameishColor} {...commonProps} />
+      return <AppishNode selectableNode={node} mainText={<em>{node.name}</em>} boxColor={streamNameishColor} />
 
     case 'UserFunctionDefinition':
-      return <AppishNode mainText="ƒ" boxColor="#d3c9d8" childCxns={false} children={makeAnonChildrenViews()} {...commonProps} />
+      return <AppishNode selectableNode={node} mainText="ƒ" boxColor="#d3c9d8" childCxns={false} children={makeAnonChildrenViews()} />
 
     case 'UserFunctionDefinitionParameters':
-      return <AppishNode mainText={'\u2009'} boxColor="#efd5db" children={makeAnonChildrenViews()} {...commonProps} />
+      return <AppishNode selectableNode={null} mainText={'\u2009'} boxColor="#efd5db" children={makeAnonChildrenViews()} />
 
     case 'UserFunctionDefinitionExpressions':
-      return <AppishNode mainText={'\u2009'} boxColor="#f1e0cc" children={makeAnonChildrenViews()} {...commonProps} />
+      return <AppishNode selectableNode={null} mainText={'\u2009'} boxColor="#f1e0cc" children={makeAnonChildrenViews()} />
 
     default:
       throw new Error();
