@@ -1,34 +1,34 @@
-.TreeView-general-node {
+.TreeView-appish-node {
   width: max-content;
 }
 
-.TreeView-general-node-with-children {
+.TreeView-appish-node-with-children {
   display: grid;
   grid-auto-columns: max-content;
 }
 
-.TreeView-general-node-padding {
+.TreeView-appish-node-padding {
   padding: 0.1em 0.2em;
 }
 
-.TreeView-general-node-child-name {
+.TreeView-appish-node-child-name {
   text-align: right;
 }
 
-.TreeView-general-node-no-pointer {
+.TreeView-appish-node-no-pointer {
   pointer-events: none;
 }
 
-.TreeView-general-node-child-cxn {
+.TreeView-appish-node-child-cxn {
   width: 0.3em;
   padding-top: 0.7em;
 }
 
-.TreeView-general-node-child-cxn-inner {
+.TreeView-appish-node-child-cxn-inner {
   border-top: 1px solid #999;
 }
 
-.TreeView-general-node-spacer-row {
+.TreeView-appish-node-spacer-row {
   height: 0.3em;
 }
 
