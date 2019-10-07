@@ -6,6 +6,7 @@ import StoragePanel from './StoragePanel';
 import { INITIAL_THEME, ThemePicker } from './ThemePicker';
 import './Editor.css';
 import { isNamedNode } from './Tree';
+import { NodeView, TreeViewContextProvider } from './TreeView';
 
 const keyMap = {
   MOVE_UP: 'up',
@@ -102,22 +103,9 @@ function useHandleEdit(obj) {
 
 const ThemeContext = createContext();
 
-function DefinitionExpressionsView({ expressions }) {
-  const { DefinitionExpression } = useContext(ThemeContext);
-
-  return (
-    <>
-      {expressions.map((expression) => (
-        <div key={expression.id}>
-          <DefinitionExpression expression={<ExpressionView expression={expression} />} />
-        </div>
-      ))}
-    </>
-  )
-}
-
 function NumberLiteralView({ numberLiteral }) {
-  return <div>{numberLiteral.value}</div>;
+  const { NumberLiteral } = useContext(ThemeContext);
+  return <NumberLiteral value={numberLiteral.value}></NumberLiteral>;
 }
 
 function ArrayLiteralView({ arrayLiteral }) {
@@ -152,9 +140,9 @@ function UserFunctionView({ userFunction }) {
   const handleSelect = useHandleSelect(userFunction);
   const { UserFunction } = useContext(ThemeContext);
 
-  return (
-    <UserFunction parameterNames={userFunction.children[0].children.map(param => param.name)} expressions={<DefinitionExpressionsView expressions={userFunction.children[1].children} />} marks={marks} onSelect={handleSelect} />
-  );
+  // return (
+  //   <UserFunction parameters={userFunction.children[0].children} expressions={<DefinitionExpressionsView expressions={userFunction.children[1].children} />} marks={marks} onSelect={handleSelect} />
+  // );
 }
 
 function ApplicationView({ application }) {
@@ -172,7 +160,7 @@ function ApplicationView({ application }) {
   const args = functionNode.signature.parameters.map((param, idx) => ({
     key: param.name,
     name: param.name.startsWith('_') ? undefined : param.name,
-    expression: <ExpressionView expression={application.children[idx]} />
+    child: <ExpressionView expression={application.children[idx]} />
   }));
 
   const { Application } = useContext(ThemeContext);
@@ -281,6 +269,21 @@ export default function Editor({ autoFocus }) {
     dispatch({type: 'LOAD_PROGRAM', program});
   };
 
+  const treeViewCtxData = {
+    selectedNode: nodeFromPath(state.program, state.selectionPath),
+    streamIdToNode: state.derivedLookups.streamIdToNode,
+    functionIdToNode: state.derivedLookups.functionIdToNode,
+    onSelectNode: (node) => {
+      const path = state.derivedLookups.nodeToPath.get(node);
+      if (path) {
+        dispatch({
+          type: 'SET_PATH',
+          newPath: path,
+        });
+      }
+    },
+  };
+
   return (
     <div className="Editor">
       <HotKeys keyMap={keyMap} handlers={handlers}>
@@ -290,7 +293,9 @@ export default function Editor({ autoFocus }) {
               <MarkedNodesContext.Provider value={markedNodes}>
                 <FullStateContext.Provider value={state}>
                   <ThemeContext.Provider value={theme}>
-                    <UserFunctionView userFunction={state.program.children[0]} />
+                    <TreeViewContextProvider value={treeViewCtxData}>
+                      <NodeView node={state.program.children[0]} />
+                    </TreeViewContextProvider>
                   </ThemeContext.Provider>
                 </FullStateContext.Provider>
               </MarkedNodesContext.Provider>

@@ -1,8 +1,6 @@
 .Editor-workspace {
-  /* border: 1px solid #aaa; */
+  border: 1px solid #aaa;
   font-size: 18px;
-  background: #333;
-  color: #eee;
   padding: 1em;
   overflow: auto;
 }

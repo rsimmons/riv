@@ -1,34 +1,47 @@
-
-.SimpleTheme-array-items, .SimpleTheme-application-arguments, .SimpleTheme-user-function-expressions, .SimpleTheme-indirection-child-outer {
-  padding-left: 1em;
+.SimpleTheme-application-box {
+  background-color: #d8d8d8;
 }
 
-.SimpleTheme-array-item, .SimpleTheme-application-argument, .SimpleTheme-indirection-child-inner {
-  padding: 0.05em 0;
+.SimpleTheme-stream-reference-box {
+  background-color: #ccd9e8;
 }
 
-.SimpleTheme-definition-expression, .SimpleTheme-array-item, .SimpleTheme-application-argument, .SimpleTheme-indirection-child-inner {
-  width: fit-content;
+.SimpleTheme-stream-indirection-box {
+  background-color: #ccd9e8;
 }
 
-.SimpleTheme-application-flex {
-  display: flex;
+.SimpleTheme-number-literal-box {
+  background-color: #cce8cc;
 }
 
-.SimpleTheme-application-function-name {
-  font-weight: bold;
+.SimpleTheme-expression {
+  width: max-content;
 }
 
-.SimpleTheme-application-function-name-centered {
-  align-self: center;
+.SimpleTheme-general-node {
+  width: max-content;
 }
 
-.SimpleTheme-application-argument {
-  display: flex;
+.SimpleTheme-general-node-with-children {
+  display: grid;
+  grid-auto-columns: max-content;
 }
 
-.SimpleTheme-application-argument-name {
-  margin-right: 0.2em;
+.SimpleTheme-general-node-padding {
+  padding: 0.1em 0.2em;
+}
+
+.SimpleTheme-general-node-child-name {
+  text-align: right;
+}
+
+.SimpleTheme-general-node-child-cxn {
+  width: 0.3em;
+  padding-top: 0.7em;
+}
+
+.SimpleTheme-general-node-child-cxn-inner {
+  border-top: 1px solid #999;
 }
 
 /* NOTE: This is awkward that we reference Editor classes, but don't know a nice way to fix */
@@ -40,64 +53,4 @@
 .SimpleTheme-hovered {
   outline: rgb(0, 200, 200) dashed 1px;
   outline-offset: 0;
-}
-
-.SimpleTheme-clipboard-top {
-  outline: rgba(0, 255, 0, 0.75) solid 1px;
-  outline-offset: 0;
-}
-
-.SimpleTheme-clipboard-rest {
-  outline: rgba(0, 255, 0, 0.25) solid 1px;
-  outline-offset: 0;
-}
-
-.SimpleTheme-definition-expression {
-  padding: 0.2em 0;
-}
-
-.SimpleTheme-expression {
-  display: flex;
-}
-
-.SimpleTheme-expression-line {
-  width: 0.2em;
-  margin-right: 0.1em;
-  border-left: 1px solid #555;
-}
-
-.SimpleTheme-expression-bracket {
-  width: 0.2em;
-  margin-right: 0.1em;
-  border-left: 1px solid #555;
-  border-top: 1px solid #555;
-  border-bottom: 1px solid #555;
-}
-
-.SimpleTheme-expression-background {
-  padding: 0 0.2em;
-  background-color: rgba(255, 255, 255, 0.05);
-}
-
-.SimpleTheme-expression-shadow {
-  padding: 0 0.2em;
-  box-shadow: 0 0 5px 0px rgba(0,0,0,0.5);
-}
-
-.SimpleTheme-stream-reference {
-  font-style: italic;
-  color: lightblue;
-}
-
-.SimpleTheme-stream-indirection {
-  display: flex;
-}
-
-.SimpleTheme-stream-indirection-name {
-  color: lightblue;
-}
-
-.SimpleTheme-undefined-expression {
-  background: rgba(255, 0, 0, 0.75);
-  padding: 0 1em;
 }

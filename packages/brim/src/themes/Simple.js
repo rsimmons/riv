@@ -46,103 +46,86 @@ function Selectable({ marks, onSelect, onEdit, children, extraClassName }) {
   );
 }
 
-export const generateTheme = ({ expressionGrouping, applicationArguments }) => ({
-  Application: ({ functionName, args, functionArgs }) => {
-    const appClass = ((applicationArguments === 'right') || (applicationArguments === 'right-centered')) ? 'SimpleTheme-application-flex' : '';
-    const nameClass = 'SimpleTheme-application-function-name' + ((applicationArguments === 'right-centered') ? ' SimpleTheme-application-function-name-centered' : '');
-    return (
-      <div className={appClass}>
-        <div className={nameClass}>{functionName}</div>
-        <div className="SimpleTheme-application-arguments">
-          {args.map(({key, name, expression}) => (
-            <div className="SimpleTheme-application-argument" key={key}>{name ? <span className="SimpleTheme-application-argument-name">{name}:</span> : null}<span className="SimpleTheme-application-argument-expression">{expression}</span></div>
+export const generateTheme = ({ expressionGrouping, applicationArguments }) => {
+  const GeneralNode = ({mainText, children = [], boxClasses = []}) => {
+    if (children.length > 0) {
+      const rows = children.length;
+      return (
+        <div className="SimpleTheme-general-node SimpleTheme-general-node-with-children">
+          <div className={boxClasses.concat(['SimpleTheme-general-node-left', 'SimpleTheme-general-node-padding']).join(' ')} style={{gridRowStart: 1, gridRowEnd: rows+1}}>{mainText}</div>
+          <>{children.map(({key, name, child}, idx) => (
+            <React.Fragment key={key}>
+              <div className={name ? boxClasses.concat(['SimpleTheme-general-node-child-name', 'SimpleTheme-general-node-padding']).join(' ') : ''} style={{gridRow: idx+1, gridColumn: 2}}>{name}</div>
+              <div className="SimpleTheme-general-node-child-cxn" style={{gridRow: idx+1, gridColumn: 3}}><div className="SimpleTheme-general-node-child-cxn-inner" /></div>
+              <div className="SimpleTheme-general-node-child-subtree" style={{gridRow: idx+1, gridColumn: 4}}>{child}</div>
+            </React.Fragment>
+          ))}
+          </>
+        </div>
+      );
+    } else {
+      return (
+        <div className="SimpleTheme-general-node">
+          <div className={boxClasses.concat(['SimpleTheme-general-node-padding']).join(' ')}>
+            {mainText}
+          </div>
+        </div>
+      );
+    }
+  };
+
+  return {
+    Application: ({ functionName, args }) => {
+      return <GeneralNode mainText={<strong>{functionName}</strong>} children={args} boxClasses={['SimpleTheme-application-box']} />
+    },
+
+    UserFunction: ({ parameterNames, expressions, marks, onSelect }) => (
+      <Selectable marks={marks} onSelect={onSelect} extraClassName={'SimpleTheme-user-function'}>
+        <div>ƒ {parameterNames.join(', ')}</div>
+        <div className="SimpleTheme-user-function-expressions">{expressions}</div>
+      </Selectable>
+    ),
+
+    DefinitionExpression: ({ expression }) => (
+      <div className="SimpleTheme-definition-expression">{expression}</div>
+    ),
+
+    Expression: ({ marks, onSelect, onEdit, inside }) => {
+      let exprClass = 'SimpleTheme-expression';
+
+      return (
+        <Selectable marks={marks} onSelect={onSelect} onEdit={onEdit} extraClassName={exprClass}>
+          {inside}
+        </Selectable>
+      );
+    },
+
+    StreamReference: ({ name }) => (
+      <GeneralNode mainText={name} boxClasses={['SimpleTheme-stream-reference-box']} />
+    ),
+
+    StreamIndirection: ({ name, child }) => {
+      return <GeneralNode mainText={name} children={[{key: null, name: null, child}]} boxClasses={['SimpleTheme-stream-indirection-box']} />
+    },
+
+    UndefinedExpression: () => (
+      <div className="SimpleTheme-undefined-expression">&nbsp;</div>
+    ),
+
+    NumberLiteral: ({ value }) => (
+      <GeneralNode mainText={value} boxClasses={['SimpleTheme-number-literal-box']} />
+    ),
+
+    ArrayLiteral: ({ keyedItems }) => (
+      <div>
+        <div>[</div>
+        <div className="SimpleTheme-array-items">
+          {keyedItems.map(([key, item]) => (
+            <div className="SimpleTheme-array-item" key={key}>{item}</div>
           ))}
         </div>
+        <div>]</div>
       </div>
-    );
-  },
-
-  UserFunction: ({ parameterNames, expressions, marks, onSelect }) => (
-    <Selectable marks={marks} onSelect={onSelect} extraClassName={'SimpleTheme-user-function'}>
-      <div>ƒ {parameterNames.join(', ')}</div>
-      <div className="SimpleTheme-user-function-expressions">{expressions}</div>
-    </Selectable>
-  ),
-
-  DefinitionExpression: ({ expression }) => (
-    <div className="SimpleTheme-definition-expression">{expression}</div>
-  ),
-
-  Expression: ({ marks, onSelect, onEdit, inside }) => {
-    let exprClass = 'SimpleTheme-expression';
-
-    switch (expressionGrouping) {
-      case 'background':
-        exprClass += ' SimpleTheme-expression-background';
-        break;
-
-      case 'shadow':
-        exprClass += ' SimpleTheme-expression-shadow';
-        break;
-
-      default:
-        // ignore
-        break;
-    }
-
-    return (
-      <Selectable marks={marks} onSelect={onSelect} onEdit={onEdit} extraClassName={exprClass}>
-        { (() => {
-          switch (expressionGrouping) {
-            case 'line':
-              return (
-                <div className="SimpleTheme-expression-line" />
-              );
-
-            case 'bracket':
-              return (
-                <div className="SimpleTheme-expression-bracket" />
-              );
-
-            default:
-              return null;
-          }
-        })() }
-        <div>
-          <div className="SimpleTheme-expression-main">{inside}</div>
-        </div>
-      </Selectable>
-    );
-  },
-
-  StreamReference: ({ name }) => (
-    <div><span className="SimpleTheme-stream-reference">{name}</span></div>
-  ),
-
-  StreamIndirection: ({ name, child }) => (
-    <div className="SimpleTheme-stream-indirection">
-      <div className="SimpleTheme-stream-indirection-name">{name}</div>
-      <div className="SimpleTheme-indirection-child-outer">
-        <div className="SimpleTheme-indirection-child-inner">
-          {child}
-        </div>
-      </div>
-    </div>
-  ),
-
-  UndefinedExpression: () => (
-    <div className="SimpleTheme-undefined-expression">&nbsp;</div>
-  ),
-
-  ArrayLiteral: ({ keyedItems }) => (
-    <div>
-      <div>[</div>
-      <div className="SimpleTheme-array-items">
-        {keyedItems.map(([key, item]) => (
-          <div className="SimpleTheme-array-item" key={key}>{item}</div>
-        ))}
-      </div>
-      <div>]</div>
-    </div>
-  ),
-});
+    ),
+  };
+}
