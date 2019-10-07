@@ -5,6 +5,9 @@ import './TreeView.css';
 import { StreamID, FunctionID } from './Identifier';
 import { State } from './State';
 
+const NORMAL_BOX_COLOR = '#d8d8d8';
+const STREAM_NAMEISH_BOX_COLOR = '#ccd9e8';
+
 export interface TreeViewContextData {
   selectedNode: Node,
   streamIdToNode: ReadonlyMap<StreamID, StreamCreationNode>;
@@ -97,7 +100,7 @@ const AppishNode: React.FC<AppishNodeProps> = ({selectableNode, mainText, boxCol
     const rows = 2*children.length - 1;
     return (
       <div className="TreeView-appish-node TreeView-appish-node-with-children">
-        <div style={{gridRowStart: 1, gridRowEnd: rows+1, gridColumnStart: 1, gridColumnEnd: 3, backgroundColor: boxColor }} />
+        <div style={{gridRowStart: 1, gridRowEnd: rows+1, gridColumnStart: 1, gridColumnEnd: 3, background: boxColor }} />
         <div className="TreeView-appish-node-main-text TreeView-appish-node-padding TreeView-appish-node-no-pointer" style={{gridRowStart: 1, gridRowEnd: rows+1, gridColumn: 1}}>{mainText}</div>
         <>{children.map(({key, name, child}, idx) => (
           <React.Fragment key={key}>
@@ -116,7 +119,7 @@ const AppishNode: React.FC<AppishNodeProps> = ({selectableNode, mainText, boxCol
   } else {
     return (
       <div className="TreeView-appish-node">
-        <div className={selectionClasses.concat(['TreeView-appish-node-padding']).join(' ')} style={{backgroundColor: boxColor}} {...selectionHandlers}>
+        <div className={selectionClasses.concat(['TreeView-appish-node-padding']).join(' ')} style={{background: boxColor}} {...selectionHandlers}>
           {mainText}
         </div>
       </div>
@@ -125,8 +128,23 @@ const AppishNode: React.FC<AppishNodeProps> = ({selectableNode, mainText, boxCol
 };
 
 const UserFunctionDefinitionView: React.FC<{node: UserFunctionDefinitionNode}> = ({ node }) => {
+  const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node);
+
+  const parameters = node.children[0].children;
+  const expressions = node.children[1].children;
+
   return (
-    <div />
+    <div className={selectionClasses.concat(['TreeView-udf-node']).join(' ')} {...selectionHandlers} style={{backgroundColor: NORMAL_BOX_COLOR}}>
+      <div>ƒ</div>
+      <div className="TreeView-udf-node-main-container">
+        <div className="TreeView-udf-node-expressions">{expressions.map(child => (
+          <NodeView key={child.id} node={child} />
+        ))}</div>
+        <div className="TreeView-udf-node-parameters">{parameters.map(child => (
+          <NodeView key={child.id} node={child} />
+        ))}</div>
+      </div>
+    </div>
   );
 }
 
@@ -143,9 +161,6 @@ export const NodeView: React.FC<{node: Node}> = ({ node }) => {
     return <ExpressionChooser mainState={ctxData.mainState} dispatch={ctxData.dispatch} />
   }
 
-  const normalBoxColor = '#d8d8d8';
-  const streamNameishColor = '#ccd9e8';
-
   const makeAnonChildrenViews = () => children.map((child, idx) => ({
     key: idx,
     name: null,
@@ -160,7 +175,7 @@ export const NodeView: React.FC<{node: Node}> = ({ node }) => {
       return <AppishNode selectableNode={node} mainText={node.value.toString()} boxColor="#cce8cc" />
 
     case 'ArrayLiteral':
-      return <AppishNode selectableNode={node} mainText="[ ]" boxColor={normalBoxColor} children={makeAnonChildrenViews()} />
+      return <AppishNode selectableNode={node} mainText="[ ]" boxColor={NORMAL_BOX_COLOR} children={makeAnonChildrenViews()} />
 
     case 'Application': {
       const functionNode = ctxData.functionIdToNode.get(node.functionId);
@@ -178,7 +193,7 @@ export const NodeView: React.FC<{node: Node}> = ({ node }) => {
         child: <NodeView node={node.children[idx]} />
       }));
 
-      return <AppishNode selectableNode={node} mainText={<strong>{displayedName}</strong>} boxColor={normalBoxColor} children={childrenViews} />
+      return <AppishNode selectableNode={node} mainText={<strong>{displayedName}</strong>} boxColor={NORMAL_BOX_COLOR} children={childrenViews} />
     }
 
     case 'StreamReference': {
@@ -187,23 +202,17 @@ export const NodeView: React.FC<{node: Node}> = ({ node }) => {
         throw new Error();
       }
       const displayedName = isNamedNode(targetExpressionNode) ? targetExpressionNode.name : ('<stream ' + node.targetStreamId + '>');
-      return <AppishNode selectableNode={node} mainText={displayedName} boxColor={streamNameishColor} />
+      return <AppishNode selectableNode={node} mainText={displayedName} boxColor={STREAM_NAMEISH_BOX_COLOR} />
     }
 
     case 'StreamIndirection':
-      return <AppishNode selectableNode={node} mainText={<em>{node.name}</em>} boxColor={streamNameishColor} children={makeAnonChildrenViews()} />
+      return <AppishNode selectableNode={node} mainText={<em>{node.name}</em>} boxColor={STREAM_NAMEISH_BOX_COLOR} children={makeAnonChildrenViews()} />
 
     case 'StreamParameter':
-      return <AppishNode selectableNode={node} mainText={<em>{node.name}</em>} boxColor={streamNameishColor} />
+      return <AppishNode selectableNode={node} mainText={node.name} boxColor={'transparent'} />
 
     case 'UserFunctionDefinition':
-      return <AppishNode selectableNode={node} mainText="ƒ" boxColor="#d3c9d8" childCxns={false} children={makeAnonChildrenViews()} />
-
-    case 'UserFunctionDefinitionParameters':
-      return <AppishNode selectableNode={null} mainText={'\u2009'} boxColor="#efd5db" children={makeAnonChildrenViews()} />
-
-    case 'UserFunctionDefinitionExpressions':
-      return <AppishNode selectableNode={null} mainText={'\u2009'} boxColor="#f1e0cc" children={makeAnonChildrenViews()} />
+      return <UserFunctionDefinitionView node={node} />
 
     default:
       throw new Error();

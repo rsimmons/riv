@@ -2,9 +2,6 @@
   font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
   font-weight: 300;
   font-size: 1.2em;
-  border: 1px solid #aaa;
-  padding: 1em;
-  overflow: auto;
 }
 
 .Editor-workspace:focus {
@@ -14,7 +11,7 @@
 
 .Editor-panel {
   margin-top: 1em;
-  background-color: #ccc;
+  background-color: #e8e0da;
   padding: 0.75em;
   width: fit-content;
 }
