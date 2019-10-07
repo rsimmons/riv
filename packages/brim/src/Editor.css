@@ -10,15 +10,6 @@
   box-shadow: none;
 }
 
-.Editor-text-edit-input {
-  border: 0;
-  padding: 0;
-  font-size: inherit;
-  font-family: inherit;
-  background: #eee;
-  color: #333;
-}
-
 .Editor-panel {
   margin-top: 1em;
   background-color: #ccc;

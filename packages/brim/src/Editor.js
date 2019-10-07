@@ -1,11 +1,8 @@
-import React, { createContext, useContext, useReducer, useRef, useEffect, useState } from 'react';
+import React, { useReducer, useRef, useEffect, useState } from 'react';
 import { HotKeys, ObserveKeys } from "react-hotkeys";
 import { initialState, reducer, nodeFromPath } from './EditReducer';
-import ExpressionChooser from './ExpressionChooser';
 import StoragePanel from './StoragePanel';
-import { INITIAL_THEME, ThemePicker } from './ThemePicker';
 import './Editor.css';
-import { isNamedNode } from './Tree';
 import { NodeView, TreeViewContextProvider } from './TreeView';
 
 const keyMap = {
@@ -49,172 +46,8 @@ const CATCH_IN_INPUTS = [
   ',',
 ];
 
-const FullStateContext = createContext();
-
-const DispatchContext = createContext();
-
-const MarkedNodesContext = createContext();
-function useMarks(obj) {
-  const marks = [];
-  const { selectedNode, clipboardTopNode, clipboardRestNodes } = useContext(MarkedNodesContext);
-  if (obj === selectedNode) {
-    marks.push('selected');
-  }
-  if (obj === clipboardTopNode) {
-    marks.push('clipboard-top');
-  }
-  if (clipboardRestNodes.includes(obj)) {
-    marks.push('clipboard-rest');
-  }
-  return marks;
-}
-function useHandleSelect(obj) {
-  const dispatch = useContext(DispatchContext);
-  const state = useContext(FullStateContext);
-
-  return () => {
-    const path = state.derivedLookups.nodeToPath.get(obj);
-    if (path) {
-      dispatch({
-        type: 'SET_PATH',
-        newPath: path,
-      });
-    }
-  };
-}
-function useHandleEdit(obj) {
-  const dispatch = useContext(DispatchContext);
-  const state = useContext(FullStateContext);
-
-  return () => {
-    const path = state.derivedLookups.nodeToPath.get(obj);
-    if (path) {
-      dispatch({
-        type: 'SET_PATH',
-        newPath: path,
-      });
-      dispatch({
-        type: 'TOGGLE_EDIT',
-      });
-    }
-  };
-}
-
-
-const ThemeContext = createContext();
-
-function NumberLiteralView({ numberLiteral }) {
-  const { NumberLiteral } = useContext(ThemeContext);
-  return <NumberLiteral value={numberLiteral.value}></NumberLiteral>;
-}
-
-function ArrayLiteralView({ arrayLiteral }) {
-  const { ArrayLiteral } = useContext(ThemeContext);
-
-return <ArrayLiteral keyedItems={arrayLiteral.children.map(item => [item.id, <ExpressionView expression={item} />])} />
-}
-
-function UndefinedLiteralView({ undefinedLiteral }) {
-  const { UndefinedExpression } = useContext(ThemeContext);
-  return <UndefinedExpression />
-}
-
-function StreamReferenceView({ streamReference }) {
-  const {streamIdToNode} = useContext(FullStateContext).derivedLookups;
-  const targetExpressionNode = streamIdToNode.get(streamReference.targetStreamId);
-  if (!targetExpressionNode) {
-    throw new Error();
-  }
-
-  const { StreamReference } = useContext(ThemeContext);
-  return <StreamReference name={isNamedNode(targetExpressionNode) ? targetExpressionNode.name : '<stream ' + streamReference.targetStreamId + '>'} />;
-}
-
-function StreamIndirectionView({ streamIndirection }) {
-  const { StreamIndirection } = useContext(ThemeContext);
-  return <StreamIndirection name={streamIndirection.name} child={<ExpressionView expression={streamIndirection.children[0]} />} />;
-}
-
-function UserFunctionView({ userFunction }) {
-  const marks = useMarks(userFunction);
-  const handleSelect = useHandleSelect(userFunction);
-  const { UserFunction } = useContext(ThemeContext);
-
-  // return (
-  //   <UserFunction parameters={userFunction.children[0].children} expressions={<DefinitionExpressionsView expressions={userFunction.children[1].children} />} marks={marks} onSelect={handleSelect} />
-  // );
-}
-
-function ApplicationView({ application }) {
-  const {functionIdToNode} = useContext(FullStateContext).derivedLookups;
-  const functionNode = functionIdToNode.get(application.functionId);
-  if (!functionNode) {
-    throw new Error();
-  }
-
-  if (functionNode.signature.parameters.length !== application.children.length) {
-    throw new Error('params and args length mismatch');
-  }
-
-  const functionName = functionNode.name ? functionNode.name : '<function ' + application.functionId + '>';
-  const args = functionNode.signature.parameters.map((param, idx) => ({
-    key: param.name,
-    name: param.name.startsWith('_') ? undefined : param.name,
-    child: <ExpressionView expression={application.children[idx]} />
-  }));
-
-  const { Application } = useContext(ThemeContext);
-
-  return <Application functionName={functionName} args={args} />;
-}
-
-function NotEditingExpressionView({ expression }) {
-  switch (expression.type) {
-    case 'NumberLiteral':
-      return <NumberLiteralView numberLiteral={expression} />
-
-    case 'ArrayLiteral':
-      return <ArrayLiteralView arrayLiteral={expression} />
-
-    case 'UndefinedLiteral':
-      return <UndefinedLiteralView undefinedLiteral={expression} />
-
-    case 'StreamReference':
-      return <StreamReferenceView streamReference={expression} />
-
-    case 'StreamIndirection':
-      return <StreamIndirectionView streamIndirection={expression} />
-
-    case 'Application':
-      return <ApplicationView application={expression} />
-
-    case 'UserFunctionDefinition':
-      return <UserFunctionView userFunction={expression} />
-
-    default:
-      throw new Error();
-  }
-}
-
-function ExpressionView({ expression }) {
-  const marks = useMarks(expression);
-  const handleSelect = useHandleSelect(expression);
-  const handleEdit = useHandleEdit(expression);
-  const mainState = useContext(FullStateContext);
-  const editingSelected = mainState.editingSelected;
-  const dispatch = useContext(DispatchContext);
-  const { Expression } = useContext(ThemeContext);
-
-  return <Expression marks={marks} onSelect={handleSelect} onEdit={handleEdit} inside={
-    (marks.includes('selected') && editingSelected)
-      ? <ExpressionChooser node={expression} mainState={mainState} dispatch={dispatch} />
-      : <NotEditingExpressionView expression={expression} />
-  } />;
-}
-
 export default function Editor({ autoFocus }) {
   const [state, dispatch] = useReducer(reducer, initialState);
-  const [theme, setTheme] = useState(INITIAL_THEME);
 
   const editorElem = useRef();
 
@@ -255,12 +88,6 @@ export default function Editor({ autoFocus }) {
     }
   };
 
-  const markedNodes = {
-    selectedNode: nodeFromPath(state.program, state.selectionPath),
-    clipboardTopNode: (state.clipboardStack.length > 0) ? state.derivedLookups.streamIdToNode.get(state.clipboardStack[state.clipboardStack.length-1].streamId) : null,
-    clipboardRestNodes: state.clipboardStack.slice(0, -1).map(frame => state.derivedLookups.streamIdToNode.get(frame.streamId)),
-  }
-
   const handleChangeProgramName = (newName) => {
     dispatch({type: 'SET_PROGRAM_NAME', newName});
   };
@@ -271,8 +98,12 @@ export default function Editor({ autoFocus }) {
 
   const treeViewCtxData = {
     selectedNode: nodeFromPath(state.program, state.selectionPath),
+    clipboardTopNode: (state.clipboardStack.length > 0) ? state.derivedLookups.streamIdToNode.get(state.clipboardStack[state.clipboardStack.length-1].streamId) : null,
+    clipboardRestNodes: state.clipboardStack.slice(0, -1).map(frame => state.derivedLookups.streamIdToNode.get(frame.streamId)),
     streamIdToNode: state.derivedLookups.streamIdToNode,
     functionIdToNode: state.derivedLookups.functionIdToNode,
+    mainState: state,
+    dispatch,
     onSelectNode: (node) => {
       const path = state.derivedLookups.nodeToPath.get(node);
       if (path) {
@@ -289,21 +120,12 @@ export default function Editor({ autoFocus }) {
       <HotKeys keyMap={keyMap} handlers={handlers}>
         <ObserveKeys only={CATCH_IN_INPUTS}>
           <div className="Editor-workspace" onKeyDown={onKeyDown} tabIndex="0" ref={editorElem}>
-            <DispatchContext.Provider value={dispatch}>
-              <MarkedNodesContext.Provider value={markedNodes}>
-                <FullStateContext.Provider value={state}>
-                  <ThemeContext.Provider value={theme}>
-                    <TreeViewContextProvider value={treeViewCtxData}>
-                      <NodeView node={state.program.children[0]} />
-                    </TreeViewContextProvider>
-                  </ThemeContext.Provider>
-                </FullStateContext.Provider>
-              </MarkedNodesContext.Provider>
-            </DispatchContext.Provider>
+            <TreeViewContextProvider value={treeViewCtxData}>
+              <NodeView node={state.program.children[0]} />
+            </TreeViewContextProvider>
           </div>
         </ObserveKeys>
       </HotKeys>
-      <div className="Editor-theme-controls Editor-panel"><ThemePicker onChange={newTheme => { setTheme(newTheme) }} /></div>
       <div className="Editor-storage-panel-container Editor-panel">
         <StoragePanel currentProgram={state.program} onChangeName={handleChangeProgramName} onLoadProgram={handleLoadProgram} />
       </div>

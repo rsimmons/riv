@@ -1,12 +1,16 @@
 import React, { createContext, useContext, useState } from 'react';
 import { Node, StreamCreationNode, FunctionDefinitionNode, isNamedNode } from './Tree';
+import ExpressionChooser from './ExpressionChooser';
 import './TreeView.css';
 import { StreamID, FunctionID } from './Identifier';
+import { State } from './State';
 
 export interface TreeViewContextData {
   selectedNode: Node,
   streamIdToNode: ReadonlyMap<StreamID, StreamCreationNode>;
   functionIdToNode: ReadonlyMap<FunctionID, FunctionDefinitionNode>;
+  mainState: State;
+  dispatch: (action: any) => void; // TODO: tighten up type
   onSelectNode: (node: Node) => void;
 };
 const TreeViewContext = createContext<TreeViewContextData | null>(null);
@@ -97,6 +101,9 @@ export const NodeView: React.FC<{node: Node}> = ({ node }) => {
 
   const mainText: React.ReactNode | null = (() => {
     switch (node.type) {
+      case 'UndefinedLiteral':
+        return <span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
+
       case 'UserFunctionDefinition':
         return 'ƒ';
 
@@ -161,6 +168,9 @@ export const NodeView: React.FC<{node: Node}> = ({ node }) => {
 
   const backgroundColor = (() => {
     switch (node.type) {
+      case 'UndefinedLiteral':
+        return 'red';
+
       case 'UserFunctionDefinition':
         return '#d3c9d8';
 
@@ -191,5 +201,11 @@ export const NodeView: React.FC<{node: Node}> = ({ node }) => {
     ctxData.onSelectNode(node);
   };
 
-  return <GeneralNode mainText={mainText} selected={ctxData.selectedNode === node} childCxns={node.type !== 'UserFunctionDefinition'} onSelect={handleSelect} styleOptions={styleOptions} children={childrenProp} />
+  const selected = (ctxData.selectedNode === node);
+
+  if (selected && ctxData.mainState.editingSelected) {
+    return <ExpressionChooser mainState={ctxData.mainState} dispatch={ctxData.dispatch} />
+  } else {
+    return <GeneralNode mainText={mainText} selected={selected} childCxns={node.type !== 'UserFunctionDefinition'} onSelect={handleSelect} styleOptions={styleOptions} children={childrenProp} />
+  }
 }

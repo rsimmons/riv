@@ -367,7 +367,7 @@ const ExpressionChooser: React.FC<{mainState: State, dispatch: (action: any) => 
 
   return (
     <div>
-      <input className="Editor-text-edit-input" value={text} onChange={onChange} onKeyDown={onKeyDown} autoFocus />
+      <input className="ExpressionChooser-input" value={text} onChange={onChange} onKeyDown={onKeyDown} autoFocus />
       <ul className="ExpressionChooser-dropdown">
         {dropdownState.choices.map((choice, idx) =>
           <li key={idx} className={(idx === dropdownState.index) ? 'ExpressionChooser-dropdown-selected' : ''} ref={(idx === dropdownState.index) ? selectedListElem : undefined}><Choice choice={choice} /></li>
