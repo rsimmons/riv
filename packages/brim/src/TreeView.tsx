@@ -99,17 +99,20 @@ export const NodeView: React.FC<{node: Node}> = ({ node }) => {
     throw new Error();
   }
 
-  const mainText: React.ReactNode | null = (() => {
+  const mainText: React.ReactNode = (() => {
     switch (node.type) {
       case 'UndefinedLiteral':
         return <span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
+
+      case 'ArrayLiteral':
+        return '[]';
 
       case 'UserFunctionDefinition':
         return 'ƒ';
 
       case 'UserFunctionDefinitionParameters':
       case 'UserFunctionDefinitionExpressions':
-        return null;
+        return '\u2009'; // thin space, to ensure these are full height
 
       case 'StreamIndirection':
       case 'StreamParameter':
