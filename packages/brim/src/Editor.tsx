@@ -3,7 +3,8 @@ import { HotKeys, ObserveKeys } from "react-hotkeys";
 import { initialState, reducer, nodeFromPath } from './EditReducer';
 import StoragePanel from './StoragePanel';
 import './Editor.css';
-import { NodeView, TreeViewContextProvider } from './TreeView';
+import { NodeView, TreeViewContextProvider, TreeViewContextData } from './TreeView';
+import { Node, ProgramNode } from './Tree';
 
 const keyMap = {
   MOVE_UP: 'up',
@@ -46,66 +47,70 @@ const CATCH_IN_INPUTS = [
   ',',
 ];
 
-export default function Editor({ autoFocus }) {
+const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
   const [state, dispatch] = useReducer(reducer, initialState);
 
-  const editorElem = useRef();
+  const editorElem = useRef<HTMLDivElement>(null);
 
   // Do auto-focus if prop is set
   const [constAutoFocus] = useState(autoFocus);
   useEffect(() => {
     if (constAutoFocus) {
       // Focus editor after initial render
-      editorElem.current.focus();
+      if (editorElem.current) {
+        editorElem.current.focus();
+      }
     }
   }, [constAutoFocus]);
 
   // Restore focus to editor elem if input box just went away.
   // NOTE: This is hacky, but don't know better way to handle.
-  const previouslyEditingSelected = useRef(false);
+  const previouslyEditingSelected = useRef<boolean>(false);
   useEffect(() => {
-    if (previouslyEditingSelected.current && !state.editingSelected) {
+    if (previouslyEditingSelected.current && !state.editingSelected && editorElem.current) {
       editorElem.current.focus();
     }
-    previouslyEditingSelected.current = state.editingSelected;
+    previouslyEditingSelected.current = !!state.editingSelected;
   });
 
   // TODO: memoize generation of this
-  const handlers = {};
+  const handlers: {[key: string]: (keyEvent?: KeyboardEvent | undefined) => void} = {};
   for (const k of Object.keys(keyMap)) {
-    handlers[k] = (() => (e) => {
-      e.preventDefault(); // If we attempted to handle this, prevent default (scrolling window, entering character, etc.)
+    handlers[k] = (() => (e: KeyboardEvent | undefined) => {
+      if (e) {
+        e.preventDefault(); // If we attempted to handle this, prevent default (scrolling window, entering character, etc.)
+      }
       dispatch({type: k});
     })(); // IIFE to bind k
   }
 
-  const onKeyDown = e => {
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     // TODO: This is not a robust check, but the spec is complicated
     // (https://www.w3.org/TR/uievents-key/#keys-whitespace)
-    if ((e.target.tagName.toLowerCase() !== 'input') && ([...e.key].length === 1) && !e.altkey && !e.ctrlKey && !e.metaKey && !COMMAND_CHARS.has(e.key)) {
+    if (((e.target as Element).tagName.toLowerCase() !== 'input') && ([...e.key].length === 1) && !e.altKey && !e.ctrlKey && !e.metaKey && !COMMAND_CHARS.has(e.key)) {
       // Interestingly, the key here will still end up going into the input element, which is what we want.
       dispatch({type: 'BEGIN_OVERWRITE_EDIT'});
     }
   };
 
-  const handleChangeProgramName = (newName) => {
+  const handleChangeProgramName = (newName: string) => {
     dispatch({type: 'SET_PROGRAM_NAME', newName});
   };
 
-  const handleLoadProgram = (program) => {
+  const handleLoadProgram = (program: ProgramNode) => {
     dispatch({type: 'LOAD_PROGRAM', program});
   };
 
-  const treeViewCtxData = {
+  const treeViewCtxData: TreeViewContextData = {
     selectedNode: nodeFromPath(state.program, state.selectionPath),
-    clipboardTopNode: (state.clipboardStack.length > 0) ? state.derivedLookups.streamIdToNode.get(state.clipboardStack[state.clipboardStack.length-1].streamId) : null,
-    clipboardRestNodes: state.clipboardStack.slice(0, -1).map(frame => state.derivedLookups.streamIdToNode.get(frame.streamId)),
-    streamIdToNode: state.derivedLookups.streamIdToNode,
-    functionIdToNode: state.derivedLookups.functionIdToNode,
+    // clipboardTopNode: (state.clipboardStack.length > 0) ? state.derivedLookups.streamIdToNode!.get(state.clipboardStack[state.clipboardStack.length-1].streamId) : null,
+    // clipboardRestNodes: state.clipboardStack.slice(0, -1).map(frame => state.derivedLookups.streamIdToNode!.get(frame.streamId)),
+    streamIdToNode: state.derivedLookups.streamIdToNode!,
+    functionIdToNode: state.derivedLookups.functionIdToNode!,
     mainState: state,
     dispatch,
-    onSelectNode: (node) => {
-      const path = state.derivedLookups.nodeToPath.get(node);
+    onSelectNode: (node: Node) => {
+      const path = state.derivedLookups.nodeToPath!.get(node);
       if (path) {
         dispatch({
           type: 'SET_PATH',
@@ -119,7 +124,7 @@ export default function Editor({ autoFocus }) {
     <div className="Editor">
       <HotKeys keyMap={keyMap} handlers={handlers}>
         <ObserveKeys only={CATCH_IN_INPUTS}>
-          <div className="Editor-workspace" onKeyDown={onKeyDown} tabIndex="0" ref={editorElem}>
+          <div className="Editor-workspace" onKeyDown={onKeyDown} tabIndex={0} ref={editorElem}>
             <TreeViewContextProvider value={treeViewCtxData}>
               <NodeView node={state.program.children[0]} />
             </TreeViewContextProvider>
@@ -132,3 +137,4 @@ export default function Editor({ autoFocus }) {
     </div>
   );
 }
+export default Editor;
