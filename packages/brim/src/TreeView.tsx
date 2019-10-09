@@ -107,7 +107,7 @@ const AppishNodeView: React.FC<AppishNodeProps> = ({node, mainText, boxColor, ch
   return (
     <div className="TreeView-appish-node">
       <div style={{gridRowStart: 1, gridRowEnd: rows+1, gridColumnStart: 1, gridColumnEnd: 2, background: boxColor }} />
-      <div className="TreeView-appish-node-main-text TreeView-common-padding TreeView-appish-node-no-pointer" style={{gridRow: 1, gridColumn: 1}}>{mainText}</div>
+      <div className="TreeView-name-bar-color TreeView-common-padding TreeView-appish-node-no-pointer" style={{gridRow: 1, gridColumn: 1}}>{mainText}</div>
       <>{children.map(({key, name, child}, idx) => (
         <React.Fragment key={key}>
           {(idx > 0) ? (
@@ -131,9 +131,9 @@ const UserFunctionDefinitionView: React.FC<{node: UserFunctionDefinitionNode}> =
   const expressions = node.children[1].children;
 
   return (
-    <div className={selectionClasses.concat(['TreeView-udf-node', 'TreeView-common-padding']).join(' ')} {...selectionHandlers} style={{backgroundColor: NORMAL_BOX_COLOR}}>
-      <div>ƒ</div>
-      <div className="TreeView-udf-node-main-container">
+    <div className={selectionClasses.concat(['TreeView-udf-node']).join(' ')} {...selectionHandlers} style={{backgroundColor: NORMAL_BOX_COLOR}}>
+      <div className="TreeView-name-bar-color TreeView-common-padding">ƒ</div>
+      <div className="TreeView-udf-node-main-container TreeView-common-padding">
         <div className="TreeView-udf-node-expressions">{expressions.map(child => (
           <NodeView key={child.id} node={child} />
         ))}</div>
