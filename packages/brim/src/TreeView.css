@@ -1,6 +1,9 @@
+.TreeView-common-padding {
+  padding: 0.1em 0.2em;
+}
+
 .TreeView-simple-node {
   width: max-content;
-  padding: 0.1em 0.2em;
 }
 
 .TreeView-appish-node {
@@ -11,10 +14,6 @@
 
 .TreeView-appish-node-main-text {
   background: #bbb;
-}
-
-.TreeView-appish-node-padding {
-  padding: 0.1em 0.2em;
 }
 
 .TreeView-appish-node-child-name {
@@ -46,7 +45,6 @@
 
 .TreeView-udf-node {
   width: max-content;
-  padding: 0.1em 0.2em;
 }
 
 .TreeView-udf-node-expressions {

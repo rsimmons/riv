@@ -96,7 +96,7 @@ const SimpleNodeView: React.FC<{node: Node, contents: React.ReactNode, boxColor:
   const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node);
 
   return (
-    <div className={selectionClasses.concat(['TreeView-simple-node']).join(' ')} {...selectionHandlers} style={{background: boxColor}}>{contents}</div>
+    <div className={selectionClasses.concat(['TreeView-simple-node', 'TreeView-common-padding']).join(' ')} {...selectionHandlers} style={{background: boxColor}}>{contents}</div>
   );
 };
 
@@ -107,13 +107,13 @@ const AppishNodeView: React.FC<AppishNodeProps> = ({node, mainText, boxColor, ch
   return (
     <div className="TreeView-appish-node">
       <div style={{gridRowStart: 1, gridRowEnd: rows+1, gridColumnStart: 1, gridColumnEnd: 2, background: boxColor }} />
-      <div className="TreeView-appish-node-main-text TreeView-appish-node-padding TreeView-appish-node-no-pointer" style={{gridRow: 1, gridColumn: 1}}>{mainText}</div>
+      <div className="TreeView-appish-node-main-text TreeView-common-padding TreeView-appish-node-no-pointer" style={{gridRow: 1, gridColumn: 1}}>{mainText}</div>
       <>{children.map(({key, name, child}, idx) => (
         <React.Fragment key={key}>
           {(idx > 0) ? (
             <div className="TreeView-appish-node-spacer-row" style={{gridRow: 2*idx+1, gridColumnStart: 1, gridColumnEnd: 5}} />
           ) : null}
-          <div className={name ? "TreeView-appish-node-child-name TreeView-appish-node-padding TreeView-appish-node-no-pointer" : ''} style={{gridRow: 2*idx+2, gridColumn: 1}}>{name}</div>
+          <div className={name ? "TreeView-appish-node-child-name TreeView-common-padding TreeView-appish-node-no-pointer" : ''} style={{gridRow: 2*idx+2, gridColumn: 1}}>{name}</div>
           <div className="TreeView-appish-node-child-cxn" style={{gridRow: 2*idx+2, gridColumn: 2}}><div className="TreeView-appish-node-child-cxn-inner" /></div>
           <div className="TreeView-appish-node-child-subtree" style={{gridRow: 2*idx+2, gridColumn: 3}}>{child}</div>
         </React.Fragment>
@@ -131,7 +131,7 @@ const UserFunctionDefinitionView: React.FC<{node: UserFunctionDefinitionNode}> =
   const expressions = node.children[1].children;
 
   return (
-    <div className={selectionClasses.concat(['TreeView-udf-node']).join(' ')} {...selectionHandlers} style={{backgroundColor: NORMAL_BOX_COLOR}}>
+    <div className={selectionClasses.concat(['TreeView-udf-node', 'TreeView-common-padding']).join(' ')} {...selectionHandlers} style={{backgroundColor: NORMAL_BOX_COLOR}}>
       <div>ƒ</div>
       <div className="TreeView-udf-node-main-container">
         <div className="TreeView-udf-node-expressions">{expressions.map(child => (
