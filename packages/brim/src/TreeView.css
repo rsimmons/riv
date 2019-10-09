@@ -1,10 +1,16 @@
-.TreeView-appish-node {
+.TreeView-simple-node {
   width: max-content;
+  padding: 0.1em 0.2em;
 }
 
-.TreeView-appish-node-with-children {
+.TreeView-appish-node {
+  width: max-content;
   display: grid;
   grid-auto-columns: max-content;
+}
+
+.TreeView-appish-node-main-text {
+  background: #bbb;
 }
 
 .TreeView-appish-node-padding {
@@ -21,7 +27,7 @@
 
 .TreeView-appish-node-child-cxn {
   width: 0.3em;
-  padding-top: 0.7em;
+  padding-top: 0.75em;
 }
 
 .TreeView-appish-node-child-cxn-inner {
@@ -29,7 +35,7 @@
 }
 
 .TreeView-appish-node-spacer-row {
-  height: 0.3em;
+  height: 0.5em;
 }
 
 .TreeView-udf-node-main-container {

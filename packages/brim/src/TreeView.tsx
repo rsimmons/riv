@@ -82,10 +82,9 @@ function useSelectable(node: Node | null): UseSelectableResult {
 }
 
 interface AppishNodeProps {
-  selectableNode: Node | null;
+  node: Node | null;
   mainText: React.ReactNode;
   boxColor: string;
-  childCxns?: boolean;
   children?: ReadonlyArray<{
     key: string | number | undefined,
     name: string | null,
@@ -93,38 +92,36 @@ interface AppishNodeProps {
   >;
 }
 
-const AppishNode: React.FC<AppishNodeProps> = ({selectableNode, mainText, boxColor, childCxns = true, children = []}) => {
-  const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(selectableNode);
+const SimpleNodeView: React.FC<{node: Node, contents: React.ReactNode, boxColor: string}> = ({node, contents, boxColor}) => {
+  const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node);
 
-  if (children.length > 0) {
-    const rows = 2*children.length - 1;
-    return (
-      <div className="TreeView-appish-node TreeView-appish-node-with-children">
-        <div style={{gridRowStart: 1, gridRowEnd: rows+1, gridColumnStart: 1, gridColumnEnd: 3, background: boxColor }} />
-        <div className="TreeView-appish-node-main-text TreeView-appish-node-padding TreeView-appish-node-no-pointer" style={{gridRowStart: 1, gridRowEnd: rows+1, gridColumn: 1}}>{mainText}</div>
-        <>{children.map(({key, name, child}, idx) => (
-          <React.Fragment key={key}>
-            {(idx > 0) ? (
-              <div className="TreeView-appish-node-spacer-row" style={{gridRow: 2*idx, gridColumnStart: 1, gridColumnEnd: 5}} />
-            ) : null}
-            <div className={name ? "TreeView-appish-node-child-name TreeView-appish-node-padding TreeView-appish-node-no-pointer" : ''} style={{gridRow: 2*idx+1, gridColumn: 2}}>{name}</div>
-            <div className={childCxns ? 'TreeView-appish-node-child-cxn' : ''} style={{gridRow: 2*idx+1, gridColumn: 3}}><div className="TreeView-appish-node-child-cxn-inner" /></div>
-            <div className="TreeView-appish-node-child-subtree" style={{gridRow: 2*idx+1, gridColumn: 4}}>{child}</div>
-          </React.Fragment>
-        ))}
-        </>
-        <div className={selectionClasses.join(' ')} style={{gridRowStart: 1, gridRowEnd: rows+1, gridColumnStart: 1, gridColumnEnd: 3}} {...selectionHandlers} />
-      </div>
-    );
-  } else {
-    return (
-      <div className="TreeView-appish-node">
-        <div className={selectionClasses.concat(['TreeView-appish-node-padding']).join(' ')} style={{background: boxColor}} {...selectionHandlers}>
-          {mainText}
-        </div>
-      </div>
-    );
-  }
+  return (
+    <div className={selectionClasses.concat(['TreeView-simple-node']).join(' ')} {...selectionHandlers} style={{background: boxColor}}>{contents}</div>
+  );
+};
+
+const AppishNodeView: React.FC<AppishNodeProps> = ({node, mainText, boxColor, children = []}) => {
+  const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node);
+
+  const rows = 2*children.length;
+  return (
+    <div className="TreeView-appish-node">
+      <div style={{gridRowStart: 1, gridRowEnd: rows+1, gridColumnStart: 1, gridColumnEnd: 2, background: boxColor }} />
+      <div className="TreeView-appish-node-main-text TreeView-appish-node-padding TreeView-appish-node-no-pointer" style={{gridRow: 1, gridColumn: 1}}>{mainText}</div>
+      <>{children.map(({key, name, child}, idx) => (
+        <React.Fragment key={key}>
+          {(idx > 0) ? (
+            <div className="TreeView-appish-node-spacer-row" style={{gridRow: 2*idx+1, gridColumnStart: 1, gridColumnEnd: 5}} />
+          ) : null}
+          <div className={name ? "TreeView-appish-node-child-name TreeView-appish-node-padding TreeView-appish-node-no-pointer" : ''} style={{gridRow: 2*idx+2, gridColumn: 1}}>{name}</div>
+          <div className="TreeView-appish-node-child-cxn" style={{gridRow: 2*idx+2, gridColumn: 2}}><div className="TreeView-appish-node-child-cxn-inner" /></div>
+          <div className="TreeView-appish-node-child-subtree" style={{gridRow: 2*idx+2, gridColumn: 3}}>{child}</div>
+        </React.Fragment>
+      ))}
+      </>
+      <div className={selectionClasses.join(' ')} style={{gridRowStart: 1, gridRowEnd: rows+1, gridColumnStart: 1, gridColumnEnd: 2}} {...selectionHandlers} />
+    </div>
+  );
 };
 
 const UserFunctionDefinitionView: React.FC<{node: UserFunctionDefinitionNode}> = ({ node }) => {
@@ -169,13 +166,13 @@ export const NodeView: React.FC<{node: Node}> = ({ node }) => {
 
   switch (node.type) {
     case 'UndefinedLiteral':
-      return <AppishNode selectableNode={node} mainText={<span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>} boxColor={'red'} />
+      return <SimpleNodeView node={node} contents={<span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>} boxColor={'red'} />
 
     case 'NumberLiteral':
-      return <AppishNode selectableNode={node} mainText={node.value.toString()} boxColor="#cce8cc" />
+      return <SimpleNodeView node={node} contents={node.value.toString()} boxColor="#cce8cc" />
 
     case 'ArrayLiteral':
-      return <AppishNode selectableNode={node} mainText="[ ]" boxColor={NORMAL_BOX_COLOR} children={makeAnonChildrenViews()} />
+      return <AppishNodeView node={node} mainText="[ ]" boxColor={NORMAL_BOX_COLOR} children={makeAnonChildrenViews()} />
 
     case 'Application': {
       const functionNode = ctxData.functionIdToNode.get(node.functionId);
@@ -193,7 +190,7 @@ export const NodeView: React.FC<{node: Node}> = ({ node }) => {
         child: <NodeView node={node.children[idx]} />
       }));
 
-      return <AppishNode selectableNode={node} mainText={<strong>{displayedName}</strong>} boxColor={NORMAL_BOX_COLOR} children={childrenViews} />
+      return <AppishNodeView node={node} mainText={<strong>{displayedName}</strong>} boxColor={NORMAL_BOX_COLOR} children={childrenViews} />
     }
 
     case 'StreamReference': {
@@ -202,14 +199,14 @@ export const NodeView: React.FC<{node: Node}> = ({ node }) => {
         throw new Error();
       }
       const displayedName = isNamedNode(targetExpressionNode) ? targetExpressionNode.name : ('<stream ' + node.targetStreamId + '>');
-      return <AppishNode selectableNode={node} mainText={displayedName} boxColor={STREAM_NAMEISH_BOX_COLOR} />
+      return <SimpleNodeView node={node} contents={displayedName} boxColor={STREAM_NAMEISH_BOX_COLOR} />
     }
 
     case 'StreamIndirection':
-      return <AppishNode selectableNode={node} mainText={<em>{node.name}</em>} boxColor={STREAM_NAMEISH_BOX_COLOR} children={makeAnonChildrenViews()} />
+      return <AppishNodeView node={node} mainText={<em>{node.name}</em>} boxColor={STREAM_NAMEISH_BOX_COLOR} children={makeAnonChildrenViews()} />
 
     case 'StreamParameter':
-      return <AppishNode selectableNode={node} mainText={node.name} boxColor={'transparent'} />
+      return <SimpleNodeView node={node} contents={node.name} boxColor={'transparent'} />
 
     case 'UserFunctionDefinition':
       return <UserFunctionDefinitionView node={node} />
