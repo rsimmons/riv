@@ -81,15 +81,18 @@ function useSelectable(node: Node | null): UseSelectableResult {
   };
 }
 
+interface ChildView {
+  key: string | number | undefined;
+  name: string | null;
+  child: React.ReactNode;
+}
+
 interface AppishNodeProps {
   node: Node | null;
   mainText: React.ReactNode;
   boxColor: string;
-  children?: ReadonlyArray<{
-    key: string | number | undefined,
-    name: string | null,
-    child: React.ReactNode}
-  >;
+  streamChildren: ReadonlyArray<ChildView>;
+  functionChildren: ReadonlyArray<ChildView>;
 }
 
 const SimpleNodeView: React.FC<{node: Node, contents: React.ReactNode, boxColor: string}> = ({node, contents, boxColor}) => {
@@ -100,26 +103,35 @@ const SimpleNodeView: React.FC<{node: Node, contents: React.ReactNode, boxColor:
   );
 };
 
-const AppishNodeView: React.FC<AppishNodeProps> = ({node, mainText, boxColor, children = []}) => {
+const AppishNodeView: React.FC<AppishNodeProps> = ({node, mainText, boxColor, streamChildren, functionChildren}) => {
   const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node);
 
-  const rows = 2*children.length;
+  const rowsForArray = (a: ReadonlyArray<any>): number => (a.length === 0) ? 0 : (2*a.length - 1);
+
+  const totalRows = 1 + rowsForArray(streamChildren) + rowsForArray(functionChildren);
   return (
     <div className="TreeView-appish-node">
-      <div style={{gridRowStart: 1, gridRowEnd: rows+1, gridColumnStart: 1, gridColumnEnd: 2, background: boxColor }} />
-      <div className="TreeView-name-bar-color TreeView-common-padding TreeView-appish-node-no-pointer" style={{gridRow: 1, gridColumn: 1}}>{mainText}</div>
-      <>{children.map(({key, name, child}, idx) => (
+      <div className={selectionClasses.join(' ')} style={{gridRowStart: 1, gridRowEnd: totalRows+1, gridColumnStart: 1, gridColumnEnd: 2, background: boxColor }} {...selectionHandlers} />
+      <div className="TreeView-name-bar TreeView-common-padding" style={{gridRow: 1, gridColumn: 1}}>{mainText}</div>
+      <>{streamChildren.map(({key, name, child}, idx) => (
         <React.Fragment key={key}>
           {(idx > 0) ? (
-            <div className="TreeView-appish-node-spacer-row" style={{gridRow: 2*idx+1, gridColumnStart: 1, gridColumnEnd: 5}} />
+            <div className="TreeView-appish-node-spacer-row" style={{gridRow: 1 + 2*idx, gridColumnStart: 1, gridColumnEnd: 5}} />
           ) : null}
-          <div className={name ? "TreeView-appish-node-child-name TreeView-common-padding TreeView-appish-node-no-pointer" : ''} style={{gridRow: 2*idx+2, gridColumn: 1}}>{name}</div>
-          <div className="TreeView-appish-node-child-cxn" style={{gridRow: 2*idx+2, gridColumn: 2}}><div className="TreeView-appish-node-child-cxn-inner" /></div>
-          <div className="TreeView-appish-node-child-subtree" style={{gridRow: 2*idx+2, gridColumn: 3}}>{child}</div>
+          <div className="TreeView-appish-node-child-name TreeView-common-padding" style={{gridRow: 2*idx+2, gridColumn: 1}}>{name}</div>
+          <div className="TreeView-appish-node-child-cxn" style={{gridRow: 1 + 2*idx + 1, gridColumn: 2}}><div className="TreeView-appish-node-child-cxn-inner" /></div>
+          <div className="TreeView-appish-node-child-subtree" style={{gridRow: 1 + 2*idx + 1, gridColumn: 3}}>{child}</div>
         </React.Fragment>
-      ))}
-      </>
-      <div className={selectionClasses.join(' ')} style={{gridRowStart: 1, gridRowEnd: rows+1, gridColumnStart: 1, gridColumnEnd: 2}} {...selectionHandlers} />
+      ))}</>
+      <>{functionChildren.map(({key, name, child}, idx) => (
+        <React.Fragment key={key}>
+          {(idx > 0) ? (
+            <div className="TreeView-appish-node-spacer-row" style={{gridRow: 1 + rowsForArray(streamChildren) + 2*idx, gridColumnStart: 1, gridColumnEnd: 5}} />
+          ) : null}
+          <div className="TreeView-appish-node-function-argument" style={{gridRow: 1 + rowsForArray(streamChildren) + 2*idx+1, gridColumn: 1}}><div className="TreeView-appish-node-function-argument-inner">{child}</div></div>
+        </React.Fragment>
+      ))}</>
+      {/* <div className={selectionClasses.concat(['TreeView-appish-node-selection-overlay']).join(' ')} style={{gridRowStart: 1, gridRowEnd: totalRows+1, gridColumnStart: 1, gridColumnEnd: 2}} {...selectionHandlers} /> */}
     </div>
   );
 };
@@ -132,7 +144,7 @@ const UserFunctionDefinitionView: React.FC<{node: UserFunctionDefinitionNode}> =
 
   return (
     <div className={selectionClasses.concat(['TreeView-udf-node']).join(' ')} {...selectionHandlers} style={{backgroundColor: NORMAL_BOX_COLOR}}>
-      <div className="TreeView-name-bar-color TreeView-common-padding">ƒ</div>
+      <div className="TreeView-name-bar TreeView-common-padding">ƒ</div>
       <div className="TreeView-udf-node-main-container TreeView-common-padding">
         <div className="TreeView-udf-node-expressions">{expressions.map(child => (
           <NodeView key={child.id} node={child} />
@@ -172,7 +184,7 @@ export const NodeView: React.FC<{node: Node}> = ({ node }) => {
       return <SimpleNodeView node={node} contents={node.value.toString()} boxColor="#cce8cc" />
 
     case 'ArrayLiteral':
-      return <AppishNodeView node={node} mainText="[ ]" boxColor={NORMAL_BOX_COLOR} children={makeAnonChildrenViews()} />
+      return <AppishNodeView node={node} mainText="[ ]" boxColor={NORMAL_BOX_COLOR} streamChildren={makeAnonChildrenViews()} functionChildren={[]} />
 
     case 'Application': {
       const functionNode = ctxData.functionIdToNode.get(node.functionId);
@@ -184,13 +196,23 @@ export const NodeView: React.FC<{node: Node}> = ({ node }) => {
       if (functionNode.signature.parameters.length !== node.children.length) {
         throw new Error('params and args length mismatch');
       }
-      const childrenViews = functionNode.signature.parameters.map((param, idx) => ({
-        key: param.name,
-        name: param.name.startsWith('_') ? null : param.name,
-        child: <NodeView node={node.children[idx]} />
-      }));
 
-      return <AppishNodeView node={node} mainText={<strong>{displayedName}</strong>} boxColor={NORMAL_BOX_COLOR} children={childrenViews} />
+      const streamChildrenViews: Array<ChildView> = [];
+      const functionChildrenViews: Array<ChildView> = [];
+      functionNode.signature.parameters.forEach((param, idx) => {
+        const childView = {
+          key: param.name,
+          name: param.name.startsWith('_') ? null : param.name,
+          child: <NodeView node={node.children[idx]} />
+        };
+        if (param.type === 'stream') {
+          streamChildrenViews.push(childView);
+        } else {
+          functionChildrenViews.push(childView);
+        }
+      });
+
+      return <AppishNodeView node={node} mainText={<strong>{displayedName}</strong>} boxColor={NORMAL_BOX_COLOR} streamChildren={streamChildrenViews} functionChildren={functionChildrenViews} />
     }
 
     case 'StreamReference': {
@@ -203,7 +225,7 @@ export const NodeView: React.FC<{node: Node}> = ({ node }) => {
     }
 
     case 'StreamIndirection':
-      return <AppishNodeView node={node} mainText={<em>{node.name}</em>} boxColor={STREAM_NAMEISH_BOX_COLOR} children={makeAnonChildrenViews()} />
+      return <AppishNodeView node={node} mainText={<em>{node.name}</em>} boxColor={STREAM_NAMEISH_BOX_COLOR} streamChildren={makeAnonChildrenViews()} functionChildren={[]} />
 
     case 'StreamParameter':
       return <SimpleNodeView node={node} contents={node.name} boxColor={'transparent'} />

@@ -1,3 +1,7 @@
+.TreeView-no-pointer {
+  pointer-events: none;
+}
+
 .TreeView-common-padding {
   padding: 0.1em 0.2em;
 }
@@ -12,15 +16,23 @@
   grid-auto-columns: max-content;
 }
 
-.TreeView-name-bar-color {
+.TreeView-name-bar {
   background: #bbb;
+  pointer-events: none;
+}
+
+.TreeView-appish-node-function-argument {
+  padding: 0.75em;
+  pointer-events: none;
+}
+
+.TreeView-appish-node-function-argument-inner {
+  box-shadow: 0px 2px 4px rgba(0,0,0,0.5);
+  pointer-events: auto;
 }
 
 .TreeView-appish-node-child-name {
   text-align: right;
-}
-
-.TreeView-appish-node-no-pointer {
   pointer-events: none;
 }
 
@@ -35,6 +47,11 @@
 
 .TreeView-appish-node-spacer-row {
   height: 0.5em;
+  pointer-events: none;
+}
+
+.TreeView-appish-node-selection-overlay {
+  pointer-events: none;
 }
 
 .TreeView-udf-node-main-container {
