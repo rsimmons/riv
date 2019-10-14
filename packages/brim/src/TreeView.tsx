@@ -6,7 +6,8 @@ import { StreamID, FunctionID } from './Identifier';
 import { State } from './State';
 
 const NORMAL_BOX_COLOR = '#d8d8d8';
-const STREAM_NAMEISH_BOX_COLOR = '#ccd9e8';
+const STREAM_REFERENCE_BOX_COLOR = '#ccd9e8';
+const STREAM_INDIRECTION_BOX_COLOR = '#8cbcf2';
 
 export interface TreeViewContextData {
   selectedNode: Node,
@@ -160,7 +161,7 @@ const UserFunctionDefinitionView: React.FC<{node: UserFunctionDefinitionNode, in
 const StreamIndirectionView: React.FC<{node: StreamIndirectionNode}> = ({node}) => {
   return (
     <div className="TreeView-stream-indirection">
-      <div className="TreeView-stream-indirection-name TreeView-common-padding" style={{background: STREAM_NAMEISH_BOX_COLOR}}>{node.name}</div>
+      <div className="TreeView-stream-indirection-name TreeView-common-padding" style={{background: STREAM_INDIRECTION_BOX_COLOR}}>{node.name}</div>
       <div>=</div>
       <div><NodeView node={node.children[0]} /></div>
     </div>
@@ -232,7 +233,7 @@ export const NodeView: React.FC<{node: Node, inheritedName?: string}> = ({ node,
         throw new Error();
       }
       const displayedName = isNamedNode(targetExpressionNode) ? targetExpressionNode.name : ('<stream ' + node.targetStreamId + '>');
-      return <SimpleNodeView node={node} contents={displayedName} boxColor={STREAM_NAMEISH_BOX_COLOR} />
+      return <SimpleNodeView node={node} contents={displayedName} boxColor={STREAM_REFERENCE_BOX_COLOR} />
     }
 
     case 'StreamIndirection':

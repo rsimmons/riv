@@ -92,10 +92,6 @@
   flex-direction: row;
 }
 
-.TreeView-stream-indirection-name {
-  font-style: italic;
-}
-
 /* NOTE: This is awkward that we reference Editor classes, but don't know a nice way to fix */
 .Editor-workspace:focus .TreeView-selected, .ExpressionChooser-input:focus {
   outline: black solid 2px;
