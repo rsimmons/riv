@@ -159,9 +159,11 @@ const UserFunctionDefinitionView: React.FC<{node: UserFunctionDefinitionNode, in
 }
 
 const StreamIndirectionView: React.FC<{node: StreamIndirectionNode}> = ({node}) => {
+  const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node);
+
   return (
     <div className="TreeView-stream-indirection">
-      <div className="TreeView-stream-indirection-name TreeView-common-padding" style={{background: STREAM_INDIRECTION_BOX_COLOR}}>{node.name}</div>
+      <div className={selectionClasses.concat(['TreeView-stream-indirection-name', 'TreeView-common-padding']).join(' ')} style={{background: STREAM_INDIRECTION_BOX_COLOR}} {...selectionHandlers} >{node.name}</div>
       <div>=</div>
       <div><NodeView node={node.children[0]} /></div>
     </div>
