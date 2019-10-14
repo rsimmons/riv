@@ -37,13 +37,25 @@
   pointer-events: none;
 }
 
-.TreeView-appish-node-child-cxn {
+.TreeView-appish-node-child-cxn-line {
   width: 0.3em;
   padding-top: 0.75em;
 }
 
-.TreeView-appish-node-child-cxn-inner {
+.TreeView-appish-node-child-cxn-line > * {
   border-top: 1px solid #999;
+}
+
+.TreeView-appish-node-child-cxn-triangle {
+  padding-top: 0.5em;
+}
+
+.TreeView-appish-node-child-cxn-triangle > * {
+  width: 0;
+  height: 0;
+  border-top: 0.3em solid transparent;
+  border-bottom: 0.3em solid transparent;
+  border-right: 0.5em solid black;
 }
 
 .TreeView-appish-node-spacer-row {

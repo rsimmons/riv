@@ -120,7 +120,7 @@ const AppishNodeView: React.FC<AppishNodeProps> = ({node, name, boxColor, stream
             <div className="TreeView-appish-node-spacer-row" style={{gridRow: 1 + 2*idx, gridColumnStart: 1, gridColumnEnd: 5}} />
           ) : null}
           <div className="TreeView-appish-node-child-name TreeView-common-padding" style={{gridRow: 2*idx+2, gridColumn: 1}}>{name}</div>
-          <div className="TreeView-appish-node-child-cxn" style={{gridRow: 1 + 2*idx + 1, gridColumn: 2}}><div className="TreeView-appish-node-child-cxn-inner" /></div>
+          <div className="TreeView-appish-node-child-cxn-triangle" style={{gridRow: 1 + 2*idx + 1, gridColumn: 2}}><div /></div>
           <div className="TreeView-appish-node-child-subtree" style={{gridRow: 1 + 2*idx + 1, gridColumn: 3}}>{child}</div>
         </React.Fragment>
       ))}</>
