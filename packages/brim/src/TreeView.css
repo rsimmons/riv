@@ -90,6 +90,7 @@
 }
 
 .TreeView-udf-node-parameters {
+  flex: 1; /* absorb extra space if UDF name is long */
   display: flex;
   flex-direction: column;
   align-items: flex-end;
