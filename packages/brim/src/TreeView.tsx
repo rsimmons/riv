@@ -83,13 +83,13 @@ function useSelectable(node: Node | null): UseSelectableResult {
 
 interface ChildView {
   key: string | number | undefined;
-  name: string | null;
+  name: string | undefined;
   child: React.ReactNode;
 }
 
 interface AppishNodeProps {
   node: Node | null;
-  mainText: React.ReactNode;
+  name: React.ReactNode;
   boxColor: string;
   streamChildren: ReadonlyArray<ChildView>;
   functionChildren: ReadonlyArray<ChildView>;
@@ -103,7 +103,7 @@ const SimpleNodeView: React.FC<{node: Node, contents: React.ReactNode, boxColor:
   );
 };
 
-const AppishNodeView: React.FC<AppishNodeProps> = ({node, mainText, boxColor, streamChildren, functionChildren}) => {
+const AppishNodeView: React.FC<AppishNodeProps> = ({node, name, boxColor, streamChildren, functionChildren}) => {
   const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node);
 
   const rowsForArray = (a: ReadonlyArray<any>): number => (a.length === 0) ? 0 : (2*a.length - 1);
@@ -112,7 +112,7 @@ const AppishNodeView: React.FC<AppishNodeProps> = ({node, mainText, boxColor, st
   return (
     <div className="TreeView-appish-node">
       <div className={selectionClasses.join(' ')} style={{gridRowStart: 1, gridRowEnd: totalRows+1, gridColumnStart: 1, gridColumnEnd: 2, background: boxColor }} {...selectionHandlers} />
-      <div className="TreeView-name-bar TreeView-common-padding" style={{gridRow: 1, gridColumn: 1}}>{mainText}</div>
+      <div className="TreeView-name-bar TreeView-common-padding" style={{gridRow: 1, gridColumn: 1}}>{name}</div>
       <>{streamChildren.map(({key, name, child}, idx) => (
         <React.Fragment key={key}>
           {(idx > 0) ? (
@@ -136,7 +136,7 @@ const AppishNodeView: React.FC<AppishNodeProps> = ({node, mainText, boxColor, st
   );
 };
 
-const UserFunctionDefinitionView: React.FC<{node: UserFunctionDefinitionNode}> = ({ node }) => {
+const UserFunctionDefinitionView: React.FC<{node: UserFunctionDefinitionNode, inheritedName?: string}> = ({ node, inheritedName }) => {
   const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node);
 
   const parameters = node.children[0].children;
@@ -144,7 +144,7 @@ const UserFunctionDefinitionView: React.FC<{node: UserFunctionDefinitionNode}> =
 
   return (
     <div className={selectionClasses.concat(['TreeView-udf-node']).join(' ')} {...selectionHandlers} style={{backgroundColor: NORMAL_BOX_COLOR}}>
-      <div className="TreeView-name-bar TreeView-common-padding">ƒ</div>
+      <div className="TreeView-name-bar TreeView-common-padding">{node.name || (inheritedName || 'ƒ')}</div>
       <div className="TreeView-udf-node-main-container TreeView-common-padding">
         <div className="TreeView-udf-node-expressions">{expressions.map(child => (
           <NodeView key={child.id} node={child} />
@@ -157,7 +157,7 @@ const UserFunctionDefinitionView: React.FC<{node: UserFunctionDefinitionNode}> =
   );
 }
 
-export const NodeView: React.FC<{node: Node}> = ({ node }) => {
+export const NodeView: React.FC<{node: Node, inheritedName?: string}> = ({ node, inheritedName }) => {
   const ctxData = useContext(TreeViewContext);
   if (!ctxData) {
     throw new Error();
@@ -172,7 +172,7 @@ export const NodeView: React.FC<{node: Node}> = ({ node }) => {
 
   const makeAnonChildrenViews = () => children.map((child, idx) => ({
     key: idx,
-    name: null,
+    name: undefined,
     child: <NodeView node={child} />
   }));
 
@@ -184,7 +184,7 @@ export const NodeView: React.FC<{node: Node}> = ({ node }) => {
       return <SimpleNodeView node={node} contents={node.value.toString()} boxColor="#cce8cc" />
 
     case 'ArrayLiteral':
-      return <AppishNodeView node={node} mainText="[ ]" boxColor={NORMAL_BOX_COLOR} streamChildren={makeAnonChildrenViews()} functionChildren={[]} />
+      return <AppishNodeView node={node} name="[ ]" boxColor={NORMAL_BOX_COLOR} streamChildren={makeAnonChildrenViews()} functionChildren={[]} />
 
     case 'Application': {
       const functionNode = ctxData.functionIdToNode.get(node.functionId);
@@ -200,10 +200,11 @@ export const NodeView: React.FC<{node: Node}> = ({ node }) => {
       const streamChildrenViews: Array<ChildView> = [];
       const functionChildrenViews: Array<ChildView> = [];
       functionNode.signature.parameters.forEach((param, idx) => {
+        const displayName = param.name.startsWith('_') ? undefined : param.name;
         const childView = {
           key: param.name,
-          name: param.name.startsWith('_') ? null : param.name,
-          child: <NodeView node={node.children[idx]} />
+          name: displayName,
+          child: <NodeView node={node.children[idx]} inheritedName={displayName} />
         };
         if (param.type === 'stream') {
           streamChildrenViews.push(childView);
@@ -212,7 +213,7 @@ export const NodeView: React.FC<{node: Node}> = ({ node }) => {
         }
       });
 
-      return <AppishNodeView node={node} mainText={<strong>{displayedName}</strong>} boxColor={NORMAL_BOX_COLOR} streamChildren={streamChildrenViews} functionChildren={functionChildrenViews} />
+      return <AppishNodeView node={node} name={displayedName} boxColor={NORMAL_BOX_COLOR} streamChildren={streamChildrenViews} functionChildren={functionChildrenViews} />
     }
 
     case 'StreamReference': {
@@ -225,13 +226,13 @@ export const NodeView: React.FC<{node: Node}> = ({ node }) => {
     }
 
     case 'StreamIndirection':
-      return <AppishNodeView node={node} mainText={<em>{node.name}</em>} boxColor={STREAM_NAMEISH_BOX_COLOR} streamChildren={makeAnonChildrenViews()} functionChildren={[]} />
+      return <AppishNodeView node={node} name={node.name} boxColor={STREAM_NAMEISH_BOX_COLOR} streamChildren={makeAnonChildrenViews()} functionChildren={[]} />
 
     case 'StreamParameter':
       return <SimpleNodeView node={node} contents={node.name} boxColor={'transparent'} />
 
     case 'UserFunctionDefinition':
-      return <UserFunctionDefinitionView node={node} />
+      return <UserFunctionDefinitionView node={node} inheritedName={inheritedName} />
 
     default:
       throw new Error();

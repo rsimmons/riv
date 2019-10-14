@@ -19,6 +19,7 @@
 .TreeView-name-bar {
   background: #bbb;
   pointer-events: none;
+  font-weight: bold;
 }
 
 .TreeView-appish-node-function-argument {

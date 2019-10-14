@@ -70,7 +70,7 @@ const nativeFunctions: Array<[string, string, FunctionSignature, Function]> = [
       type: 'stream',
     },
     {
-      name: 'func',
+      name: 'transform one value',
       type: {
         parameters: [
           {
@@ -85,7 +85,7 @@ const nativeFunctions: Array<[string, string, FunctionSignature, Function]> = [
 
   ['audioDriver', 'play computed audio', {parameters: [
     {
-      name: '_func',
+      name: 'compute one sample',
       type: {
         parameters: [
           {
