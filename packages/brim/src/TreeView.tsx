@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState } from 'react';
-import { Node, StreamCreationNode, FunctionDefinitionNode, isNamedNode, UserFunctionDefinitionNode } from './Tree';
+import { Node, StreamCreationNode, FunctionDefinitionNode, isNamedNode, UserFunctionDefinitionNode, StreamIndirectionNode } from './Tree';
 import ExpressionChooser from './ExpressionChooser';
 import './TreeView.css';
 import { StreamID, FunctionID } from './Identifier';
@@ -157,6 +157,16 @@ const UserFunctionDefinitionView: React.FC<{node: UserFunctionDefinitionNode, in
   );
 }
 
+const StreamIndirectionView: React.FC<{node: StreamIndirectionNode}> = ({node}) => {
+  return (
+    <div className="TreeView-stream-indirection">
+      <div className="TreeView-stream-indirection-name TreeView-common-padding" style={{background: STREAM_NAMEISH_BOX_COLOR}}>{node.name}</div>
+      <div>=</div>
+      <div><NodeView node={node.children[0]} /></div>
+    </div>
+  );
+}
+
 export const NodeView: React.FC<{node: Node, inheritedName?: string}> = ({ node, inheritedName }) => {
   const ctxData = useContext(TreeViewContext);
   if (!ctxData) {
@@ -226,7 +236,7 @@ export const NodeView: React.FC<{node: Node, inheritedName?: string}> = ({ node,
     }
 
     case 'StreamIndirection':
-      return <AppishNodeView node={node} name={node.name} boxColor={STREAM_NAMEISH_BOX_COLOR} streamChildren={makeAnonChildrenViews()} functionChildren={[]} />
+      return <StreamIndirectionView node={node} />
 
     case 'StreamParameter':
       return <SimpleNodeView node={node} contents={node.name} boxColor={'transparent'} />
