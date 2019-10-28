@@ -3,7 +3,8 @@ import { EssentialDefinition } from './EssentialDefinition';
 
 import { StreamID, FunctionID } from './Identifier';
 
-import { Node, ProgramNode, NativeFunctionDefinitionNode, StreamCreationNode, FunctionDefinitionNode } from './Tree';
+import { Node, ProgramNode, FunctionDefinitionNode, StreamDefinitionNode } from './Tree';
+import { RivFunctionDefinition } from './newEssentialDefinition';
 
 export function pathIsPrefix(a: Path, b: Path): boolean {
   if (a.length > b.length) {
@@ -38,18 +39,17 @@ export interface ClipboardStackFrame {
 }
 
 export interface State {
+  readonly mainDefinition: RivFunctionDefinition;
   readonly program: ProgramNode;
   readonly selectionPath: Path;
   readonly editingSelected: NodeEditState;
-  readonly nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>;
   readonly derivedLookups: {
-    streamIdToNode: ReadonlyMap<StreamID, StreamCreationNode> | null;
+    streamIdToNode: ReadonlyMap<StreamID, StreamDefinitionNode> | null;
     functionIdToNode: ReadonlyMap<FunctionID, FunctionDefinitionNode> | null;
     nodeToPath: ReadonlyMap<Node, Path> | null;
   };
   readonly liveMain: {
     context: ExecutionContext;
-    compiledDefinition: EssentialDefinition | null;
     updateCompiledDefinition: (newDefinition: EssentialDefinition) => void;
   } | null;
   readonly undoStack: ReadonlyArray<UndoStackFrame>;

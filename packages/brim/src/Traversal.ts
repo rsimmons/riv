@@ -1,5 +1,5 @@
 import { Path, pathIsPrefix } from './State';
-import { Node, isUserFunctionDefinitionNode } from './Tree';
+import { Node, isRivFunctionDefinitionNode } from './Tree';
 import { FunctionID } from './Identifier';
 
 type TraversalVisitor = (node: Node, path: Path) => [boolean, Node];
@@ -18,7 +18,7 @@ function recursiveTraverseTree(node: Node, path: Path, options: TraversalOptions
   let newNode: Node = node;
 
   // Recurse
-  if (!(options.onlyWithinFunctionId && (isUserFunctionDefinitionNode(node) && (node.id !== options.onlyWithinFunctionId)))) {
+  if (!(options.onlyWithinFunctionId && (isRivFunctionDefinitionNode(node) && (node.definition.id !== options.onlyWithinFunctionId)))) {
     let exited = false;
 
     let newChildren: Array<Node> = [];

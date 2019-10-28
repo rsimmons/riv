@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Children } from 'react';
 import './ExpressionChooser.css';
-import { Node, FunctionDefinitionNode, UserFunctionDefinitionNode, isStreamCreationNode, StreamCreationNode, isNamedNode, isStreamIndirectionNode } from './Tree';
+import { Node, FunctionDefinitionNode, StreamParameterNode, StreamExpressionNode, StreamDefinitionNode } from './Tree';
 import { fuzzy_match } from './vendor/fts_fuzzy_match';
 import { environmentForSelectedNode } from './EditReducer';
 import { generateStreamId, generateFunctionId } from './Identifier';
@@ -12,7 +12,7 @@ interface UndefinedChoice {
 
 interface StreamRefChoice {
   readonly type: 'streamref';
-  readonly node: StreamCreationNode;
+  readonly node: StreamDefinitionNode;
 }
 
 interface StreamIndChoice {
@@ -129,13 +129,13 @@ function Choice({ choice }: ChoiceProps) {
       return <span>{choice.value}</span>
 
     case 'streamref':
-      return <span><em>S</em> {isNamedNode(choice.node) ? choice.node.name : <em>unnamed</em>} <small>(id {choice.node.id})</small></span>
+      return <span><em>S</em> {choice.node.definition.desc || <em>unnamed</em>} <small>(id {choice.node.definition.id})</small></span>
 
     case 'streamind':
       return <span><em>I</em> {choice.name}</span>
 
     case 'function':
-      return <span><em>F</em> {choice.node.name}({choice.node.signature.parameters.map(param => (param.name.startsWith('_') ? '\u25A1' : param.name)).join(', ')})</span>
+      return <span><em>F</em> {choice.node.definition.desc}({choice.node.definition.signature.streamParameters.map(param => (param.name.startsWith('_') ? '\u25A1' : param.name)).join(', ')})</span>
 
     default:
       throw new Error();
@@ -167,18 +167,23 @@ const ExpressionChooser: React.FC<{mainState: State, dispatch: (action: any) => 
 
     // Initialize text based on node
     switch (initFromNode.type) {
-      case 'UndefinedLiteral':
-        return '';
+      case 'SimpleStreamDefinition': {
+        switch (initFromNode.definition.type) {
+          case 'und':
+            return '';
 
-      case 'NumberLiteral':
-        return initFromNode.value.toString();
+          case 'num':
+            return initFromNode.definition.value.toString();
+
+          default:
+            throw new Error();
+        }
+      }
 
       case 'StreamReference':
       case 'Application':
         return ''; // Don't prefill with text, but in case we change our mind, old code is below
 
-      case 'StreamIndirection':
-        return initFromNode.name || '';
 /*
       case 'StreamReference': {
         const targetExpressionNode = mainState.derivedLookups.streamIdToNode.get(initFromNode.targetStreamId);
@@ -198,6 +203,7 @@ const ExpressionChooser: React.FC<{mainState: State, dispatch: (action: any) => 
 
   // Update the expression node to reflect the current choice
   const realizeChoice = (state: DropdownState): void => {
+    /*
     const choice = state.choices[state.index];
 
     if (!mainState.editingSelected) {
@@ -231,7 +237,6 @@ const ExpressionChooser: React.FC<{mainState: State, dispatch: (action: any) => 
       case 'streamref':
         newNode = {
           type: 'StreamReference',
-          id: originalNode.id,
           children: [],
           targetStreamId: choice.node.id,
         };
@@ -252,64 +257,64 @@ const ExpressionChooser: React.FC<{mainState: State, dispatch: (action: any) => 
         };
         break;
 
-      case 'function':
+      case 'function': {
+        const streamArgs: Array<StreamExpressionNode> = choice.node.signature.streamParameters.map(param => {
+          return {
+            type: 'UndefinedLiteral',
+            id: generateStreamId(),
+            children: [],
+          };
+        });
+
+        const functionArgs = choice.node.signature.functionParameters.map(param => {
+          const psig = param.signature;
+          const fdef: UserFunctionDefinitionNode = {
+            type: 'UserFunctionDefinition',
+            id: generateFunctionId(),
+            name: null,
+            signature: psig,
+            children: [
+              {
+                type: 'UserFunctionDefinitionStreamParameters',
+                children: psig.streamParameters.map(param => {
+                  return {
+                    type: 'StreamParameter',
+                    id: generateStreamId(),
+                    name: param.name,
+                    children: [],
+                  };
+                }),
+              },
+              {
+                type: 'UserFunctionDefinitionExpressions',
+                children: [
+                  {
+                    type: 'UndefinedLiteral',
+                    id: generateStreamId(),
+                    children: [],
+                  },
+                ]
+              }
+            ],
+          };
+          return fdef;
+        });
+
         newNode = {
           type: 'Application',
           id: originalNode.id,
           functionId: choice.node.id,
-          children: choice.node.signature.parameters.map(param => {
-            if (param.type === 'stream') {
-              return {
-                type: 'UndefinedLiteral',
-                id: generateStreamId(),
-                children: [],
-              };
-            } else {
-              const psig = param.type;
-              const fdef: UserFunctionDefinitionNode = {
-                type: 'UserFunctionDefinition',
-                id: generateFunctionId(),
-                name: null,
-                signature: psig,
-                children: [
-                  {
-                    type: 'UserFunctionDefinitionParameters',
-                    children: psig.parameters.map(param => {
-                      if (param.type === 'stream') {
-                        return {
-                          type: 'StreamParameter',
-                          id: generateStreamId(),
-                          name: param.name,
-                          children: [],
-                        };
-                      } else {
-                        throw new Error('unimplemented');
-                      }
-                    }),
-                  },
-                  {
-                    type: 'UserFunctionDefinitionExpressions',
-                    children: [
-                      {
-                        type: 'UndefinedLiteral',
-                        id: generateStreamId(),
-                        children: [],
-                      },
-                    ]
-                  }
-                ],
-              };
-              return fdef;
-            }
-          }),
+          children: streamArgs,
         };
         break;
+      }
 
       default:
         throw new Error();
     }
 
     dispatch({type: 'UPDATE_EDITING_TENTATIVE_NODE', newNode});
+    */
   };
 
   const recomputeDropdownChoices = (text: string): DropdownState => {

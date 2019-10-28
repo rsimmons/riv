@@ -1,9 +1,9 @@
-import { StreamID, FunctionID, AnyID } from './Identifier';
-import { UserFunctionDefinitionNode, StreamCreationNode, FunctionDefinitionNode, isStreamCreationNode, isUserFunctionDefinitionNode, isStreamExpressionNode } from './Tree';
+import { StreamID, FunctionID } from './Identifier';
 import { EssentialDefinition } from './EssentialDefinition';
 import Environment from './Environment';
 import { traverseTree } from './Traversal';
 
+/*
 export class CompilationError extends Error {
 };
 
@@ -98,12 +98,10 @@ function traverseFromStreamCreation(node: StreamCreationNode, context: Traversal
       break;
 
     case 'Application':
-      /*
-      const functionNode = functionEnvironment.get(node.functionId);
-      if (!functionNode) {
-        throw Error();
-      }
-      */
+      // const functionNode = functionEnvironment.get(node.functionId);
+      // if (!functionNode) {
+      //   throw Error();
+      // }
 
       const argumentIds: Array<AnyID> = [];
 
@@ -228,3 +226,4 @@ export function compileGlobalUserDefinition(definition: UserFunctionDefinitionNo
 
   return compileUserDefinition(definition, streamEnvironment, functionEnvironment);
 }
+*/

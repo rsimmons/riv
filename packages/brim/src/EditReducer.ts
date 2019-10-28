@@ -1,14 +1,15 @@
 import genuid from './uid';
 import { StreamID, FunctionID, generateStreamId, generateFunctionId } from './Identifier';
 import { State, Path, NodeEditState, pathIsPrefix } from './State';
-import { Node, ProgramNode, UserFunctionDefinitionNode, StreamCreationNode, FunctionDefinitionNode, isStreamCreationNode, isFunctionDefinitionNode, isProgramNode, isUserFunctionDefinitionNode, isStreamExpressionNode, isIDedNode, isNamedNode, isApplicationNode, isArrayLiteralNode, isUserFunctionDefinitionExpressionsNode, isStreamIndirectionNode, ArrayLiteralNode } from './Tree';
+import { Node, ProgramNode, FunctionDefinitionNode, isFunctionDefinitionNode, isProgramNode, isRivFunctionDefinitionNode, isStreamExpressionNode, isStreamReferenceNode, StreamDefinitionNode, StreamExpressionNode } from './Tree';
 import { EssentialDefinition } from './EssentialDefinition';
-import { compileGlobalUserDefinition, CompilationError } from './Compiler';
 import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
 import { createLiveFunction } from './LiveFunction';
 import Environment from './Environment';
 import { traverseTree } from './Traversal';
 import globalNativeFunctions from './globalNatives';
+import { SAMPLE_DEFINITION, RivFunctionDefinition, NativeFunctionDefinition } from './newEssentialDefinition';
+import { treeFromEssential } from './newTreeFromEssential';
 
 const REALIZE_TENTATIVE_EXPRESSION_EDITS = false;
 // const REALIZE_TENTATIVE_IDENTIFIER_EDITS = true;
@@ -51,6 +52,7 @@ function nodeSplitPath(node: Node, root: Node, path: Path): [Path, Path] {
 }
 */
 
+/*
 function addUserFunctionLocalEnvironment(func: UserFunctionDefinitionNode, namedStreams: Array<[string, StreamCreationNode]>, namedFunctions: Array<[string, FunctionDefinitionNode]>) {
   traverseTree(func, {onlyWithinFunctionId: func.id}, (node, path) => {
     if (isNamedNode(node)) {
@@ -75,11 +77,13 @@ function addEnvironmentAlongPath(root: Node, path: Path, namedStreams: Array<[st
     cur = cur.children[seg];
   }
 }
+*/
 
 export function environmentForSelectedNode(state: State) {
-  const namedStreams: Array<[string, StreamCreationNode]> = [];
+  const namedStreams: Array<[string, StreamDefinitionNode]> = [];
   const namedFunctions: Array<[string, FunctionDefinitionNode]> = [];
 
+  /*
   for (const extFunc of state.nativeFunctions) {
     if (extFunc.name) {
       namedFunctions.push([extFunc.name, extFunc]);
@@ -87,6 +91,7 @@ export function environmentForSelectedNode(state: State) {
   }
 
   addEnvironmentAlongPath(state.program, state.selectionPath, namedStreams, namedFunctions);
+  */
 
   return {
     namedStreams,
@@ -773,7 +778,7 @@ function firstUndefinedNode(node: Node, after: Path | undefined = undefined): [N
       passed = true;
     }
 
-    if (node.type === 'UndefinedLiteral') {
+    if ((node.type === 'SimpleStreamDefinition') && (node.definition.type === 'und')) {
       if (passed || !after) {
         result = [node, path];
         return [true, node];
@@ -790,7 +795,7 @@ function tryMoveSelectionOut(program: ProgramNode, selectionPath: Path): Path {
   while (p.length > 0) {
     p = p.slice(0, -1);
     const node = nodeFromPath(program, p);
-    if (isIDedNode(node)) {
+    if (node.selectionIds.length) {
       return p;
     }
   }
@@ -802,6 +807,8 @@ function tryMoveSelectionOut(program: ProgramNode, selectionPath: Path): Path {
  * "Maybe" because if the node is not OK to delete, we just return program unchanged.
  */
 function maybeDeleteSubtreeAtPath(program: ProgramNode, atPath: Path): [ProgramNode, Path] {
+  return [program, atPath];
+  /*
   let newProgram = program;
   let newPath = atPath;
 
@@ -811,9 +818,10 @@ function maybeDeleteSubtreeAtPath(program: ProgramNode, atPath: Path): [ProgramN
 
     if (isStreamExpressionNode(node)) {
       if (isApplicationNode(parentNode) || isStreamIndirectionNode(parentNode)) {
+        const id = isStreamReferenceNode(node) ? generateStreamId() : node.id;
         newProgram = replaceNodeAtPath(program, atPath, {
           type: 'UndefinedLiteral',
-          id: node.id,
+          id: id,
           children: [],
         });
       } else {
@@ -845,6 +853,7 @@ function maybeDeleteSubtreeAtPath(program: ProgramNode, atPath: Path): [ProgramN
   }
 
   return [newProgram, newPath];
+  */
 }
 
 function replaceNodeAtPath(program: ProgramNode, atPath: Path, newNode: Node): ProgramNode {
@@ -864,6 +873,8 @@ function replaceNodeAtPath(program: ProgramNode, atPath: Path, newNode: Node): P
 }
 
 function beginEdit(st: CoreState, overwrite: boolean): CoreState | void {
+  throw new Error();
+  /*
   if (st.editingSelected) {
     throw new Error(); // sanity check
   }
@@ -887,6 +898,7 @@ function beginEdit(st: CoreState, overwrite: boolean): CoreState | void {
     default:
       throw new Error();
   }
+  */
 }
 
 function endEdit(st: CoreState, confirm: boolean): CoreState {
@@ -958,7 +970,7 @@ const HANDLERS: Handler[] = [
 
   [['MOVE_RIGHT'], ({st}) => {
     const node = nodeFromPath(st.program, st.selectionPath);
-    if (isUserFunctionDefinitionNode(node)) {
+    if (isRivFunctionDefinitionNode(node)) {
       if (node.children[1].children.length > 0) {
         return {
           ...st,
@@ -1068,6 +1080,7 @@ const HANDLERS: Handler[] = [
     };
   }],
 
+  /*
   [['CREATE_ARRAY'], ({st}) => {
     const node = nodeFromPath(st.program, st.selectionPath);
     if (isStreamExpressionNode(node)) {
@@ -1090,6 +1103,7 @@ const HANDLERS: Handler[] = [
       };
     }
   }],
+  */
 ];
 
 function applyActionToCoreState(action: Action, coreState: CoreState): CoreState {
@@ -1111,11 +1125,12 @@ function applyActionToCoreState(action: Action, coreState: CoreState): CoreState
 }
 
 function addStateIdLookups(state: State): State {
-  const streamIdToNode: Map<StreamID, StreamCreationNode> = new Map();
+  const streamIdToNode: Map<StreamID, StreamDefinitionNode> = new Map();
   const functionIdToNode: Map<FunctionID, FunctionDefinitionNode> = new Map();
 
+  /*
   for (const extFunc of state.nativeFunctions) {
-    functionIdToNode.set(extFunc.id, extFunc);
+    functionIdToNode.set(extFunc.definition.id, extFunc);
   }
 
   traverseTree(state.program, {}, (node, ) => {
@@ -1135,6 +1150,7 @@ function addStateIdLookups(state: State): State {
 
     return [false, node];
   });
+  */
 
   return {
     ...state,
@@ -1167,27 +1183,9 @@ function addStatePathLookup(state: State): State {
   };
 }
 
-function undefineDanglingStreamRefs(state: State): State {
-  const newProgram = traverseTree(state.program, {}, (node, ) => {
-    if (node.type === 'StreamReference') {
-      return [false, state.derivedLookups.streamIdToNode!.has(node.targetStreamId) ? node : {
-        type: 'UndefinedLiteral',
-        id: generateStreamId(),
-        name: null,
-        children: [],
-      }];
-    } else {
-      return [false, node];
-    }
-  });
-
-  return (newProgram === state.program) ? state : {
-    ...state,
-    program: newProgram as ProgramNode,
-  }
-}
-
 function addStateCompiled(oldState: State | undefined, newState: State): State {
+  return newState;
+  /*
   // We initialize with an "empty" definition, which we fall back on if compilation fails
   let newCompiledDefinition: EssentialDefinition = {
     parameters: [],
@@ -1250,18 +1248,17 @@ function addStateCompiled(oldState: State | undefined, newState: State): State {
     ...newState,
     liveMain: newLiveMain,
   };
+  */
 }
 
 function addDerivedState(oldState: State | undefined, newState: State): State {
-  // undefineDanglingStreamRefs needs up-to-date id lookups
-  const danglingRemovedState = undefineDanglingStreamRefs(addStateIdLookups(newState));
-
-  return addStateCompiled(oldState, addStatePathLookup(addStateIdLookups(danglingRemovedState)));
+  return addStateCompiled(oldState, addStatePathLookup(newState));
 }
 
 export function reducer(state: State, action: Action): State {
   console.log('action', action);
 
+  /*
   if (action.type === 'LOAD_PROGRAM') {
     if (!action.program) {
       throw new Error();
@@ -1275,6 +1272,7 @@ export function reducer(state: State, action: Action): State {
 
     return initialStateFromProgram(action.program);
   }
+  */
 
   let newProgram = state.program;
   let newSelectionPath = state.selectionPath;
@@ -1339,10 +1337,10 @@ export function reducer(state: State, action: Action): State {
     }
 
     return addDerivedState(state, {
+      mainDefinition: state.mainDefinition,
       program: newProgram,
       selectionPath: newSelectionPath,
       editingSelected: newEditingSelected,
-      nativeFunctions: state.nativeFunctions,
       derivedLookups: {
         streamIdToNode: null,
         functionIdToNode: null,
@@ -1358,27 +1356,43 @@ export function reducer(state: State, action: Action): State {
   }
 }
 
-
-
+/*
 const nativeFunctionEnvironment: Environment<Function> = new Environment();
 nativeFunctionEnvironment.set('id', (x: any) => x);
 nativeFunctionEnvironment.set('Array_of', Array.of);
 globalNativeFunctions.forEach(([id, , , jsFunc]) => {
   nativeFunctionEnvironment.set(id, jsFunc);
 });
+*/
 
-function initialStateFromProgram(program: ProgramNode): State {
+const nativeFunctionFromId: Map<FunctionID, NativeFunctionDefinition> = new Map();
+globalNativeFunctions.forEach(([id, name, signature, jsFunc]) => {
+  nativeFunctionFromId.set(id, {
+    type: 'native',
+    id,
+    desc: name,
+    signature,
+    jsFunc,
+  });
+});
+
+function programFromEssentialDefinition(definition: RivFunctionDefinition): ProgramNode {
+  return {
+    type: 'Program',
+    children: [treeFromEssential(SAMPLE_DEFINITION, nativeFunctionFromId)],
+    selectionIds: [],
+    programId: genuid(),
+    name: 'my program',
+  };
+}
+
+function initialStateFromDefinition(definition: RivFunctionDefinition): State {
+
   return addDerivedState(undefined, {
-    program,
+    mainDefinition: definition,
+    program: programFromEssentialDefinition(definition),
     selectionPath: [0],
     editingSelected: null,
-    nativeFunctions: globalNativeFunctions.map(([id, name, signature, ]) => ({
-      type: 'NativeFunctionDefinition',
-      id,
-      name,
-      signature,
-      children: [],
-    })),
     derivedLookups: {
       streamIdToNode: null,
       functionIdToNode: null,
@@ -1390,76 +1404,4 @@ function initialStateFromProgram(program: ProgramNode): State {
   });
 }
 
-const mdId = generateStreamId();
-const INITIAL_PROGRAM: ProgramNode = {
-  type: 'Program',
-  programId: genuid(),
-  name: 'my program',
-  children: [{
-    type: 'UserFunctionDefinition',
-    id: generateFunctionId(),
-    name: null,
-    signature: {
-      parameters: [],
-      yields: false,
-    },
-    children: [
-      {
-        type: 'UserFunctionDefinitionParameters',
-        children: [],
-      },
-      {
-        type: 'UserFunctionDefinitionExpressions',
-        children: [
-          {
-            type: 'StreamIndirection',
-            id: mdId,
-            name: 'md',
-            children: [
-              {
-                type: 'Application',
-                id: generateStreamId(),
-                functionId: 'mouseDown',
-                children: [],
-              },
-            ],
-          },
-          {
-            type: 'Application',
-            id: generateStreamId(),
-            functionId: 'showString',
-            children: [
-              {
-                type: 'Application',
-                id: generateStreamId(),
-                functionId: 'ifte',
-                children: [
-                  {
-                    type: 'StreamReference',
-                    id: generateStreamId(),
-                    targetStreamId: mdId,
-                    children: [],
-                  },
-                  {
-                    type: 'NumberLiteral',
-                    id: generateStreamId(),
-                    value: 10,
-                    children: [],
-                  },
-                  {
-                    type: 'NumberLiteral',
-                    id: generateStreamId(),
-                    value: 20,
-                    children: [],
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      },
-    ],
-  }],
-};
-
-export const initialState: State = initialStateFromProgram(INITIAL_PROGRAM);
+export const initialState: State = initialStateFromDefinition(SAMPLE_DEFINITION);

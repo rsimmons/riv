@@ -1,4 +1,4 @@
-import { FunctionSignature } from './Tree';
+import { FunctionSignature } from './Signature';
 const { showString, animationTime, mouseDown, changeCount, streamMap, audioDriver, random, mouseClickEvts, redCircle, mousePosition, latestValue } = require('riv-demo-lib');
 
 interface Vec2d {
@@ -27,7 +27,8 @@ function vec2sqgrid(count: number, size: number) {
 
 function simpleSig(pnames: Array<string>, yields: boolean): FunctionSignature {
   return {
-    parameters: pnames.map(pn => ({name: pn, type: 'stream'})),
+    streamParameters: pnames.map(pn => ({name: pn})),
+    functionParameters: [],
     yields,
   }
 }
@@ -64,47 +65,53 @@ const nativeFunctions: Array<[string, string, FunctionSignature, Function]> = [
   ['vec2sqgrid', 'square grid of 2d vectors', simpleSig(['count', 'size'], true), vec2sqgrid],
 
   // higher-order
-  ['streamMap', 'map', {parameters: [
-    {
-      name: 'array',
-      type: 'stream',
-    },
-    {
-      name: 'transform one value',
-      type: {
-        parameters: [
-          {
-            name: 'value',
-            type: 'stream',
-          }
-        ],
-        yields: true,
+  ['streamMap', 'map', {
+    streamParameters: [
+      {
+        name: 'array',
       },
-    },
-  ], yields: true}, (arr: Array<any>, f: (v: any) => any) => streamMap(f, arr)],
+    ],
+    functionParameters: [
+      {
+        name: 'transform one value',
+        signature: {
+          streamParameters: [
+            {
+              name: 'value',
+            }
+          ],
+          functionParameters: [],
+          yields: true,
+        },
+      },
+    ],
+    yields: true,
+  }, (arr: Array<any>, f: (v: any) => any) => streamMap(f, arr)],
 
-  ['audioDriver', 'play computed audio', {parameters: [
-    {
-      name: 'compute one sample',
-      type: {
-        parameters: [
-          {
-            name: 'audio time',
-            type: 'stream',
-          },
-          {
-            name: 'next frame',
-            type: 'stream',
-          },
-          {
-            name: 'sample rate',
-            type: 'stream',
-          },
-        ],
-        yields: true,
+  ['audioDriver', 'play computed audio', {
+    streamParameters: [],
+    functionParameters: [
+      {
+        name: 'compute one sample',
+        signature: {
+          streamParameters: [
+            {
+              name: 'audio time',
+            },
+            {
+              name: 'next frame',
+            },
+            {
+              name: 'sample rate',
+            },
+          ],
+          functionParameters: [],
+          yields: true,
+        },
       },
-    },
-  ], yields: false}, audioDriver],
+    ],
+    yields: false,
+  }, audioDriver],
 ];
 
 export default nativeFunctions;
