@@ -1,22 +1,16 @@
 import { RivFunctionDefinition, StreamDefinition, FunctionDefinition } from './newEssentialDefinition';
-import { RivFunctionDefinitionNode, StreamParameterNode, FunctionParameterNode, StreamExpressionNode } from './Tree';
+import { Node, RivFunctionDefinitionNode, StreamParameterNode, FunctionParameterNode, StreamExpressionNode, SimpleStreamDefinitionNode, ApplicationNode } from './Tree';
 import { StreamID, FunctionID } from './Identifier';
 
+function postorderTraverseTree(node: Node, visit: (node: Node) => void): void {
+  for (const child of node.children) {
+    postorderTraverseTree(child, visit);
+  }
+
+  visit(node);
+}
+
 export function recursiveTreeFromEssential(definition: RivFunctionDefinition, streamIdToDef: Map<StreamID, StreamDefinition>, functionIdToDef: Map<FunctionID, FunctionDefinition>): RivFunctionDefinitionNode {
-  const streamParameters: ReadonlyArray<StreamParameterNode> = definition.signature.streamParameters.map(param => ({
-    type: 'StreamParameter',
-    children: [],
-    selectionIds: [],
-    parameter: param,
-  }));
-
-  const functionParameters: ReadonlyArray<FunctionParameterNode> = definition.signature.functionParameters.map(param => ({
-    type: 'FunctionParameter',
-    children: [],
-    selectionIds: [],
-    parameter: param,
-  }));
-
   const streamIdReferenceCount: Map<StreamID, number> = new Map();
   const incStreamRefCount = (sid: StreamID) => {
     if (!streamIdReferenceCount.has(sid)) {
@@ -70,7 +64,7 @@ export function recursiveTreeFromEssential(definition: RivFunctionDefinition, st
     return v;
   };
 
-  const recursiveBuildStreamExpression = (sdef: StreamDefinition, parent: StreamDefinition | null): StreamExpressionNode => {
+  const recursiveBuildStreamExpression = (sdef: StreamDefinition, parent: Node | null): StreamExpressionNode => {
     const isRoot = streamIdIsRootExpr.get(sdef.id);
     if (isRoot === undefined) {
       throw new Error();
@@ -83,7 +77,9 @@ export function recursiveTreeFromEssential(definition: RivFunctionDefinition, st
       return {
         type: 'StreamReference',
         children: [],
+        selected: false,
         selectionIds: [],
+        parent,
         targetDefinition: sdef,
       };
     }
@@ -94,27 +90,43 @@ export function recursiveTreeFromEssential(definition: RivFunctionDefinition, st
         return {
           type: 'SimpleStreamDefinition',
           children: [],
-          selectionIds: [],
+          selected: false,
+          selectionIds: [sdef.id],
+          parent,
           definition: sdef,
         };
 
-      case 'arr':
-        return {
+      case 'arr': {
+        const node: SimpleStreamDefinitionNode = {
           type: 'SimpleStreamDefinition',
-          children: sdef.itemIds.map(itemId => recursiveBuildStreamExpression(assertDefined(streamIdToDef.get(itemId)), sdef)),
-          selectionIds: [],
+          children: [],
+          selected: false,
+          selectionIds: [sdef.id],
+          parent,
           definition: sdef,
         };
 
-      case 'app':
-        return {
+        node.children = sdef.itemIds.map(itemId => recursiveBuildStreamExpression(assertDefined(streamIdToDef.get(itemId)), node));
+
+        return node;
+      }
+
+      case 'app': {
+        const node: ApplicationNode = {
           type: 'Application',
           // TODO: we also need function arguments
-          children: sdef.streamArgumentIds.map(argId => recursiveBuildStreamExpression(assertDefined(streamIdToDef.get(argId)), sdef)),
-          selectionIds: [],
+          children: [],
+          selected: false,
+          selectionIds: [sdef.id],
           definition: sdef,
+          parent,
           appliedFunctionDefinition: assertDefined(functionIdToDef.get(sdef.appliedFunctionId)),
         };
+
+        node.children = sdef.streamArgumentIds.map(argId => recursiveBuildStreamExpression(assertDefined(streamIdToDef.get(argId)), node));
+
+        return node;
+      }
 
       default:
         throw new Error();
@@ -135,27 +147,82 @@ export function recursiveTreeFromEssential(definition: RivFunctionDefinition, st
     }
   }
 
-  return {
+  const streamParameters: ReadonlyArray<StreamParameterNode> = definition.signature.streamParameters.map(param => ({
+    type: 'StreamParameter',
+    children: [],
+    selected: false,
+    selectionIds: [],
+    parent: null,
+    parameter: param,
+  }));
+
+  const functionParameters: ReadonlyArray<FunctionParameterNode> = definition.signature.functionParameters.map(param => ({
+    type: 'FunctionParameter',
+    children: [],
+    selected: false,
+    selectionIds: [],
+    parent: null,
+    parameter: param,
+  }));
+
+  const definitionNode: RivFunctionDefinitionNode = {
     type: 'RivFunctionDefinition',
     children: [
       {
         type: 'RivFunctionDefinitionStreamParameters',
         children: streamParameters,
+        selected: false,
         selectionIds: [],
+        parent: null,
       },
       {
         type: 'RivFunctionDefinitionStreamExpressions',
         children: expressions,
+        selected: false,
         selectionIds: [],
+        parent: null,
       },
     ],
-    selectionIds: [],
+    selected: false,
+    selectionIds: [definition.id],
+    parent: null, // TODO: set
     definition: definition,
   };
+
+  definitionNode.children[0].parent = definitionNode;
+  definitionNode.children[1].parent = definitionNode;
+
+  for (const param of definitionNode.children[0].children) {
+    param.parent = definitionNode.children[0];
+  }
+  // TODO: do for function-parameters when we add them
+
+  for (const expr of definitionNode.children[1].children) {
+    expr.parent = definitionNode.children[1];
+  }
+
+  return definitionNode;
 }
 
-export function treeFromEssential(definition: RivFunctionDefinition, globalFunctions: Map<FunctionID, FunctionDefinition>): RivFunctionDefinitionNode {
+export function treeFromEssential(definition: RivFunctionDefinition, globalFunctions: Map<FunctionID, FunctionDefinition>, selectionIds: ReadonlyArray<string>): [RivFunctionDefinitionNode, Node | null] {
   const streamIdToDef: Map<StreamID, StreamDefinition> = new Map();
   const functionIdToDef: Map<FunctionID, FunctionDefinition> = new Map(globalFunctions);
-  return recursiveTreeFromEssential(definition, streamIdToDef, functionIdToDef);
+  const tree = recursiveTreeFromEssential(definition, streamIdToDef, functionIdToDef);
+
+  let selectedNode: Node | null = null;
+  for (const selId of selectionIds) {
+    if (selectedNode) {
+      continue;
+    }
+    postorderTraverseTree(tree, node => {
+      if (node.selectionIds.includes(selId)) {
+        if (!selectedNode) {
+          node.selected = true;
+          selectedNode = node;
+        }
+      }
+    });
+  }
+
+  return [tree, selectedNode];
 }

@@ -8,7 +8,7 @@ const NORMAL_BOX_COLOR = '#d8d8d8';
 const STREAM_REFERENCE_BOX_COLOR = '#ccd9e8';
 
 export interface TreeViewContextData {
-  selectedNode: Node,
+  selectedNode: Node;
   mainState: State;
   dispatch: (action: any) => void; // TODO: tighten up type
   onSelectNode: (node: Node) => void;
@@ -40,8 +40,6 @@ function useSelectable(node: Node | null): UseSelectableResult {
     };
   }
 
-  const selected = (ctxData.selectedNode === node);
-
   const handleClick = (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
     if ((e.target as Element).tagName !== 'INPUT') {
       e.stopPropagation();
@@ -60,7 +58,7 @@ function useSelectable(node: Node | null): UseSelectableResult {
 
   const classes: Array<string> = [];
 
-  if (selected) {
+  if (node === ctxData.selectedNode) {
     classes.push('TreeView-selected');
   }
   if (hovered) {
@@ -161,9 +159,8 @@ export const NodeView: React.FC<{node: Node, inheritedName?: string}> = ({ node,
   }
 
   const children: ReadonlyArray<Node> = node.children; // to get type right
-  const selected = (ctxData.selectedNode === node);
 
-  if (selected && ctxData.mainState.editingSelected) {
+  if ((node === ctxData.selectedNode) && ctxData.mainState.editingSelected) {
     return <ExpressionChooser mainState={ctxData.mainState} dispatch={ctxData.dispatch} />
   }
 

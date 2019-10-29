@@ -1,14 +1,14 @@
 import genuid from './uid';
 import { StreamID, FunctionID, generateStreamId, generateFunctionId } from './Identifier';
-import { State, Path, NodeEditState, pathIsPrefix } from './State';
-import { Node, ProgramNode, FunctionDefinitionNode, isFunctionDefinitionNode, isProgramNode, isRivFunctionDefinitionNode, isStreamExpressionNode, isStreamReferenceNode, StreamDefinitionNode, StreamExpressionNode } from './Tree';
+import { State, Path, NodeEditState, pathIsPrefix, Program } from './State';
+import { Node, FunctionDefinitionNode, isFunctionDefinitionNode, isRivFunctionDefinitionNode, isStreamExpressionNode, isStreamReferenceNode, StreamDefinitionNode, StreamExpressionNode } from './Tree';
 import { EssentialDefinition } from './EssentialDefinition';
 import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
 import { createLiveFunction } from './LiveFunction';
 import Environment from './Environment';
 import { traverseTree } from './Traversal';
 import globalNativeFunctions from './globalNatives';
-import { SAMPLE_DEFINITION, RivFunctionDefinition, NativeFunctionDefinition } from './newEssentialDefinition';
+import { RivFunctionDefinition, NativeFunctionDefinition } from './newEssentialDefinition';
 import { treeFromEssential } from './newTreeFromEssential';
 
 const REALIZE_TENTATIVE_EXPRESSION_EDITS = false;
@@ -19,9 +19,9 @@ interface Action {
   type: string;
   char?: string;
   newNode?: Node;
-  newPath?: Path;
+  newSelectedNode?: Node;
   newName?: string;
-  program?: ProgramNode;
+  program?: Program;
 }
 
 export function nodeFromPath(root: Node, path: Path): Node {
@@ -790,23 +790,23 @@ function firstUndefinedNode(node: Node, after: Path | undefined = undefined): [N
   return result;
 }
 
-function tryMoveSelectionOut(program: ProgramNode, selectionPath: Path): Path {
-  let p = selectionPath;
-  while (p.length > 0) {
-    p = p.slice(0, -1);
-    const node = nodeFromPath(program, p);
-    if (node.selectionIds.length) {
-      return p;
+function tryMoveSelectionOut(node: Node): Node {
+  let n: Node = node;
+
+  while (n.parent) {
+    n = n.parent;
+    if (n.selectionIds.length) {
+      return n;
     }
   }
 
-  return selectionPath;
+  return node;
 }
 
 /**
  * "Maybe" because if the node is not OK to delete, we just return program unchanged.
  */
-function maybeDeleteSubtreeAtPath(program: ProgramNode, atPath: Path): [ProgramNode, Path] {
+function maybeDeleteSubtreeAtPath(program: Program, atPath: Path): [Program, Path] {
   return [program, atPath];
   /*
   let newProgram = program;
@@ -856,8 +856,8 @@ function maybeDeleteSubtreeAtPath(program: ProgramNode, atPath: Path): [ProgramN
   */
 }
 
-function replaceNodeAtPath(program: ProgramNode, atPath: Path, newNode: Node): ProgramNode {
-  const newProgram = traverseTree(program, {alongPath: atPath}, (node, path) => {
+function replaceNodeAtPath(program: Program, atPath: Path, newNode: Node): Program {
+  const newMainTree = traverseTree(program.mainTree, {alongPath: atPath}, (node, path) => {
     if (equiv(path, atPath)) {
       return [false, newNode];
     } else {
@@ -865,11 +865,14 @@ function replaceNodeAtPath(program: ProgramNode, atPath: Path, newNode: Node): P
     }
   });
 
-  if (!isProgramNode(newProgram)) {
+  if (!isRivFunctionDefinitionNode(newMainTree)) {
     throw new Error();
   }
 
-  return newProgram;
+  return {
+    ...program,
+    mainTree: newMainTree,
+  };
 }
 
 function beginEdit(st: CoreState, overwrite: boolean): CoreState | void {
@@ -901,6 +904,7 @@ function beginEdit(st: CoreState, overwrite: boolean): CoreState | void {
   */
 }
 
+/*
 function endEdit(st: CoreState, confirm: boolean): CoreState {
   if (!st.editingSelected) {
     throw new Error(); // sanity check
@@ -929,10 +933,11 @@ function endEdit(st: CoreState, confirm: boolean): CoreState {
     editingSelected: newEditingSelected,
   };
 }
+*/
 
 interface CoreState {
-  readonly program: ProgramNode;
-  readonly selectionPath: Path;
+  readonly program: Program;
+  readonly selectedNode: Node;
   readonly editingSelected: NodeEditState;
 }
 
@@ -953,23 +958,23 @@ const HANDLERS: Handler[] = [
     };
   }],
 
-  [['SET_PATH'], ({action, st}) => {
+  [['SET_SELECTED_NODE'], ({action, st}) => {
     return {
       ...st,
-      selectionPath: action.newPath!,
-      editingSelected: null,
-    };
+      selectedNode: action.newSelectedNode!,
+    }
   }],
 
   [['MOVE_LEFT'], ({st}) => {
     return {
       ...st,
-      selectionPath: tryMoveSelectionOut(st.program, st.selectionPath),
+      selectedNode: tryMoveSelectionOut(st.selectedNode),
     }
   }],
 
+/*
   [['MOVE_RIGHT'], ({st}) => {
-    const node = nodeFromPath(st.program, st.selectionPath);
+    const node = nodeFromPath(st.program.mainTree, st.selectionPath);
     if (isRivFunctionDefinitionNode(node)) {
       if (node.children[1].children.length > 0) {
         return {
@@ -1000,7 +1005,7 @@ const HANDLERS: Handler[] = [
   [['MOVE_DOWN'], ({st}) => {
     if (st.selectionPath.length > 0) {
       const lastIdx = st.selectionPath[st.selectionPath.length-1];
-      const parentNode = nodeFromPath(st.program, st.selectionPath.slice(0, -1));
+      const parentNode = nodeFromPath(st.program.mainTree, st.selectionPath.slice(0, -1));
       if (lastIdx < (parentNode.children.length-1)) {
         return {
           ...st,
@@ -1042,7 +1047,7 @@ const HANDLERS: Handler[] = [
       throw new Error();
     }
 
-    const node = nodeFromPath(st.program, st.selectionPath);
+    const node = nodeFromPath(st.program.mainTree, st.selectionPath);
     if (isStreamExpressionNode(node)) {
       let newNode = REALIZE_TENTATIVE_EXPRESSION_EDITS ? action.newNode : node;
       return {
@@ -1058,7 +1063,7 @@ const HANDLERS: Handler[] = [
   [['EDIT_NEXT_UNDEFINED'], ({st}) => {
     let newSt = applyActionToCoreState({type: 'CONFIRM_EDIT'}, st);
 
-    const hit = firstUndefinedNode(newSt.program, newSt.selectionPath);
+    const hit = firstUndefinedNode(newSt.program.mainTree, newSt.selectionPath);
     if (hit) {
       const [hitNode, hitPath] = hit;
       newSt = {
@@ -1080,7 +1085,6 @@ const HANDLERS: Handler[] = [
     };
   }],
 
-  /*
   [['CREATE_ARRAY'], ({st}) => {
     const node = nodeFromPath(st.program, st.selectionPath);
     if (isStreamExpressionNode(node)) {
@@ -1103,7 +1107,7 @@ const HANDLERS: Handler[] = [
       };
     }
   }],
-  */
+*/
 ];
 
 function applyActionToCoreState(action: Action, coreState: CoreState): CoreState {
@@ -1122,65 +1126,6 @@ function applyActionToCoreState(action: Action, coreState: CoreState): CoreState
   }
 
   return newCoreState;
-}
-
-function addStateIdLookups(state: State): State {
-  const streamIdToNode: Map<StreamID, StreamDefinitionNode> = new Map();
-  const functionIdToNode: Map<FunctionID, FunctionDefinitionNode> = new Map();
-
-  /*
-  for (const extFunc of state.nativeFunctions) {
-    functionIdToNode.set(extFunc.definition.id, extFunc);
-  }
-
-  traverseTree(state.program, {}, (node, ) => {
-    if (isStreamCreationNode(node)) {
-      if (streamIdToNode.has(node.id)) {
-        throw new Error('stream ids must be unique');
-      }
-      streamIdToNode.set(node.id, node);
-    }
-
-    if (isFunctionDefinitionNode(node)) {
-      if (functionIdToNode.has(node.id)) {
-        throw new Error('funciton ids must be unique');
-      }
-      functionIdToNode.set(node.id, node);
-    }
-
-    return [false, node];
-  });
-  */
-
-  return {
-    ...state,
-    derivedLookups: {
-      streamIdToNode,
-      functionIdToNode,
-      nodeToPath: null,
-    },
-  };
-}
-
-function computeNodeToPathMap(program: ProgramNode): Map<Node, Path> {
-  const nodeToPath: Map<Node, Path> = new Map();
-
-  traverseTree(program, {}, (node, path) => {
-    nodeToPath.set(node, path);
-    return [false, node];
-  });
-
-  return nodeToPath;
-}
-
-function addStatePathLookup(state: State): State {
-  return {
-    ...state,
-    derivedLookups: {
-      ...state.derivedLookups,
-      nodeToPath: computeNodeToPathMap(state.program),
-    },
-  };
 }
 
 function addStateCompiled(oldState: State | undefined, newState: State): State {
@@ -1252,7 +1197,7 @@ function addStateCompiled(oldState: State | undefined, newState: State): State {
 }
 
 function addDerivedState(oldState: State | undefined, newState: State): State {
-  return addStateCompiled(oldState, addStatePathLookup(newState));
+  return addStateCompiled(oldState, newState);
 }
 
 export function reducer(state: State, action: Action): State {
@@ -1275,7 +1220,7 @@ export function reducer(state: State, action: Action): State {
   */
 
   let newProgram = state.program;
-  let newSelectionPath = state.selectionPath;
+  let newSelectedNode: Node = state.selectedNode;
   let newEditingSelected = state.editingSelected;
   let newUndoStack = state.undoStack;
   let newClipboardStack = state.clipboardStack;
@@ -1284,7 +1229,7 @@ export function reducer(state: State, action: Action): State {
     if (state.undoStack.length > 0) {
       const topFrame = newUndoStack[newUndoStack.length-1];
       newProgram = topFrame.program;
-      newSelectionPath = topFrame.selectionPath;
+      newSelectedNode = topFrame.selectedNode;
       newUndoStack = newUndoStack.slice(0, newUndoStack.length-1);
     }
   } else if (action.type === 'CUT') {
@@ -1311,19 +1256,19 @@ export function reducer(state: State, action: Action): State {
   } else {
     const newCoreState = applyActionToCoreState(action, {
       program: newProgram,
-      selectionPath: newSelectionPath,
+      selectedNode: newSelectedNode,
       editingSelected: newEditingSelected,
     });
     newProgram = newCoreState.program;
-    newSelectionPath = newCoreState.selectionPath;
+    newSelectedNode = newCoreState.selectedNode;
     newEditingSelected = newCoreState.editingSelected;
     /*
     [newProgram, newSelectionPath, newEditingSelected] = applyActionToProgram(newProgram, newSelectionPath, newEditingSelected, action);
     */
   }
 
-  if ((newProgram !== state.program) || (newSelectionPath !== state.selectionPath) || (newEditingSelected !== state.editingSelected) || (newUndoStack !== state.undoStack) || (newClipboardStack !== state.clipboardStack)) {
-    console.log('handled! new prog', newProgram, 'new selectionPath is', newSelectionPath, 'newEditingSelected is', newEditingSelected);
+  if ((newProgram !== state.program) || (newSelectedNode !== state.selectedNode) || (newEditingSelected !== state.editingSelected) || (newUndoStack !== state.undoStack) || (newClipboardStack !== state.clipboardStack)) {
+    console.log('handled! new prog', newProgram, 'new selectedNode is', newSelectedNode, 'newEditingSelected is', newEditingSelected);
     if (newProgram !== state.program) {
       console.log('program changed identity');
 
@@ -1331,7 +1276,7 @@ export function reducer(state: State, action: Action): State {
       if (action.type !== 'UNDO') {
         newUndoStack = newUndoStack.concat([{
           program: state.program,
-          selectionPath: state.selectionPath,
+          selectedNode: state.selectedNode,
         }]);
       }
     }
@@ -1339,13 +1284,8 @@ export function reducer(state: State, action: Action): State {
     return addDerivedState(state, {
       mainDefinition: state.mainDefinition,
       program: newProgram,
-      selectionPath: newSelectionPath,
+      selectedNode: newSelectedNode,
       editingSelected: newEditingSelected,
-      derivedLookups: {
-        streamIdToNode: null,
-        functionIdToNode: null,
-        nodeToPath: null,
-      },
       liveMain: null,
       undoStack: newUndoStack,
       clipboardStack: newClipboardStack,
@@ -1376,32 +1316,89 @@ globalNativeFunctions.forEach(([id, name, signature, jsFunc]) => {
   });
 });
 
-function programFromEssentialDefinition(definition: RivFunctionDefinition): ProgramNode {
-  return {
-    type: 'Program',
-    children: [treeFromEssential(SAMPLE_DEFINITION, nativeFunctionFromId)],
-    selectionIds: [],
+function initialStateFromDefinition(definition: RivFunctionDefinition): State {
+  // const selectionIds = [definition.id];
+  const selectionIds = ['S-2'];
+  const [tree, selectedNode] = treeFromEssential(SAMPLE_DEFINITION, nativeFunctionFromId, selectionIds);
+
+  if (!selectedNode) {
+    throw new Error();
+  }
+
+  const program: Program = {
     programId: genuid(),
     name: 'my program',
+    mainTree: tree,
   };
-}
 
-function initialStateFromDefinition(definition: RivFunctionDefinition): State {
-
-  return addDerivedState(undefined, {
+  return {
     mainDefinition: definition,
-    program: programFromEssentialDefinition(definition),
-    selectionPath: [0],
+    program,
+    selectedNode,
     editingSelected: null,
-    derivedLookups: {
-      streamIdToNode: null,
-      functionIdToNode: null,
-      nodeToPath: null,
-    },
     liveMain: null,
     undoStack: [],
     clipboardStack: [],
-  });
+  };
 }
+
+const SAMPLE_DEFINITION: RivFunctionDefinition = {
+  type: 'riv',
+  id: 'F-1',
+  desc: 'main',
+  signature: {
+    streamParameters: [],
+    functionParameters: [],
+    yields: false,
+  },
+  streamDefinitions: [
+    {
+      type: 'app',
+      id: 'S-1',
+      desc: 'md',
+      appliedFunctionId: 'mouseDown',
+      streamArgumentIds: [],
+      functionArgumentIds: [],
+    },
+    {
+      type: 'num',
+      id: 'S-2',
+      desc: null,
+      value: 10,
+    },
+    {
+      type: 'num',
+      id: 'S-3',
+      desc: null,
+      value: 20,
+    },
+    {
+      type: 'app',
+      id: 'S-4',
+      desc: null,
+      appliedFunctionId: 'ifte',
+      streamArgumentIds: ['S-1', 'S-2', 'S-3'],
+      functionArgumentIds: [],
+    },
+    {
+      type: 'app',
+      id: 'S-5',
+      desc: null,
+      appliedFunctionId: 'showString',
+      streamArgumentIds: ['S-4'],
+      functionArgumentIds: [],
+    },
+    {
+      type: 'app',
+      id: 'S-6',
+      desc: null,
+      appliedFunctionId: 'showString',
+      streamArgumentIds: ['S-1'],
+      functionArgumentIds: [],
+    },
+  ],
+  functionDefinitions: [],
+  yieldStreamId: null,
+};
 
 export const initialState: State = initialStateFromDefinition(SAMPLE_DEFINITION);

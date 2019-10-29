@@ -2,9 +2,10 @@ import React, { useReducer, useRef, useEffect, useState } from 'react';
 import { HotKeys, ObserveKeys } from "react-hotkeys";
 import { initialState, reducer, nodeFromPath } from './EditReducer';
 import StoragePanel from './StoragePanel';
-import './Editor.css';
 import { NodeView, TreeViewContextProvider, TreeViewContextData } from './TreeView';
-import { Node, ProgramNode } from './Tree';
+import { Node } from './Tree';
+import { Program } from './State';
+import './Editor.css';
 
 const keyMap = {
   MOVE_UP: 'up',
@@ -97,24 +98,21 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
     dispatch({type: 'SET_PROGRAM_NAME', newName});
   };
 
-  const handleLoadProgram = (program: ProgramNode) => {
+  const handleLoadProgram = (program: Program) => {
     dispatch({type: 'LOAD_PROGRAM', program});
   };
 
   const treeViewCtxData: TreeViewContextData = {
-    selectedNode: nodeFromPath(state.program, state.selectionPath),
+    selectedNode: state.selectedNode,
     // clipboardTopNode: (state.clipboardStack.length > 0) ? state.derivedLookups.streamIdToNode!.get(state.clipboardStack[state.clipboardStack.length-1].streamId) : null,
     // clipboardRestNodes: state.clipboardStack.slice(0, -1).map(frame => state.derivedLookups.streamIdToNode!.get(frame.streamId)),
     mainState: state,
     dispatch,
     onSelectNode: (node: Node) => {
-      const path = state.derivedLookups.nodeToPath!.get(node);
-      if (path) {
-        dispatch({
-          type: 'SET_PATH',
-          newPath: path,
-        });
-      }
+      dispatch({
+        type: 'SET_SELECTED_NODE',
+        newSelectedNode: node,
+      });
     },
   };
 
@@ -124,7 +122,7 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
         <ObserveKeys only={CATCH_IN_INPUTS}>
           <div className="Editor-workspace" onKeyDown={onKeyDown} tabIndex={0} ref={editorElem}>
             <TreeViewContextProvider value={treeViewCtxData}>
-              <NodeView node={state.program.children[0]} inheritedName="main" />
+              <NodeView node={state.program.mainTree} inheritedName="main" />
             </TreeViewContextProvider>
           </div>
         </ObserveKeys>

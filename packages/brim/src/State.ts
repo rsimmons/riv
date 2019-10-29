@@ -1,9 +1,9 @@
 import { ExecutionContext } from 'riv-runtime';
 import { EssentialDefinition } from './EssentialDefinition';
 
-import { StreamID, FunctionID } from './Identifier';
+import { StreamID } from './Identifier';
 
-import { Node, ProgramNode, FunctionDefinitionNode, StreamDefinitionNode } from './Tree';
+import { Node, RivFunctionDefinitionNode } from './Tree';
 import { RivFunctionDefinition } from './newEssentialDefinition';
 
 export function pathIsPrefix(a: Path, b: Path): boolean {
@@ -29,8 +29,8 @@ export type NodeEditState = {
 } | null;
 
 export interface UndoStackFrame {
-  readonly program: ProgramNode;
-  readonly selectionPath: Path;
+  readonly program: Program;
+  readonly selectedNode: Node;
 };
 
 export interface ClipboardStackFrame {
@@ -38,16 +38,17 @@ export interface ClipboardStackFrame {
   readonly streamId: StreamID;
 }
 
+export interface Program {
+  readonly programId: string;
+  readonly name: string;
+  readonly mainTree: RivFunctionDefinitionNode;
+}
+
 export interface State {
   readonly mainDefinition: RivFunctionDefinition;
-  readonly program: ProgramNode;
-  readonly selectionPath: Path;
+  readonly program: Program;
+  readonly selectedNode: Node;
   readonly editingSelected: NodeEditState;
-  readonly derivedLookups: {
-    streamIdToNode: ReadonlyMap<StreamID, StreamDefinitionNode> | null;
-    functionIdToNode: ReadonlyMap<FunctionID, FunctionDefinitionNode> | null;
-    nodeToPath: ReadonlyMap<Node, Path> | null;
-  };
   readonly liveMain: {
     context: ExecutionContext;
     updateCompiledDefinition: (newDefinition: EssentialDefinition) => void;

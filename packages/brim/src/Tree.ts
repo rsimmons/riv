@@ -1,10 +1,17 @@
 import { RivFunctionDefinition, StreamDefinition, NativeFunctionDefinition, FunctionDefinition, UndefinedLiteralStreamDefinition, NumberLiteralStreamDefinition, ArrayLiteralStreamDefinition } from './newEssentialDefinition';
 import { SignatureStreamParameter, SignatureFunctionParameter } from './Signature';
 
-export interface SimpleStreamDefinitionNode {
-  readonly type: 'SimpleStreamDefinition';
-  readonly children: ReadonlyArray<StreamExpressionNode>;
+interface NodeCommon {
+  readonly type: string;
+  children: ReadonlyArray<Node>;
+  selected: boolean;
   readonly selectionIds: ReadonlyArray<string>;
+  parent: Node | null;
+}
+
+export interface SimpleStreamDefinitionNode extends NodeCommon {
+  readonly type: 'SimpleStreamDefinition';
+  children: ReadonlyArray<StreamExpressionNode>;
 
   readonly definition: UndefinedLiteralStreamDefinition | NumberLiteralStreamDefinition | ArrayLiteralStreamDefinition;
 }
@@ -12,10 +19,9 @@ export function isSimpleStreamDefinitionNode(node: Node): node is SimpleStreamDe
   return node.type === 'SimpleStreamDefinition';
 }
 
-export interface ApplicationNode {
+export interface ApplicationNode extends NodeCommon {
   readonly type: 'Application';
-  readonly children: ReadonlyArray<StreamExpressionNode>;
-  readonly selectionIds: ReadonlyArray<string>;
+  children: ReadonlyArray<StreamExpressionNode>;
 
   readonly definition: StreamDefinition;
   readonly appliedFunctionDefinition: FunctionDefinition;
@@ -29,10 +35,9 @@ export function isStreamDefinitionNode(node: Node): node is StreamDefinitionNode
   return isSimpleStreamDefinitionNode(node) || isApplicationNode(node);
 }
 
-export interface StreamReferenceNode {
+export interface StreamReferenceNode extends NodeCommon {
   readonly type: 'StreamReference';
-  readonly children: readonly [];
-  readonly selectionIds: ReadonlyArray<string>;
+  children: readonly [];
 
   readonly targetDefinition: StreamDefinition;
 }
@@ -45,10 +50,9 @@ export function isStreamExpressionNode(node: Node): node is StreamExpressionNode
   return isStreamDefinitionNode(node) || isStreamReferenceNode(node);
 }
 
-export interface StreamParameterNode {
+export interface StreamParameterNode extends NodeCommon {
   readonly type: 'StreamParameter';
-  readonly children: readonly [];
-  readonly selectionIds: ReadonlyArray<string>;
+  children: readonly [];
 
   readonly parameter: SignatureStreamParameter;
 }
@@ -56,10 +60,9 @@ export function isStreamParameterNode(node: Node): node is StreamParameterNode {
   return node.type === 'StreamParameter';
 }
 
-export interface FunctionParameterNode {
+export interface FunctionParameterNode extends NodeCommon {
   readonly type: 'FunctionParameter';
-  readonly children: readonly [];
-  readonly selectionIds: ReadonlyArray<string>;
+  children: readonly [];
 
   readonly parameter: SignatureFunctionParameter;
 }
@@ -67,28 +70,29 @@ export function isFunctionParameterNode(node: Node): node is FunctionParameterNo
   return node.type === 'FunctionParameter';
 }
 
-export interface RivFunctionDefinitionStreamParametersNode {
+export interface RivFunctionDefinitionStreamParametersNode extends NodeCommon {
   readonly type: 'RivFunctionDefinitionStreamParameters';
-  readonly children: ReadonlyArray<StreamParameterNode>;
-  readonly selectionIds: [];
+  children: ReadonlyArray<StreamParameterNode>;
+  selected: false;
+  readonly selectionIds: string [];
 }
 export function isRivFunctionDefinitionStreamParametersNode(node: Node): node is RivFunctionDefinitionStreamParametersNode {
   return node.type === 'RivFunctionDefinitionStreamParameters';
 }
 
-export interface RivFunctionDefinitionStreamExpressionsNode {
+export interface RivFunctionDefinitionStreamExpressionsNode extends NodeCommon {
   readonly type: 'RivFunctionDefinitionStreamExpressions';
-  readonly children: ReadonlyArray<StreamExpressionNode>;
-  readonly selectionIds: [];
+  children: ReadonlyArray<StreamExpressionNode>;
+  selected: false;
+  readonly selectionIds: string [];
 }
 export function isRivFunctionDefinitionStreamExpressionsNode(node: Node): node is RivFunctionDefinitionStreamExpressionsNode {
   return node.type === 'RivFunctionDefinitionStreamExpressions';
 }
 
-export interface RivFunctionDefinitionNode {
+export interface RivFunctionDefinitionNode extends NodeCommon {
   readonly type: 'RivFunctionDefinition';
-  readonly children: readonly [RivFunctionDefinitionStreamParametersNode, RivFunctionDefinitionStreamExpressionsNode];
-  readonly selectionIds: ReadonlyArray<string>;
+  children: readonly [RivFunctionDefinitionStreamParametersNode, RivFunctionDefinitionStreamExpressionsNode];
 
   readonly definition: RivFunctionDefinition;
 }
@@ -96,10 +100,9 @@ export function isRivFunctionDefinitionNode(node: Node): node is RivFunctionDefi
   return node.type === 'RivFunctionDefinition';
 }
 
-export interface NativeFunctionDefinitionNode {
+export interface NativeFunctionDefinitionNode extends NodeCommon {
   readonly type: 'NativeFunctionDefinition';
-  readonly children: readonly [];
-  readonly selectionIds: ReadonlyArray<string>;
+  children: readonly [];
 
   readonly definition: NativeFunctionDefinition;
 }
@@ -112,19 +115,7 @@ export function isFunctionDefinitionNode(node: Node): node is FunctionDefinition
   return isRivFunctionDefinitionNode(node) || isNativeFunctionDefinitionNode(node);
 }
 
-export interface ProgramNode {
-  readonly type: 'Program';
-  readonly children: readonly [RivFunctionDefinitionNode];
-  readonly selectionIds: ReadonlyArray<string>;
-
-  readonly programId: string;
-  readonly name: string;
-}
-export function isProgramNode(node: Node): node is ProgramNode {
-  return node.type === 'Program';
-}
-
-export type Node = StreamExpressionNode | StreamParameterNode | FunctionParameterNode | RivFunctionDefinitionStreamParametersNode | RivFunctionDefinitionStreamExpressionsNode | RivFunctionDefinitionNode | NativeFunctionDefinitionNode | ProgramNode;
+export type Node = StreamExpressionNode | StreamParameterNode | FunctionParameterNode | RivFunctionDefinitionStreamParametersNode | RivFunctionDefinitionStreamExpressionsNode | RivFunctionDefinitionNode | NativeFunctionDefinitionNode;
 export function isNode(node: Node): node is Node {
-  return isStreamExpressionNode(node) || isStreamParameterNode(node) || isFunctionParameterNode(node) || isRivFunctionDefinitionStreamParametersNode(node) || isRivFunctionDefinitionStreamExpressionsNode(node) || isRivFunctionDefinitionNode(node) || isNativeFunctionDefinitionNode(node) || isProgramNode(node);
+  return isStreamExpressionNode(node) || isStreamParameterNode(node) || isFunctionParameterNode(node) || isRivFunctionDefinitionStreamParametersNode(node) || isRivFunctionDefinitionStreamExpressionsNode(node) || isRivFunctionDefinitionNode(node) || isNativeFunctionDefinitionNode(node);
 }
