@@ -795,13 +795,53 @@ function tryMoveSelectionOut(node: Node): Node {
 
   while (n.parent) {
     n = n.parent;
-    if (n.selectionIds.length) {
+    if (n.selectable) {
       return n;
     }
   }
 
   return node;
 }
+
+function tryMoveSelectionUpDown(node: Node, up: boolean): Node {
+  let n: Node | null = node;
+  let depth = 0;
+
+  while (n) {
+    if ((n.parent !== null) && (n.childIdx !== null) && (up ? (n.childIdx > 0) : (n.childIdx < (n.parent.children.length-1)))) {
+      n = n.parent.children[n.childIdx + (up ? -1 : 1)]; // move up/down
+      break;
+    }
+    n = n.parent;
+    depth++;
+  }
+
+  if (!n) {
+    // We got to the top without being able to move up
+    return node;
+  }
+
+  // Try to move back down to same depth
+  let lastSelectable: Node | null = null;
+  while (true) {
+    if (n.selectable) {
+      lastSelectable = n;
+    }
+    if ((depth > 0) && (n.children.length > 0)) {
+      n = up ? n.children[n.children.length-1] : n.children[0];
+      depth--;
+    } else {
+      break;
+    }
+  }
+
+  if (!lastSelectable) {
+    return node;
+  }
+
+  return n;
+}
+
 
 /**
  * "Maybe" because if the node is not OK to delete, we just return program unchanged.
@@ -972,49 +1012,37 @@ const HANDLERS: Handler[] = [
     }
   }],
 
-/*
   [['MOVE_RIGHT'], ({st}) => {
-    const node = nodeFromPath(st.program.mainTree, st.selectionPath);
-    if (isRivFunctionDefinitionNode(node)) {
-      if (node.children[1].children.length > 0) {
+    if (isRivFunctionDefinitionNode(st.selectedNode)) {
+      if (st.selectedNode.children[1].children.length > 0) {
         return {
           ...st,
-          selectionPath: st.selectionPath.concat([1, 0]),
+          selectedNode: st.selectedNode.children[1].children[0],
         }
       }
-    } else if (node.children.length > 0) {
+    } else if (st.selectedNode.children.length > 0) {
       return {
         ...st,
-        selectionPath: st.selectionPath.concat([0]),
+        selectedNode: st.selectedNode.children[0],
       }
     }
   }],
 
   [['MOVE_UP'], ({st}) => {
-    if (st.selectionPath.length > 0) {
-      const lastIdx = st.selectionPath[st.selectionPath.length-1];
-      if (lastIdx > 0) {
-        return {
-          ...st,
-          selectionPath: st.selectionPath.slice(0, -1).concat([lastIdx-1]),
-        }
-      }
-    }
+    return {
+      ...st,
+      selectedNode: tryMoveSelectionUpDown(st.selectedNode, true),
+    };
   }],
 
   [['MOVE_DOWN'], ({st}) => {
-    if (st.selectionPath.length > 0) {
-      const lastIdx = st.selectionPath[st.selectionPath.length-1];
-      const parentNode = nodeFromPath(st.program.mainTree, st.selectionPath.slice(0, -1));
-      if (lastIdx < (parentNode.children.length-1)) {
-        return {
-          ...st,
-          selectionPath: st.selectionPath.slice(0, -1).concat([lastIdx+1]),
-        }
-      }
-    }
+    return {
+      ...st,
+      selectedNode: tryMoveSelectionUpDown(st.selectedNode, false),
+    };
   }],
 
+/*
   [['ABORT_EDIT'], ({st}) => {
     if (st.editingSelected) {
       return endEdit(st, false);

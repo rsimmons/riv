@@ -64,7 +64,7 @@ export function recursiveTreeFromEssential(definition: RivFunctionDefinition, st
     return v;
   };
 
-  const recursiveBuildStreamExpression = (sdef: StreamDefinition, parent: Node | null): StreamExpressionNode => {
+  const recursiveBuildStreamExpression = (sdef: StreamDefinition, parent: Node | null, childIdx: number | null): StreamExpressionNode => {
     const isRoot = streamIdIsRootExpr.get(sdef.id);
     if (isRoot === undefined) {
       throw new Error();
@@ -77,9 +77,11 @@ export function recursiveTreeFromEssential(definition: RivFunctionDefinition, st
       return {
         type: 'StreamReference',
         children: [],
+        selectable: true,
         selected: false,
         selectionIds: [],
         parent,
+        childIdx,
         targetDefinition: sdef,
       };
     }
@@ -90,9 +92,11 @@ export function recursiveTreeFromEssential(definition: RivFunctionDefinition, st
         return {
           type: 'SimpleStreamDefinition',
           children: [],
+          selectable: true,
           selected: false,
           selectionIds: [sdef.id],
           parent,
+          childIdx,
           definition: sdef,
         };
 
@@ -100,13 +104,15 @@ export function recursiveTreeFromEssential(definition: RivFunctionDefinition, st
         const node: SimpleStreamDefinitionNode = {
           type: 'SimpleStreamDefinition',
           children: [],
+          selectable: true,
           selected: false,
           selectionIds: [sdef.id],
           parent,
+          childIdx,
           definition: sdef,
         };
 
-        node.children = sdef.itemIds.map(itemId => recursiveBuildStreamExpression(assertDefined(streamIdToDef.get(itemId)), node));
+        node.children = sdef.itemIds.map((itemId, idx) => recursiveBuildStreamExpression(assertDefined(streamIdToDef.get(itemId)), node, idx));
 
         return node;
       }
@@ -116,14 +122,16 @@ export function recursiveTreeFromEssential(definition: RivFunctionDefinition, st
           type: 'Application',
           // TODO: we also need function arguments
           children: [],
+          selectable: true,
           selected: false,
           selectionIds: [sdef.id],
           definition: sdef,
           parent,
+          childIdx,
           appliedFunctionDefinition: assertDefined(functionIdToDef.get(sdef.appliedFunctionId)),
         };
 
-        node.children = sdef.streamArgumentIds.map(argId => recursiveBuildStreamExpression(assertDefined(streamIdToDef.get(argId)), node));
+        node.children = sdef.streamArgumentIds.map((argId, idx) => recursiveBuildStreamExpression(assertDefined(streamIdToDef.get(argId)), node, idx));
 
         return node;
       }
@@ -134,34 +142,39 @@ export function recursiveTreeFromEssential(definition: RivFunctionDefinition, st
   };
 
   const expressions: Array<StreamExpressionNode> = [];
-
-  for (const sdef of definition.streamDefinitions) {
+  let idx = 0;
+  definition.streamDefinitions.forEach((sdef) => {
     const isRoot = streamIdIsRootExpr.get(sdef.id);
     if (isRoot === undefined) {
       throw new Error();
     }
 
     if (isRoot) {
-      const expression = recursiveBuildStreamExpression(sdef, null);
+      const expression = recursiveBuildStreamExpression(sdef, null, idx);
       expressions.push(expression);
+      idx++;
     }
-  }
+  });
 
-  const streamParameters: ReadonlyArray<StreamParameterNode> = definition.signature.streamParameters.map(param => ({
+  const streamParameters: ReadonlyArray<StreamParameterNode> = definition.signature.streamParameters.map((param, idx) => ({
     type: 'StreamParameter',
     children: [],
+    selectable: true,
     selected: false,
     selectionIds: [],
     parent: null,
+    childIdx: idx,
     parameter: param,
   }));
 
-  const functionParameters: ReadonlyArray<FunctionParameterNode> = definition.signature.functionParameters.map(param => ({
+  const functionParameters: ReadonlyArray<FunctionParameterNode> = definition.signature.functionParameters.map((param, idx) => ({
     type: 'FunctionParameter',
     children: [],
+    selectable: true,
     selected: false,
     selectionIds: [],
     parent: null,
+    childIdx: idx,
     parameter: param,
   }));
 
@@ -171,21 +184,27 @@ export function recursiveTreeFromEssential(definition: RivFunctionDefinition, st
       {
         type: 'RivFunctionDefinitionStreamParameters',
         children: streamParameters,
+        selectable: false,
         selected: false,
         selectionIds: [],
         parent: null,
+        childIdx: 0,
       },
       {
         type: 'RivFunctionDefinitionStreamExpressions',
         children: expressions,
+        selectable: false,
         selected: false,
         selectionIds: [],
         parent: null,
+        childIdx: 1,
       },
     ],
+    selectable: true,
     selected: false,
     selectionIds: [definition.id],
     parent: null, // TODO: set
+    childIdx: null, // TODO: set
     definition: definition,
   };
 

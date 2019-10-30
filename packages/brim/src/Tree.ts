@@ -4,14 +4,17 @@ import { SignatureStreamParameter, SignatureFunctionParameter } from './Signatur
 interface NodeCommon {
   readonly type: string;
   children: ReadonlyArray<Node>;
+  selectable: boolean;
   selected: boolean;
   readonly selectionIds: ReadonlyArray<string>;
   parent: Node | null;
+  childIdx: number | null; // what child number of our parent are we
 }
 
 export interface SimpleStreamDefinitionNode extends NodeCommon {
   readonly type: 'SimpleStreamDefinition';
   children: ReadonlyArray<StreamExpressionNode>;
+  selectable: true;
 
   readonly definition: UndefinedLiteralStreamDefinition | NumberLiteralStreamDefinition | ArrayLiteralStreamDefinition;
 }
@@ -22,6 +25,7 @@ export function isSimpleStreamDefinitionNode(node: Node): node is SimpleStreamDe
 export interface ApplicationNode extends NodeCommon {
   readonly type: 'Application';
   children: ReadonlyArray<StreamExpressionNode>;
+  selectable: true;
 
   readonly definition: StreamDefinition;
   readonly appliedFunctionDefinition: FunctionDefinition;
@@ -38,6 +42,7 @@ export function isStreamDefinitionNode(node: Node): node is StreamDefinitionNode
 export interface StreamReferenceNode extends NodeCommon {
   readonly type: 'StreamReference';
   children: readonly [];
+  selectable: true;
 
   readonly targetDefinition: StreamDefinition;
 }
@@ -53,6 +58,7 @@ export function isStreamExpressionNode(node: Node): node is StreamExpressionNode
 export interface StreamParameterNode extends NodeCommon {
   readonly type: 'StreamParameter';
   children: readonly [];
+  selectable: true;
 
   readonly parameter: SignatureStreamParameter;
 }
@@ -63,6 +69,7 @@ export function isStreamParameterNode(node: Node): node is StreamParameterNode {
 export interface FunctionParameterNode extends NodeCommon {
   readonly type: 'FunctionParameter';
   children: readonly [];
+  selectable: true;
 
   readonly parameter: SignatureFunctionParameter;
 }
@@ -73,6 +80,7 @@ export function isFunctionParameterNode(node: Node): node is FunctionParameterNo
 export interface RivFunctionDefinitionStreamParametersNode extends NodeCommon {
   readonly type: 'RivFunctionDefinitionStreamParameters';
   children: ReadonlyArray<StreamParameterNode>;
+  selectable: false;
   selected: false;
   readonly selectionIds: string [];
 }
@@ -83,6 +91,7 @@ export function isRivFunctionDefinitionStreamParametersNode(node: Node): node is
 export interface RivFunctionDefinitionStreamExpressionsNode extends NodeCommon {
   readonly type: 'RivFunctionDefinitionStreamExpressions';
   children: ReadonlyArray<StreamExpressionNode>;
+  selectable: false;
   selected: false;
   readonly selectionIds: string [];
 }
@@ -93,6 +102,7 @@ export function isRivFunctionDefinitionStreamExpressionsNode(node: Node): node i
 export interface RivFunctionDefinitionNode extends NodeCommon {
   readonly type: 'RivFunctionDefinition';
   children: readonly [RivFunctionDefinitionStreamParametersNode, RivFunctionDefinitionStreamExpressionsNode];
+  selectable: true;
 
   readonly definition: RivFunctionDefinition;
 }
@@ -103,6 +113,7 @@ export function isRivFunctionDefinitionNode(node: Node): node is RivFunctionDefi
 export interface NativeFunctionDefinitionNode extends NodeCommon {
   readonly type: 'NativeFunctionDefinition';
   children: readonly [];
+  selectable: true;
 
   readonly definition: NativeFunctionDefinition;
 }
