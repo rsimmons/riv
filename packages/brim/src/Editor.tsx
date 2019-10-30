@@ -1,6 +1,6 @@
 import React, { useReducer, useRef, useEffect, useState } from 'react';
 import { HotKeys, ObserveKeys } from "react-hotkeys";
-import { initialState, reducer, nodeFromPath } from './EditReducer';
+import { initialState, reducer } from './EditReducer';
 import StoragePanel from './StoragePanel';
 import { NodeView, TreeViewContextProvider, TreeViewContextData } from './TreeView';
 import { Node } from './Tree';

@@ -24,34 +24,6 @@ interface Action {
   program?: Program;
 }
 
-export function nodeFromPath(root: Node, path: Path): Node {
-  let cur: any = root;
-  for (const seg of path) {
-    cur = cur.children[seg];
-  }
-  return cur;
-}
-
-/*
-function nodeSplitPath(node: Node, root: Node, path: Path): [Path, Path] {
-  let cur: any = root;
-  let idx = 0;
-  for (const seg of path) {
-    if (node === cur) {
-      return [path.slice(0, idx), path.slice(idx)];
-    }
-    cur = cur.children[seg];
-    idx++;
-  }
-
-  if (node === cur) {
-    return [path.slice(0, idx), path.slice(idx)];
-  } else {
-    throw new Error('node was not in path');
-  }
-}
-*/
-
 /*
 function addUserFunctionLocalEnvironment(func: UserFunctionDefinitionNode, namedStreams: Array<[string, StreamCreationNode]>, namedFunctions: Array<[string, FunctionDefinitionNode]>) {
   traverseTree(func, {onlyWithinFunctionId: func.id}, (node, path) => {
