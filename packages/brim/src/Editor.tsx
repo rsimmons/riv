@@ -109,10 +109,12 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
     mainState: state,
     dispatch,
     onSelectNode: (node: Node) => {
-      dispatch({
-        type: 'SET_SELECTED_NODE',
-        newSelectedNode: node,
-      });
+      if (node.selectable) {
+        dispatch({
+          type: 'SET_SELECTED_NODE',
+          newSelectedNode: node,
+        });
+      }
     },
   };
 

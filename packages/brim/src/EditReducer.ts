@@ -999,9 +999,11 @@ const HANDLERS: Handler[] = [
   }],
 
   [['SET_SELECTED_NODE'], ({action, st}) => {
-    return {
-      ...st,
-      selectedNode: action.newSelectedNode!,
+    if (action.newSelectedNode!.selectable) {
+      return {
+        ...st,
+        selectedNode: action.newSelectedNode!,
+      }
     }
   }],
 
