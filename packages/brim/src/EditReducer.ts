@@ -524,17 +524,21 @@ export function reducer(state: State, action: Action): State {
     }
   }
 
-  const movedSelectedNode = handleSelectionAction(action, state.selectedNode);
-  if (movedSelectedNode && (movedSelectedNode !== state.selectedNode)) {
+  const newSelectedNode = handleSelectionAction(action, state.selectedNode);
+  if (newSelectedNode && (newSelectedNode !== state.selectedNode)) {
     return {
       ...state,
-      selectedNode: movedSelectedNode,
+      selectedNode: newSelectedNode,
     };
   }
 
   const newMainDefinition = handleDefinitionEditAction(action, state.program.mainDefinition, state.selectedNode);
   if (newMainDefinition && (newMainDefinition !== state.program.mainDefinition)) {
     // TODO: find new selectedNode, update liveMain, build new state, etc.
+    console.log('newMainDefinition', newMainDefinition);
+
+    const [newTree, newSelectedNode] = treeFromEssential(newMainDefinition, nativeFunctionFromId, state.selectedNode.selectionIds);
+    console.log(newTree);
 
     /*
     if (!state.liveMain) {
@@ -553,7 +557,15 @@ export function reducer(state: State, action: Action): State {
     };
     */
 
-    return state;
+    return {
+      ...state,
+      program: {
+        ...state.program,
+        mainDefinition: newMainDefinition,
+      },
+      tree: newTree,
+      selectedNode: newTree,
+    };
   }
 
   /*
@@ -635,7 +647,7 @@ globalNativeFunctions.forEach(([id, name, signature, jsFunc]) => {
 
 function initializeStateFromProgram(program: Program): State {
   const selectionIds = [program.mainDefinition.id];
-  const [tree, selectedNode] = treeFromEssential(SAMPLE_DEFINITION, nativeFunctionFromId, selectionIds);
+  const [tree, selectedNode] = treeFromEssential(program.mainDefinition, nativeFunctionFromId, selectionIds);
 
   if (!selectedNode) {
     throw new Error();

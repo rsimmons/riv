@@ -118,6 +118,8 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
     },
   };
 
+  console.log('rendering tree', state.tree);
+
   return (
     <div className="Editor">
       <HotKeys keyMap={keyMap} handlers={handlers}>
