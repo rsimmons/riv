@@ -277,28 +277,60 @@ function tryDeleteSubtree(node: Node, definition: RivFunctionDefinition): RivFun
   // Build edit batch
   const edits: Array<EditBatchItem> = [];
 
-  const recursiveBuildEdits = (n: Node): void => {
-    for (const child of n.children) {
-      recursiveBuildEdits(child);
+  if (node.type === 'StreamReference') {
+    if (!node.parent || (node.childIdx === null)) {
+      throw new Error();
     }
 
-    switch (n.type) {
-      case 'SimpleStreamDefinition':
+    switch (node.parent.type) {
       case 'Application':
         edits.push({
-          type: 'delete_stream',
-          streamId: n.definition.id,
+          type: 'undefine_app_stream_argument',
+          streamId: node.parent.definition.id,
+          argumentIdx: node.childIdx,
         });
         break;
 
-      case 'StreamReference':
-        throw new Error(); // unimplemented, depends on parent
+      case 'SimpleStreamDefinition':
+        if (node.parent.definition.type !== 'arr') {
+          throw new Error();
+        }
+        edits.push({
+          type: 'delete_array_item',
+          streamId: node.parent.definition.id,
+          itemIdx: node.childIdx,
+        });
+        break;
 
       default:
+        // TODO: could this be a yielded reference?
         throw new Error();
     }
-  };
-  recursiveBuildEdits(node);
+  } else {
+    const recursiveBuildEdits = (n: Node): void => {
+      for (const child of n.children) {
+        recursiveBuildEdits(child);
+      }
+
+      switch (n.type) {
+        case 'SimpleStreamDefinition':
+        case 'Application':
+          edits.push({
+            type: 'delete_stream',
+            streamId: n.definition.id,
+          });
+          break;
+
+        case 'StreamReference':
+          // nothing to do here
+          break;
+
+        default:
+          throw new Error();
+      }
+    };
+    recursiveBuildEdits(node);
+  }
 
   // Attempt edit
   const newDefinition = batchEditRivDefinition(definition, {items: edits});
@@ -541,7 +573,6 @@ export function reducer(state: State, action: Action): State {
     console.log('newMainDefinition', newMainDefinition);
 
     const [newTree, newSelectedNode] = treeFromEssential(newMainDefinition, nativeFunctionFromId, state.selectedNode.selectionIds);
-    console.log(newTree);
 
     /*
     if (!state.liveMain) {
