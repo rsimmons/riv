@@ -598,7 +598,7 @@ export function reducer(state: State, action: Action): State {
         mainDefinition: newMainDefinition,
       },
       tree: newTree,
-      selectedNode: newTree,
+      selectedNode: newSelectedNode,
     };
   }
 
@@ -682,10 +682,6 @@ globalNativeFunctions.forEach(([id, name, signature, jsFunc]) => {
 function initializeStateFromProgram(program: Program): State {
   const selectionIds = [program.mainDefinition.id];
   const [tree, selectedNode] = treeFromEssential(program.mainDefinition, nativeFunctionFromId, selectionIds);
-
-  if (!selectedNode) {
-    throw new Error();
-  }
 
   /*
   const [liveStreamFunc, updateCompiledDefinition] = createLiveFunction(program.mainDefinition, nativeFunctionEnvironment);

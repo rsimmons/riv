@@ -3,10 +3,10 @@ import { SignatureStreamParameter, SignatureFunctionParameter } from './Signatur
 
 interface NodeCommon {
   readonly type: string;
-  children: ReadonlyArray<Node>;
+  readonly children: ReadonlyArray<Node>;
   selectable: boolean;
   selected: boolean;
-  readonly selectionIds: ReadonlyArray<string>;
+  readonly selectionIds: Array<string>;
   parent: Node | null;
   childIdx: number | null; // what child number of our parent are we
 }

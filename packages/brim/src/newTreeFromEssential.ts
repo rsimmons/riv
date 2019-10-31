@@ -86,6 +86,8 @@ export function recursiveTreeFromEssential(definition: RivFunctionDefinition, st
       };
     }
 
+    const selectionIds = [sdef.id];
+
     switch (sdef.type) {
       case 'und':
       case 'num':
@@ -94,7 +96,7 @@ export function recursiveTreeFromEssential(definition: RivFunctionDefinition, st
           children: [],
           selectable: true,
           selected: false,
-          selectionIds: [sdef.id],
+          selectionIds,
           parent,
           childIdx,
           definition: sdef,
@@ -106,13 +108,15 @@ export function recursiveTreeFromEssential(definition: RivFunctionDefinition, st
           children: [],
           selectable: true,
           selected: false,
-          selectionIds: [sdef.id],
+          selectionIds,
           parent,
           childIdx,
           definition: sdef,
         };
 
         node.children = sdef.itemIds.map((itemId, idx) => recursiveBuildStreamExpression(assertDefined(streamIdToDef.get(itemId)), node, idx));
+
+        node.children.forEach((item, idx) => { item.selectionIds.push(sdef.id + '_' + idx); });
 
         return node;
       }
@@ -124,7 +128,7 @@ export function recursiveTreeFromEssential(definition: RivFunctionDefinition, st
           children: [],
           selectable: true,
           selected: false,
-          selectionIds: [sdef.id],
+          selectionIds,
           definition: sdef,
           parent,
           childIdx,
@@ -132,6 +136,8 @@ export function recursiveTreeFromEssential(definition: RivFunctionDefinition, st
         };
 
         node.children = sdef.streamArgumentIds.map((argId, idx) => recursiveBuildStreamExpression(assertDefined(streamIdToDef.get(argId)), node, idx));
+
+        node.children.forEach((child, idx) => { child.selectionIds.push(sdef.id + '_' + idx); });
 
         return node;
       }
@@ -223,7 +229,7 @@ export function recursiveTreeFromEssential(definition: RivFunctionDefinition, st
   return definitionNode;
 }
 
-export function treeFromEssential(definition: RivFunctionDefinition, globalFunctions: Map<FunctionID, FunctionDefinition>, selectionIds: ReadonlyArray<string>): [RivFunctionDefinitionNode, Node | null] {
+export function treeFromEssential(definition: RivFunctionDefinition, globalFunctions: Map<FunctionID, FunctionDefinition>, selectionIds: ReadonlyArray<string>): [RivFunctionDefinitionNode, Node] {
   const streamIdToDef: Map<StreamID, StreamDefinition> = new Map();
   const functionIdToDef: Map<FunctionID, FunctionDefinition> = new Map(globalFunctions);
   const tree = recursiveTreeFromEssential(definition, streamIdToDef, functionIdToDef);
@@ -243,5 +249,5 @@ export function treeFromEssential(definition: RivFunctionDefinition, globalFunct
     });
   }
 
-  return [tree, selectedNode];
+  return [tree, selectedNode || tree];
 }
