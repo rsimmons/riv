@@ -52,7 +52,7 @@ export interface State {
   readonly liveMain: {
     context: ExecutionContext;
     updateCompiledDefinition: (newDefinition: EssentialDefinition) => void;
-  } | null;
+  } | null; // TODO: make this not optional
   readonly undoStack: ReadonlyArray<UndoStackFrame>;
   readonly clipboardStack: ReadonlyArray<ClipboardStackFrame>;
 }

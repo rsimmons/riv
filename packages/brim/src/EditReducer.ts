@@ -292,7 +292,7 @@ function tryDeleteSubtree(node: Node, definition: RivFunctionDefinition): RivFun
         break;
 
       case 'StreamReference':
-        throw new Error(); // unimplemented
+        throw new Error(); // unimplemented, depends on parent
 
       default:
         throw new Error();
@@ -499,74 +499,6 @@ function handleDefinitionEditAction(action: Action, mainDefinition: RivFunctionD
   }
 }
 
-/*
-function addStateCompiled(oldState: State | undefined, newState: State): State {
-  return newState;
-  // We initialize with an "empty" definition, which we fall back on if compilation fails
-  let newCompiledDefinition: EssentialDefinition = {
-    parameters: [],
-    constantStreamValues: [],
-    applications: [],
-    containedFunctionDefinitions: [],
-    yieldStreamId: null,
-    externalReferencedStreamIds: new Set(),
-    externalReferencedFunctionIds: new Set(),
-  };
-
-  try {
-    // NOTE: We could avoid repeating this work, but this is sort of temporary anyways
-    const globalFunctionEnvironment: Environment<FunctionDefinitionNode> = new Environment();
-    for (const nf of newState.nativeFunctions) {
-      globalFunctionEnvironment.set(nf.id, nf);
-    }
-
-    newCompiledDefinition = compileGlobalUserDefinition(newState.program.children[0], globalFunctionEnvironment);
-    // console.log('compiled to', newCompiledDefinition);
-  } catch (e) {
-    if (e instanceof CompilationError) {
-      console.log('COMPILATION ERROR', e.message);
-    } else {
-      throw e;
-    }
-  }
-
-  let newLiveMain;
-
-  if (oldState) {
-    const { context, updateCompiledDefinition } = oldState.liveMain!;
-
-    // console.log('updating compiled definition to', newCompiledDefinition);
-    beginBatch();
-    updateCompiledDefinition(newCompiledDefinition);
-    endBatch();
-
-    newLiveMain = {
-      context,
-      updateCompiledDefinition,
-      compiledDefinition: newCompiledDefinition,
-    };
-  } else {
-    // There is no old state, so we need to create the long-lived stuff
-    // console.log('initializing compiled definition to', newCompiledDefinition);
-    const [liveStreamFunc, updateCompiledDefinition] = createLiveFunction(newCompiledDefinition, nativeFunctionEnvironment);
-    const context = createNullaryVoidRootExecutionContext(liveStreamFunc);
-
-    context.update(); // first update that generally kicks off further async updates
-
-    newLiveMain = {
-      context,
-      updateCompiledDefinition,
-      compiledDefinition: newCompiledDefinition,
-    };
-  }
-
-  return {
-    ...newState,
-    liveMain: newLiveMain,
-  };
-}
-*/
-
 export function reducer(state: State, action: Action): State {
   console.log('action', action);
 
@@ -603,6 +535,24 @@ export function reducer(state: State, action: Action): State {
   const newMainDefinition = handleDefinitionEditAction(action, state.program.mainDefinition, state.selectedNode);
   if (newMainDefinition && (newMainDefinition !== state.program.mainDefinition)) {
     // TODO: find new selectedNode, update liveMain, build new state, etc.
+
+    /*
+    if (!state.liveMain) {
+      throw new Error();
+    }
+    const { context, updateCompiledDefinition } = state.liveMain!;
+
+    // console.log('updating compiled definition to', newMainDefinition);
+    beginBatch();
+    updateCompiledDefinition(newMainDefinition);
+    endBatch();
+
+    const newLiveMain = {
+      context,
+      updateCompiledDefinition,
+    };
+    */
+
     return state;
   }
 
@@ -691,12 +641,23 @@ function initializeStateFromProgram(program: Program): State {
     throw new Error();
   }
 
+  /*
+  const [liveStreamFunc, updateCompiledDefinition] = createLiveFunction(program.mainDefinition, nativeFunctionEnvironment);
+  const context = createNullaryVoidRootExecutionContext(liveStreamFunc);
+  context.update(); // first update that generally kicks off further async updates
+
+  const liveMain = {
+    context,
+    updateCompiledDefinition,
+  };
+  */
+
   return {
     program,
     tree,
     selectedNode,
     editingSelected: null,
-    liveMain: null,
+    liveMain: null, // TODO: initialize this
     undoStack: [],
     clipboardStack: [],
   };
