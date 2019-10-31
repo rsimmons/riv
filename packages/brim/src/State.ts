@@ -41,12 +41,12 @@ export interface ClipboardStackFrame {
 export interface Program {
   readonly programId: string;
   readonly name: string;
-  readonly mainTree: RivFunctionDefinitionNode;
+  readonly mainDefinition: RivFunctionDefinition;
 }
 
 export interface State {
-  readonly mainDefinition: RivFunctionDefinition;
   readonly program: Program;
+  readonly tree: RivFunctionDefinitionNode;
   readonly selectedNode: Node;
   readonly editingSelected: NodeEditState;
   readonly liveMain: {

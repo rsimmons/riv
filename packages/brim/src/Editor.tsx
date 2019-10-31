@@ -124,7 +124,7 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
         <ObserveKeys only={CATCH_IN_INPUTS}>
           <div className="Editor-workspace" onKeyDown={onKeyDown} tabIndex={0} ref={editorElem}>
             <TreeViewContextProvider value={treeViewCtxData}>
-              <NodeView node={state.program.mainTree} inheritedName="main" />
+              <NodeView node={state.tree} inheritedName="main" />
             </TreeViewContextProvider>
           </div>
         </ObserveKeys>
