@@ -508,10 +508,13 @@ export function reducer(state: State, action: Action): State {
     }
 
     // Terminate currently running main function
+    // TODO: bring back
+    /*
     if (!state.liveMain) {
       throw new Error();
     }
     state.liveMain.context.terminate();
+    */
 
     return initializeStateFromProgram(action.program);
   } else if (action.type === 'SET_PROGRAM_NAME') {
