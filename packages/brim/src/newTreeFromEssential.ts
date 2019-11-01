@@ -78,7 +78,6 @@ export function recursiveTreeFromEssential(definition: RivFunctionDefinition, st
         type: 'StreamReference',
         children: [],
         selectable: true,
-        selected: false,
         selectionIds: [],
         parent,
         childIdx,
@@ -95,7 +94,6 @@ export function recursiveTreeFromEssential(definition: RivFunctionDefinition, st
           type: 'SimpleStreamDefinition',
           children: [],
           selectable: true,
-          selected: false,
           selectionIds,
           parent,
           childIdx,
@@ -107,7 +105,6 @@ export function recursiveTreeFromEssential(definition: RivFunctionDefinition, st
           type: 'SimpleStreamDefinition',
           children: [],
           selectable: true,
-          selected: false,
           selectionIds,
           parent,
           childIdx,
@@ -127,7 +124,6 @@ export function recursiveTreeFromEssential(definition: RivFunctionDefinition, st
           // TODO: we also need function arguments
           children: [],
           selectable: true,
-          selected: false,
           selectionIds,
           definition: sdef,
           parent,
@@ -166,7 +162,6 @@ export function recursiveTreeFromEssential(definition: RivFunctionDefinition, st
     type: 'StreamParameter',
     children: [],
     selectable: true,
-    selected: false,
     selectionIds: [],
     parent: null,
     childIdx: idx,
@@ -177,7 +172,6 @@ export function recursiveTreeFromEssential(definition: RivFunctionDefinition, st
     type: 'FunctionParameter',
     children: [],
     selectable: true,
-    selected: false,
     selectionIds: [],
     parent: null,
     childIdx: idx,
@@ -191,7 +185,6 @@ export function recursiveTreeFromEssential(definition: RivFunctionDefinition, st
         type: 'RivFunctionDefinitionStreamParameters',
         children: streamParameters,
         selectable: false,
-        selected: false,
         selectionIds: [],
         parent: null,
         childIdx: 0,
@@ -200,14 +193,12 @@ export function recursiveTreeFromEssential(definition: RivFunctionDefinition, st
         type: 'RivFunctionDefinitionStreamExpressions',
         children: expressions,
         selectable: false,
-        selected: false,
         selectionIds: [],
         parent: null,
         childIdx: 1,
       },
     ],
     selectable: true,
-    selected: false,
     selectionIds: [definition.id],
     parent: null, // TODO: set
     childIdx: null, // TODO: set
@@ -242,7 +233,6 @@ export function treeFromEssential(definition: RivFunctionDefinition, globalFunct
     postorderTraverseTree(tree, node => {
       if (node.selectionIds.includes(selId)) {
         if (!selectedNode) {
-          node.selected = true;
           selectedNode = node;
         }
       }

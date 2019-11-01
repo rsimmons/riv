@@ -5,7 +5,6 @@ interface NodeCommon {
   readonly type: string;
   readonly children: ReadonlyArray<Node>;
   selectable: boolean;
-  selected: boolean;
   readonly selectionIds: Array<string>;
   parent: Node | null;
   childIdx: number | null; // what child number of our parent are we
@@ -81,7 +80,6 @@ export interface RivFunctionDefinitionStreamParametersNode extends NodeCommon {
   readonly type: 'RivFunctionDefinitionStreamParameters';
   children: ReadonlyArray<StreamParameterNode>;
   selectable: false;
-  selected: false;
   readonly selectionIds: string [];
 }
 export function isRivFunctionDefinitionStreamParametersNode(node: Node): node is RivFunctionDefinitionStreamParametersNode {
@@ -92,7 +90,6 @@ export interface RivFunctionDefinitionStreamExpressionsNode extends NodeCommon {
   readonly type: 'RivFunctionDefinitionStreamExpressions';
   children: ReadonlyArray<StreamExpressionNode>;
   selectable: false;
-  selected: false;
   readonly selectionIds: string [];
 }
 export function isRivFunctionDefinitionStreamExpressionsNode(node: Node): node is RivFunctionDefinitionStreamExpressionsNode {
