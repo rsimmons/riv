@@ -1,18 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './ExpressionChooser.css';
-import { Node, FunctionDefinitionNode, UserFunctionDefinitionNode, isStreamCreationNode, StreamCreationNode, isNamedNode, isStreamIndirectionNode } from './Tree';
+import { generateStreamId, generateFunctionId, Node, FunctionDefinitionNode, TreeFunctionDefinitionNode } from './Tree';
 import { fuzzy_match } from './vendor/fts_fuzzy_match';
-import { environmentForSelectedNode } from './EditReducer';
-import { generateStreamId, generateFunctionId } from './Identifier';
+// import { environmentForSelectedNode } from './EditReducer';
 import { State } from './State';
 
 interface UndefinedChoice {
   readonly type: 'undefined';
 }
-
+/*
 interface StreamRefChoice {
   readonly type: 'streamref';
-  readonly node: StreamCreationNode;
+  readonly node: StreamDefinition;
 }
 
 interface StreamIndChoice {
@@ -179,17 +178,16 @@ const ExpressionChooser: React.FC<{mainState: State, dispatch: (action: any) => 
 
       case 'StreamIndirection':
         return initFromNode.name || '';
-/*
-      case 'StreamReference': {
-        const targetExpressionNode = mainState.derivedLookups.streamIdToNode.get(initFromNode.targetStreamId);
-        return targetExpressionNode.identifier ? targetExpressionNode.identifier.name : '';
-      }
 
-      case 'Application': {
-        const functionNode = mainState.derivedLookups.functionIdToNode.get(initFromNode.functionId);
-        return functionNode.identifier ? functionNode.identifier.name : '';
-      }
-*/
+      // case 'StreamReference': {
+      //   const targetExpressionNode = mainState.derivedLookups.streamIdToNode.get(initFromNode.targetStreamId);
+      //   return targetExpressionNode.identifier ? targetExpressionNode.identifier.name : '';
+      // }
+
+      // case 'Application': {
+      //   const functionNode = mainState.derivedLookups.functionIdToNode.get(initFromNode.functionId);
+      //   return functionNode.identifier ? functionNode.identifier.name : '';
+      // }
 
       default:
         throw new Error();
@@ -266,14 +264,14 @@ const ExpressionChooser: React.FC<{mainState: State, dispatch: (action: any) => 
               };
             } else {
               const psig = param.type;
-              const fdef: UserFunctionDefinitionNode = {
-                type: 'UserFunctionDefinition',
+              const fdef: TreeFunctionDefinitionNode = {
+                type: 'TreeFunctionDefinition',
                 id: generateFunctionId(),
                 name: null,
                 signature: psig,
                 children: [
                   {
-                    type: 'UserFunctionDefinitionParameters',
+                    type: 'TreeFunctionDefinitionParameters',
                     children: psig.parameters.map(param => {
                       if (param.type === 'stream') {
                         return {
@@ -288,7 +286,7 @@ const ExpressionChooser: React.FC<{mainState: State, dispatch: (action: any) => 
                     }),
                   },
                   {
-                    type: 'UserFunctionDefinitionExpressions',
+                    type: 'TreeFunctionDefinitionExpressions',
                     children: [
                       {
                         type: 'UndefinedLiteral',
@@ -377,3 +375,4 @@ const ExpressionChooser: React.FC<{mainState: State, dispatch: (action: any) => 
   );
 }
 export default ExpressionChooser;
+*/

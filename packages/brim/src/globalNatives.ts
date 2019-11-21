@@ -1,4 +1,4 @@
-import { FunctionSignature } from './Tree';
+import { Signature, NodeKind } from './Tree';
 const { showString, animationTime, mouseDown, changeCount, streamMap, audioDriver, random, mouseClickEvts, redCircle, mousePosition, latestValue } = require('riv-demo-lib');
 
 interface Vec2d {
@@ -25,14 +25,15 @@ function vec2sqgrid(count: number, size: number) {
   return vecs;
 }
 
-function simpleSig(pnames: Array<string>, yields: boolean): FunctionSignature {
+function simpleSig(pnames: Array<string>, yields: boolean): Signature {
   return {
-    parameters: pnames.map(pn => ({name: pn, type: 'stream'})),
-    yields,
+    streamParams: pnames.map(pn => ({kind: NodeKind.SignatureStreamParameter, desc: { kind: NodeKind.Description, text: pn }})),
+    funcParams: [],
+    yields: yields ? [{kind: NodeKind.SignatureYield, desc: null}] : [],
   }
 }
 
-const nativeFunctions: Array<[string, string, FunctionSignature, Function]> = [
+const nativeFunctions: Array<[string, string, Signature, Function]> = [
   // simple
   ['ifte', 'if', simpleSig(['cond', 'then', 'else'], true), (cond: any, _then: any, _else: any) => (cond ? _then : _else)],
 
@@ -64,6 +65,7 @@ const nativeFunctions: Array<[string, string, FunctionSignature, Function]> = [
   ['vec2sqgrid', 'square grid of 2d vectors', simpleSig(['count', 'size'], true), vec2sqgrid],
 
   // higher-order
+  /*
   ['streamMap', 'map', {parameters: [
     {
       name: 'array',
@@ -105,6 +107,7 @@ const nativeFunctions: Array<[string, string, FunctionSignature, Function]> = [
       },
     },
   ], yields: false}, audioDriver],
+  */
 ];
 
 export default nativeFunctions;

@@ -1,6 +1,6 @@
 import { ExecutionContext, useVar, useInitialize, useRequestUpdate } from 'riv-runtime';
-import { EssentialDefinition } from './EssentialDefinition';
-import { StreamID, FunctionID, AnyID } from './Identifier';
+import { CompiledDefinition } from './CompiledDefinition';
+import { StreamID, FunctionID } from './Tree';
 import Environment from './Environment';
 
 function arraysShallowEqual(a: Array<any>, b: Array<any>): boolean {
@@ -20,11 +20,12 @@ function arraysShallowEqual(a: Array<any>, b: Array<any>): boolean {
 /**
  * I think that functions in outer environment are not allowed to change identity.
  */
-export function createLiveFunction(initialDefinition: EssentialDefinition, outerEnvironment: Environment<any>): [Function, (newDefinition: EssentialDefinition) => void] {
+/*
+export function createLiveFunction(initialDefinition: CompiledDefinition, outerEnvironment: Environment<any>): [Function, (newDefinition: CompiledDefinition) => void] {
   interface Activation {
     environment: Environment<any>;
     applicationContext: Map<string, ExecutionContext>;
-    updateContainedDefinition: Map<FunctionID, (newDefinition: EssentialDefinition) => void>;
+    updateContainedDefinition: Map<FunctionID, (newDefinition: CompiledDefinition) => void>;
     requestUpdate: () => void;
   }
 
@@ -32,7 +33,7 @@ export function createLiveFunction(initialDefinition: EssentialDefinition, outer
   let currentDefinition = initialDefinition;
 
   function streamFunc() { // NOTE: this can't be an arrow function because we use "arguments"
-    /* eslint-disable react-hooks/rules-of-hooks */
+    // eslint-disable react-hooks/rules-of-hooks
     const requestUpdate = useRequestUpdate();
 
     const activation = useVar<Activation>(() => {
@@ -52,7 +53,7 @@ export function createLiveFunction(initialDefinition: EssentialDefinition, outer
         applicationContext.set(sid, new ExecutionContext(func, requestUpdate));
       }
 
-      const updateContainedDefinition: Map<FunctionID, (newDefinition: EssentialDefinition) => void> = new Map();
+      const updateContainedDefinition: Map<FunctionID, (newDefinition: CompiledDefinition) => void> = new Map();
       for (const {id: fid, definition: def} of currentDefinition.containedFunctionDefinitions) {
         const [sf, updateDef] = createLiveFunction(def, environment);
         environment.set(fid, sf);
@@ -109,7 +110,7 @@ export function createLiveFunction(initialDefinition: EssentialDefinition, outer
     }
   };
 
-  const updateDefinition = (newDefinition: EssentialDefinition): void => {
+  const updateDefinition = (newDefinition: CompiledDefinition): void => {
     if (JSON.stringify(newDefinition) === JSON.stringify(currentDefinition)) {
       return;
     }
@@ -196,8 +197,8 @@ export function createLiveFunction(initialDefinition: EssentialDefinition, outer
     //
     // RECONCILE CONTAINED DEFINITIONS
     //
-    const oldDefMap: Map<FunctionID, EssentialDefinition> = new Map();
-    const newDefMap: Map<FunctionID, EssentialDefinition> = new Map();
+    const oldDefMap: Map<FunctionID, CompiledDefinition> = new Map();
+    const newDefMap: Map<FunctionID, CompiledDefinition> = new Map();
 
     for (const {id: fid, definition: def} of currentDefinition.containedFunctionDefinitions) {
       oldDefMap.set(fid, def);
@@ -241,3 +242,4 @@ export function createLiveFunction(initialDefinition: EssentialDefinition, outer
 
   return [streamFunc, updateDefinition];
 }
+*/

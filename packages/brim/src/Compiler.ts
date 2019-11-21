@@ -1,12 +1,12 @@
-import { StreamID, FunctionID, AnyID } from './Identifier';
-import { UserFunctionDefinitionNode, StreamCreationNode, FunctionDefinitionNode, isStreamCreationNode, isUserFunctionDefinitionNode, isStreamExpressionNode } from './Tree';
-import { EssentialDefinition } from './EssentialDefinition';
+import { StreamID, FunctionID, Node } from './Tree';
+import { CompiledDefinition } from './CompiledDefinition';
 import Environment from './Environment';
-import { traverseTree } from './Traversal';
+import { visitChildren } from './Traversal';
 
 export class CompilationError extends Error {
 };
 
+/*
 interface TraversalContext {
   streamEnvironment: Environment<StreamCreationNode>;
   functionEnvironment: Environment<FunctionDefinitionNode>;
@@ -14,11 +14,11 @@ interface TraversalContext {
   localFunctionIds: Set<FunctionID>;
   temporaryMarkedStreamIds: Set<StreamID>;
   permanentMarkedStreamIds: Set<StreamID>;
-  essentialDefinition: EssentialDefinition;
+  compiledDefinition: CompiledDefinition;
 }
 
 function traverseFromStreamCreation(node: StreamCreationNode, context: TraversalContext) {
-  const {streamEnvironment, functionEnvironment, localStreamIds, temporaryMarkedStreamIds, permanentMarkedStreamIds, essentialDefinition} = context;
+  const {streamEnvironment, functionEnvironment, localStreamIds, temporaryMarkedStreamIds, permanentMarkedStreamIds, compiledDefinition} = context;
 
   if (permanentMarkedStreamIds.has(node.id)) {
     return;
@@ -34,11 +34,11 @@ function traverseFromStreamCreation(node: StreamCreationNode, context: Traversal
       break;
 
     case 'UndefinedLiteral':
-      essentialDefinition.constantStreamValues.push({streamId: node.id, value: undefined});
+      compiledDefinition.constantStreamValues.push({streamId: node.id, value: undefined});
       break;
 
     case 'NumberLiteral':
-      essentialDefinition.constantStreamValues.push({streamId: node.id, value: node.value});
+      compiledDefinition.constantStreamValues.push({streamId: node.id, value: node.value});
       break;
 
     case 'ArrayLiteral':
@@ -52,7 +52,7 @@ function traverseFromStreamCreation(node: StreamCreationNode, context: Traversal
       temporaryMarkedStreamIds.delete(node.id);
 
       // An array literal is handled as a function application, where the function is Array.of() which builds an array from its arguments.
-      essentialDefinition.applications.push({
+      compiledDefinition.applications.push({
         resultStreamId: node.id,
         appliedFunction: 'Array_of',
         argumentIds: itemStreamIds,
@@ -73,11 +73,11 @@ function traverseFromStreamCreation(node: StreamCreationNode, context: Traversal
         if (streamEnvironment.get(node.targetStreamId) === undefined) {
           throw new Error();
         }
-        essentialDefinition.externalReferencedStreamIds.add(node.targetStreamId);
+        compiledDefinition.externalReferencedStreamIds.add(node.targetStreamId);
       }
 
       // For now, we do an inefficient copy rather than being smart
-      essentialDefinition.applications.push({
+      compiledDefinition.applications.push({
         resultStreamId: node.id,
         appliedFunction: 'id',
         argumentIds: [node.targetStreamId],
@@ -90,7 +90,7 @@ function traverseFromStreamCreation(node: StreamCreationNode, context: Traversal
       temporaryMarkedStreamIds.delete(node.id);
 
       // For now, we do an inefficient copy rather than being smart
-      essentialDefinition.applications.push({
+      compiledDefinition.applications.push({
         resultStreamId: node.id,
         appliedFunction: 'id',
         argumentIds: [node.children[0].id],
@@ -98,12 +98,10 @@ function traverseFromStreamCreation(node: StreamCreationNode, context: Traversal
       break;
 
     case 'Application':
-      /*
-      const functionNode = functionEnvironment.get(node.functionId);
-      if (!functionNode) {
-        throw Error();
-      }
-      */
+      // const functionNode = functionEnvironment.get(node.functionId);
+      // if (!functionNode) {
+      //   throw Error();
+      // }
 
       const argumentIds: Array<AnyID> = [];
 
@@ -113,11 +111,11 @@ function traverseFromStreamCreation(node: StreamCreationNode, context: Traversal
         if (isStreamExpressionNode(argument)) {
           traverseFromStreamCreation(argument, context);
           argumentIds.push(argument.id);
-        } else if (isUserFunctionDefinitionNode(argument)) {
+        } else if (isTreeFunctionDefinitionNode(argument)) {
           const compiledContainedDef = compileUserDefinition(argument, streamEnvironment, functionEnvironment);
 
           compiledContainedDef.externalReferencedStreamIds.forEach((sid) => {
-            essentialDefinition.externalReferencedStreamIds.add(sid);
+            compiledDefinition.externalReferencedStreamIds.add(sid);
           });
 
           // An application needs to traverse from its function-arguments out to any streams (in this exact scope)
@@ -133,7 +131,7 @@ function traverseFromStreamCreation(node: StreamCreationNode, context: Traversal
             }
           });
 
-          essentialDefinition.containedFunctionDefinitions.push({
+          compiledDefinition.containedFunctionDefinitions.push({
             id: argument.id,
             definition: compiledContainedDef,
           });
@@ -147,7 +145,7 @@ function traverseFromStreamCreation(node: StreamCreationNode, context: Traversal
 
       temporaryMarkedStreamIds.delete(node.id);
 
-      essentialDefinition.applications.push({
+      compiledDefinition.applications.push({
         resultStreamId: node.id,
         appliedFunction: node.functionId,
         argumentIds,
@@ -161,7 +159,7 @@ function traverseFromStreamCreation(node: StreamCreationNode, context: Traversal
   permanentMarkedStreamIds.add(node.id);
 }
 
-function compileUserDefinition(definition: UserFunctionDefinitionNode, outerStreamEnvironment: Environment<StreamCreationNode>, outerFunctionEnvironment: Environment<FunctionDefinitionNode>): EssentialDefinition {
+function compileUserDefinition(definition: TreeFunctionDefinitionNode, outerStreamEnvironment: Environment<StreamCreationNode>, outerFunctionEnvironment: Environment<FunctionDefinitionNode>): CompiledDefinition {
   const streamEnvironment: Environment<StreamCreationNode> = new Environment(outerStreamEnvironment);
   const functionEnvironment: Environment<FunctionDefinitionNode> = new Environment(outerFunctionEnvironment);
   const localStreamIds: Set<StreamID> = new Set();
@@ -177,7 +175,7 @@ function compileUserDefinition(definition: UserFunctionDefinitionNode, outerStre
       localStreamIds.add(node.id);
     }
 
-    if (isUserFunctionDefinitionNode(node) && (node.id !== definition.id)) {
+    if (isTreeFunctionDefinitionNode(node) && (node.id !== definition.id)) {
       if (functionEnvironment.get(node.id) !== undefined) {
         throw new Error('must be unique');
       }
@@ -191,7 +189,7 @@ function compileUserDefinition(definition: UserFunctionDefinitionNode, outerStre
   // Using terminology from https://en.wikipedia.org/wiki/Topological_sorting#Depth-first_search
   const temporaryMarkedStreamIds: Set<StreamID> = new Set();
   const permanentMarkedStreamIds: Set<StreamID> = new Set();
-  const essentialDefinition: EssentialDefinition = {
+  const compiledDefinition: CompiledDefinition = {
     parameters: definition.children[0].children.map(param => ({id: param.id})),
     constantStreamValues: [],
     applications: [],
@@ -210,21 +208,22 @@ function compileUserDefinition(definition: UserFunctionDefinitionNode, outerStre
         localFunctionIds,
         temporaryMarkedStreamIds,
         permanentMarkedStreamIds,
-        essentialDefinition,
+        compiledDefinition,
       });
-      essentialDefinition.yieldStreamId = expr.id; // yield the last stream expression
+      compiledDefinition.yieldStreamId = expr.id; // yield the last stream expression
     } else {
       // TODO: eventually, this could also be a function expression
       throw new Error();
     }
   }
 
-  return essentialDefinition;
+  return compiledDefinition;
 }
 
-export function compileGlobalUserDefinition(definition: UserFunctionDefinitionNode, globalFunctionEnvironment: Environment<FunctionDefinitionNode>): EssentialDefinition {
+export function compileGlobalUserDefinition(definition: TreeFunctionDefinitionNode, globalFunctionEnvironment: Environment<FunctionDefinitionNode>): CompiledDefinition {
   const streamEnvironment: Environment<StreamCreationNode> = new Environment();
   const functionEnvironment: Environment<FunctionDefinitionNode> = new Environment(globalFunctionEnvironment);
 
   return compileUserDefinition(definition, streamEnvironment, functionEnvironment);
 }
+*/

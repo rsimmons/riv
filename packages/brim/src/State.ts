@@ -1,9 +1,7 @@
 import { ExecutionContext } from 'riv-runtime';
-import { EssentialDefinition } from './EssentialDefinition';
+import { CompiledDefinition } from './CompiledDefinition';
 
-import { StreamID, FunctionID } from './Identifier';
-
-import { Node, ProgramNode, NativeFunctionDefinitionNode, StreamCreationNode, FunctionDefinitionNode } from './Tree';
+import { StreamID, FunctionID, Node, FunctionDefinitionNode, NativeFunctionDefinitionNode, TreeFunctionDefinitionNode } from './Tree';
 
 export function pathIsPrefix(a: Path, b: Path): boolean {
   if (a.length > b.length) {
@@ -28,7 +26,7 @@ export type NodeEditState = {
 } | null;
 
 export interface UndoStackFrame {
-  readonly program: ProgramNode;
+  readonly program: Program;
   readonly selectionPath: Path;
 };
 
@@ -37,21 +35,37 @@ export interface ClipboardStackFrame {
   readonly streamId: StreamID;
 }
 
+/**
+ * PROGRAM
+ */
+export interface Program {
+  readonly programId: string;
+  readonly name: string;
+  readonly mainDefinition: TreeFunctionDefinitionNode;
+}
+
+export interface DerivedLookups {
+  // streamIdToNode: ReadonlyMap<StreamID, StreamCreationNode> | null;
+  functionIdToDef: ReadonlyMap<FunctionID, FunctionDefinitionNode> | null;
+  nodeSelectionParent: ReadonlyMap<Node, Node>;
+  nodeSelectionPrevSibling: ReadonlyMap<Node, Node>;
+  nodeSelectionNextSibling: ReadonlyMap<Node, Node>;
+  nodeSelectionFirstChild: ReadonlyMap<Node, Node>;
+}
+
 export interface State {
-  readonly program: ProgramNode;
-  readonly selectionPath: Path;
+  readonly program: Program;
+  readonly selectedNode: Node;
   readonly editingSelected: NodeEditState;
   readonly nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>;
-  readonly derivedLookups: {
-    streamIdToNode: ReadonlyMap<StreamID, StreamCreationNode> | null;
-    functionIdToNode: ReadonlyMap<FunctionID, FunctionDefinitionNode> | null;
-    nodeToPath: ReadonlyMap<Node, Path> | null;
-  };
+  readonly derivedLookups: DerivedLookups;
+  /*
   readonly liveMain: {
     context: ExecutionContext;
-    compiledDefinition: EssentialDefinition | null;
-    updateCompiledDefinition: (newDefinition: EssentialDefinition) => void;
+    compiledDefinition: CompiledDefinition | null;
+    updateCompiledDefinition: (newDefinition: CompiledDefinition) => void;
   } | null;
+  */
   readonly undoStack: ReadonlyArray<UndoStackFrame>;
   readonly clipboardStack: ReadonlyArray<ClipboardStackFrame>;
 }

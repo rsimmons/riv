@@ -1,13 +1,12 @@
 import genuid from './uid';
-import { StreamID, FunctionID, generateStreamId, generateFunctionId } from './Identifier';
-import { State, Path, NodeEditState, pathIsPrefix } from './State';
-import { Node, ProgramNode, UserFunctionDefinitionNode, StreamCreationNode, FunctionDefinitionNode, isStreamCreationNode, isFunctionDefinitionNode, isProgramNode, isUserFunctionDefinitionNode, isStreamExpressionNode, isIDedNode, isNamedNode, isApplicationNode, isArrayLiteralNode, isUserFunctionDefinitionExpressionsNode, isStreamIndirectionNode, ArrayLiteralNode } from './Tree';
-import { EssentialDefinition } from './EssentialDefinition';
-import { compileGlobalUserDefinition, CompilationError } from './Compiler';
+import { State, Path, Program, NodeEditState, pathIsPrefix, DerivedLookups } from './State';
+import { StreamID, FunctionID, generateStreamId, generateFunctionId, NodeKind, Node, TreeFunctionDefinitionNode, FunctionDefinitionNode, ArrayLiteralNode, isFunctionDefinitionNode, StreamExpressionNode, NativeFunctionDefinitionNode, isStreamExpressionNode, UndefinedLiteralNode } from './Tree';
+// import { CompiledDefinition } from './CompiledDefinition';
+// import { compileGlobalUserDefinition, CompilationError } from './Compiler';
 import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
-import { createLiveFunction } from './LiveFunction';
+// import { createLiveFunction } from './LiveFunction';
 import Environment from './Environment';
-import { traverseTree } from './Traversal';
+import { visitChildren, replaceChild, deleteArrayElementChild } from './Traversal';
 import globalNativeFunctions from './globalNatives';
 
 const REALIZE_TENTATIVE_EXPRESSION_EDITS = false;
@@ -20,38 +19,23 @@ interface Action {
   newNode?: Node;
   newPath?: Path;
   newName?: string;
-  program?: ProgramNode;
+  program?: Program;
 }
 
-export function nodeFromPath(root: Node, path: Path): Node {
-  let cur: any = root;
-  for (const seg of path) {
-    cur = cur.children[seg];
-  }
-  return cur;
+interface ExprStreamDefinition {
+  type: 'expr';
+  expr: StreamExpressionNode;
 }
+
+interface ParamStreamDefinition {
+  type: 'param';
+  index: number;
+}
+
+type StreamDefinition = ExprStreamDefinition | ParamStreamDefinition;
 
 /*
-function nodeSplitPath(node: Node, root: Node, path: Path): [Path, Path] {
-  let cur: any = root;
-  let idx = 0;
-  for (const seg of path) {
-    if (node === cur) {
-      return [path.slice(0, idx), path.slice(idx)];
-    }
-    cur = cur.children[seg];
-    idx++;
-  }
-
-  if (node === cur) {
-    return [path.slice(0, idx), path.slice(idx)];
-  } else {
-    throw new Error('node was not in path');
-  }
-}
-*/
-
-function addUserFunctionLocalEnvironment(func: UserFunctionDefinitionNode, namedStreams: Array<[string, StreamCreationNode]>, namedFunctions: Array<[string, FunctionDefinitionNode]>) {
+function addUserFunctionLocalEnvironment(func: TreeFunctionDefinitionNode, namedStreams: Array<[string, StreamCreationNode]>, namedFunctions: Array<[string, FunctionDefinitionNode]>) {
   traverseTree(func, {onlyWithinFunctionId: func.id}, (node, path) => {
     if (isNamedNode(node)) {
       if (isStreamCreationNode(node) && node.name) {
@@ -69,7 +53,7 @@ function addUserFunctionLocalEnvironment(func: UserFunctionDefinitionNode, named
 function addEnvironmentAlongPath(root: Node, path: Path, namedStreams: Array<[string, StreamCreationNode]>, namedFunctions: Array<[string, FunctionDefinitionNode]>) {
   let cur: Node = root;
   for (const seg of path) {
-    if (cur.type === 'UserFunctionDefinition') {
+    if (cur.type === 'TreeFunctionDefinition') {
       addUserFunctionLocalEnvironment(cur, namedStreams, namedFunctions);
     }
     cur = cur.children[seg];
@@ -93,6 +77,7 @@ export function environmentForSelectedNode(state: State) {
     namedFunctions,
   }
 }
+*/
 
 const equiv = (a: any, b: any): boolean => JSON.stringify(a) === JSON.stringify(b);
 
@@ -113,7 +98,7 @@ const SCHEMA_CLASSES: {[nodeType: string]: string[]} = {
   Any: ['Program', 'Identifier', 'UndefinedExpression', 'IntegerLiteral', 'ArrayLiteral', 'StreamReference', 'Application', 'NativeFunction', 'UserFunction'],
 }
 
-function deleteDefinitionExpression(node: UserFunctionDefinitionNode, removeIdx: number): [UserFunctionDefinitionNode, Path, NodeEditState] {
+function deleteDefinitionExpression(node: TreeFunctionDefinitionNode, removeIdx: number): [TreeFunctionDefinitionNode, Path, NodeEditState] {
   // TODO: Handle case where we delete all expressions
   if (typeof(removeIdx) !== 'number') {
     throw new Error();
@@ -764,6 +749,7 @@ function pasteExpressionNode(pasteNode: ExpressionNode, pasteStreamId: StreamID,
 }
 */
 
+/*
 function firstUndefinedNode(node: Node, after: Path | undefined = undefined): [Node, Path] | undefined {
   let passed = false; // have we passed the "after" path?
   let result: [Node, Path] | undefined;
@@ -797,10 +783,12 @@ function tryMoveSelectionOut(program: ProgramNode, selectionPath: Path): Path {
 
   return selectionPath;
 }
+*/
 
 /**
  * "Maybe" because if the node is not OK to delete, we just return program unchanged.
  */
+/*
 function maybeDeleteSubtreeAtPath(program: ProgramNode, atPath: Path): [ProgramNode, Path] {
   let newProgram = program;
   let newPath = atPath;
@@ -817,7 +805,7 @@ function maybeDeleteSubtreeAtPath(program: ProgramNode, atPath: Path): [ProgramN
           children: [],
         });
       } else {
-        if (!(isArrayLiteralNode(parentNode) || isUserFunctionDefinitionExpressionsNode(parentNode))) {
+        if (!(isArrayLiteralNode(parentNode) || isTreeFunctionDefinitionExpressionsNode(parentNode))) {
           throw new Error();
         }
         const removeIdx = atPath[atPath.length-1];
@@ -958,7 +946,7 @@ const HANDLERS: Handler[] = [
 
   [['MOVE_RIGHT'], ({st}) => {
     const node = nodeFromPath(st.program, st.selectionPath);
-    if (isUserFunctionDefinitionNode(node)) {
+    if (isTreeFunctionDefinitionNode(node)) {
       if (node.children[1].children.length > 0) {
         return {
           ...st,
@@ -1109,64 +1097,147 @@ function applyActionToCoreState(action: Action, coreState: CoreState): CoreState
 
   return newCoreState;
 }
+*/
 
-function addStateIdLookups(state: State): State {
-  const streamIdToNode: Map<StreamID, StreamCreationNode> = new Map();
-  const functionIdToNode: Map<FunctionID, FunctionDefinitionNode> = new Map();
+function moveSelectionUpDown(selectedNode: Node, up: boolean, derivedLookups: DerivedLookups): Node {
+  let n: Node | undefined = selectedNode;
+  let depth = 0;
 
-  for (const extFunc of state.nativeFunctions) {
-    functionIdToNode.set(extFunc.id, extFunc);
+  while (n) {
+    const sib = up ? derivedLookups.nodeSelectionPrevSibling.get(n) : derivedLookups.nodeSelectionNextSibling.get(n);
+    if (sib) {
+      n = sib;
+      break;
+    }
+    n = derivedLookups.nodeSelectionParent.get(n);
+    depth++;
   }
 
-  traverseTree(state.program, {}, (node, ) => {
-    if (isStreamCreationNode(node)) {
-      if (streamIdToNode.has(node.id)) {
-        throw new Error('stream ids must be unique');
+  if (!n) {
+    // We got to the top without being able to move up
+    return selectedNode;
+  }
+
+  return n;
+
+  /* TODO: update this code
+  // Try to move back down to same depth
+  let lastSelectable: Node | undefined;
+  while (true) {
+    if (n.selectable) {
+      lastSelectable = n;
+    }
+    if ((depth > 0) && (n.children.length > 0)) {
+      n = up ? n.children[n.children.length-1] : n.children[0];
+      depth--;
+    } else {
+      break;
+    }
+  }
+
+  if (!lastSelectable) {
+    return node;
+  }
+
+  return n;
+  */
+}
+
+function handleSelectionAction(action: Action, selectedNode: Node, derivedLookups: DerivedLookups): Node | void {
+  switch (action.type) {
+    case 'SET_SELECTED_NODE':
+      return action.newNode!;
+
+
+    case 'MOVE_LEFT': {
+      const parent = derivedLookups.nodeSelectionParent.get(selectedNode);
+      if (parent) {
+        return parent;
       }
-      streamIdToNode.set(node.id, node);
+      break;
     }
 
-    if (isFunctionDefinitionNode(node)) {
-      if (functionIdToNode.has(node.id)) {
-        throw new Error('funciton ids must be unique');
+    case 'MOVE_RIGHT': {
+      const firstChild = derivedLookups.nodeSelectionFirstChild.get(selectedNode);
+      if (firstChild) {
+        return firstChild;
       }
-      functionIdToNode.set(node.id, node);
+      break;
     }
 
-    return [false, node];
-  });
+    case 'MOVE_UP':
+      return moveSelectionUpDown(selectedNode, true, derivedLookups);
 
-  return {
-    ...state,
-    derivedLookups: {
-      streamIdToNode,
-      functionIdToNode,
-      nodeToPath: null,
-    },
-  };
+    case 'MOVE_DOWN':
+      return moveSelectionUpDown(selectedNode, false, derivedLookups);
+  }
 }
 
-function computeNodeToPathMap(program: ProgramNode): Map<Node, Path> {
-  const nodeToPath: Map<Node, Path> = new Map();
-
-  traverseTree(program, {}, (node, path) => {
-    nodeToPath.set(node, path);
-    return [false, node];
-  });
-
-  return nodeToPath;
+/**
+ * Note that this returns the new _root_ of the whole tree
+ */
+function replaceNode(node: Node, newNode: Node, derivedLookups: DerivedLookups): Node {
+  const parent = derivedLookups.nodeSelectionParent.get(node);
+  if (!parent) {
+    return newNode;
+  }
+  return replaceNode(parent, replaceChild(parent, node, newNode), derivedLookups);
 }
 
-function addStatePathLookup(state: State): State {
-  return {
-    ...state,
-    derivedLookups: {
-      ...state.derivedLookups,
-      nodeToPath: computeNodeToPathMap(state.program),
-    },
-  };
+/**
+ * Returns [newRoot, newSelectedNode]
+ */
+function deleteArrayElementNode(node: Node, derivedLookups: DerivedLookups): [Node, Node] {
+  // TODO: find new selected by either getting previous sibling or parent
+  const parent = derivedLookups.nodeSelectionParent.get(node);
+  if (!parent) {
+    throw new Error();
+  }
+
+  const selectedSib = derivedLookups.nodeSelectionPrevSibling.get(node) || derivedLookups.nodeSelectionNextSibling.get(node);
+  const newParent = deleteArrayElementChild(parent, node);
+  const newRoot = replaceNode(parent, newParent, derivedLookups);
+  return [newRoot, selectedSib || newParent];
 }
 
+function deleteNodeSubtree(node: Node, derivedLookups: DerivedLookups): [Node, Node] | void {
+  const parent = derivedLookups.nodeSelectionParent.get(node);
+
+  if (!parent) {
+    return;
+  }
+
+  if (isStreamExpressionNode(node)) {
+    if (parent.kind === NodeKind.RefApplication) {
+      let newSid: StreamID;
+      if (node.kind === NodeKind.RefApplication) {
+        newSid = node.sids[0];
+      } else {
+        newSid = node.sid;
+      }
+      const newNode: UndefinedLiteralNode = {
+        kind: NodeKind.UndefinedLiteral,
+        sid: newSid,
+        desc: node.desc,
+      };
+      const newRoot = replaceNode(node, newNode, derivedLookups);
+      return [newRoot, newNode];
+    } else if ((parent.kind === NodeKind.ArrayLiteral) || (parent.kind === NodeKind.TreeFunctionDefinition)) {
+      return deleteArrayElementNode(node, derivedLookups);
+    } else {
+      throw new Error();
+    }
+  }
+}
+
+function handleEditAction(action: Action, mainDefinition: TreeFunctionDefinitionNode, selectedNode: Node, derivedLookups: DerivedLookups): [Node, Node] | void {
+  switch (action.type) {
+    case 'DELETE_SUBTREE':
+      return deleteNodeSubtree(selectedNode, derivedLookups);
+  }
+}
+
+/*
 function undefineDanglingStreamRefs(state: State): State {
   const newProgram = traverseTree(state.program, {}, (node, ) => {
     if (node.type === 'StreamReference') {
@@ -1183,13 +1254,13 @@ function undefineDanglingStreamRefs(state: State): State {
 
   return (newProgram === state.program) ? state : {
     ...state,
-    program: newProgram as ProgramNode,
+    program: newProgram as Program,
   }
 }
 
 function addStateCompiled(oldState: State | undefined, newState: State): State {
   // We initialize with an "empty" definition, which we fall back on if compilation fails
-  let newCompiledDefinition: EssentialDefinition = {
+  let newCompiledDefinition: CompiledDefinition = {
     parameters: [],
     constantStreamValues: [],
     applications: [],
@@ -1206,7 +1277,7 @@ function addStateCompiled(oldState: State | undefined, newState: State): State {
       globalFunctionEnvironment.set(nf.id, nf);
     }
 
-    newCompiledDefinition = compileGlobalUserDefinition(newState.program.children[0], globalFunctionEnvironment);
+    newCompiledDefinition = compileGlobalUserDefinition(newState.program.mainDefinition, globalFunctionEnvironment);
     // console.log('compiled to', newCompiledDefinition);
   } catch (e) {
     if (e instanceof CompilationError) {
@@ -1251,17 +1322,95 @@ function addStateCompiled(oldState: State | undefined, newState: State): State {
     liveMain: newLiveMain,
   };
 }
+*/
 
-function addDerivedState(oldState: State | undefined, newState: State): State {
+function* selectionChildren(node: Node) {
+  switch (node.kind) {
+    case NodeKind.ArrayLiteral:
+      for (const elem of node.elems) {
+        yield elem;
+      }
+      break;
+
+    case NodeKind.RefApplication:
+      for (const sarg of node.sargs) {
+        yield sarg;
+      }
+      for (const farg of node.fargs) {
+        yield farg;
+      }
+      break;
+
+    case NodeKind.TreeFunctionDefinition:
+      // TODO: include signature
+      for (const expr of node.exprs) {
+        yield expr;
+      }
+      break;
+  }
+}
+
+function computeDerivedLookups(program: Program, nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>): DerivedLookups {
   // undefineDanglingStreamRefs needs up-to-date id lookups
+  /*
   const danglingRemovedState = undefineDanglingStreamRefs(addStateIdLookups(newState));
 
-  return addStateCompiled(oldState, addStatePathLookup(addStateIdLookups(danglingRemovedState)));
+  return addStateCompiled(oldState, addStateIdLookups(danglingRemovedState));
+  */
+
+  // const streamIdToNode: Map<StreamID, StreamCreationNode> = new Map();
+  const functionIdToDef: Map<FunctionID, FunctionDefinitionNode> = new Map();
+  const nodeSelectionParent: Map<Node, Node> = new Map();
+  const nodeSelectionPrevSibling: Map<Node, Node> = new Map();
+  const nodeSelectionNextSibling: Map<Node, Node> = new Map();
+  const nodeSelectionFirstChild: Map<Node, Node> = new Map();
+
+  for (const extFunc of nativeFunctions) {
+    functionIdToDef.set(extFunc.fid, extFunc);
+  }
+
+  const visit = (node: Node): void => {
+    if (isFunctionDefinitionNode(node)) {
+      if (functionIdToDef.has(node.fid)) {
+        throw new Error('function ids must be unique');
+      }
+      functionIdToDef.set(node.fid, node);
+    }
+
+    let prev: Node | undefined;
+    let setFirst = false;
+    for (const child of selectionChildren(node)) {
+      nodeSelectionParent.set(child, node);
+      if (prev) {
+        nodeSelectionPrevSibling.set(child, prev);
+        nodeSelectionNextSibling.set(prev, child);
+      }
+      if (!setFirst) {
+        nodeSelectionFirstChild.set(node, child);
+        setFirst = true;
+      }
+      prev = child;
+    }
+
+    visitChildren(node, visit);
+  };
+
+  visit(program.mainDefinition);
+
+  return {
+    // streamIdToNode,
+    functionIdToDef,
+    nodeSelectionParent,
+    nodeSelectionPrevSibling,
+    nodeSelectionNextSibling,
+    nodeSelectionFirstChild,
+  };
 }
 
 export function reducer(state: State, action: Action): State {
   console.log('action', action);
 
+  /*
   if (action.type === 'LOAD_PROGRAM') {
     if (!action.program) {
       throw new Error();
@@ -1275,20 +1424,63 @@ export function reducer(state: State, action: Action): State {
 
     return initialStateFromProgram(action.program);
   }
+  */
 
+  const handleSelectionActionResult = handleSelectionAction(action, state.selectedNode, state.derivedLookups);
+  if (handleSelectionActionResult) {
+    const newSelectedNode = handleSelectionActionResult;
+    if (newSelectedNode !== state.selectedNode) {
+      return {
+        ...state,
+        selectedNode: newSelectedNode,
+      };
+    }
+  }
+
+  const handleEditActionResult = handleEditAction(action, state.program.mainDefinition, state.selectedNode, state.derivedLookups);
+  if (handleEditActionResult) {
+    const [newMainDefinition, newSelectedNode] = handleEditActionResult;
+    console.log(newMainDefinition, newSelectedNode);
+    if (newMainDefinition.kind !== NodeKind.TreeFunctionDefinition) {
+      throw new Error();
+    }
+
+    if (newMainDefinition !== state.program.mainDefinition) {
+      const newProgram = {
+        ...state.program,
+        mainDefinition: newMainDefinition,
+      };
+      return {
+        ...state,
+        program: newProgram,
+        derivedLookups: computeDerivedLookups(newProgram, state.nativeFunctions),
+        selectedNode: newSelectedNode,
+      };
+    } else if (newSelectedNode !== state.selectedNode) {
+      return {
+        ...state,
+        selectedNode: newSelectedNode,
+      };
+    }
+  }
+
+  /*
   let newProgram = state.program;
-  let newSelectionPath = state.selectionPath;
+  let newSelectedNode = state.selectedNode;
   let newEditingSelected = state.editingSelected;
   let newUndoStack = state.undoStack;
   let newClipboardStack = state.clipboardStack;
+  */
 
   if (action.type === 'UNDO') {
+    /*
     if (state.undoStack.length > 0) {
       const topFrame = newUndoStack[newUndoStack.length-1];
       newProgram = topFrame.program;
       newSelectionPath = topFrame.selectionPath;
       newUndoStack = newUndoStack.slice(0, newUndoStack.length-1);
     }
+    */
   } else if (action.type === 'CUT') {
     /*
     const selectedNode = nodeFromPath(newProgram, newSelectionPath);
@@ -1311,6 +1503,7 @@ export function reducer(state: State, action: Action): State {
     }
     */
   } else {
+    /*
     const newCoreState = applyActionToCoreState(action, {
       program: newProgram,
       selectionPath: newSelectionPath,
@@ -1319,36 +1512,37 @@ export function reducer(state: State, action: Action): State {
     newProgram = newCoreState.program;
     newSelectionPath = newCoreState.selectionPath;
     newEditingSelected = newCoreState.editingSelected;
+    */
     /*
     [newProgram, newSelectionPath, newEditingSelected] = applyActionToProgram(newProgram, newSelectionPath, newEditingSelected, action);
     */
   }
 
-  if ((newProgram !== state.program) || (newSelectionPath !== state.selectionPath) || (newEditingSelected !== state.editingSelected) || (newUndoStack !== state.undoStack) || (newClipboardStack !== state.clipboardStack)) {
-    console.log('handled! new prog', newProgram, 'new selectionPath is', newSelectionPath, 'newEditingSelected is', newEditingSelected);
+  /*
+  if ((newProgram !== state.program) || (newSelectedNode !== state.selectedNode) || (newEditingSelected !== state.editingSelected) || (newUndoStack !== state.undoStack) || (newClipboardStack !== state.clipboardStack)) {
+    console.log('handled! new prog', newProgram, 'new selectedNode is', newSelectedNode, 'newEditingSelected is', newEditingSelected);
     if (newProgram !== state.program) {
       console.log('program changed identity');
 
       // Push the state of things _before_ this action onto the stack
-      if (action.type !== 'UNDO') {
-        newUndoStack = newUndoStack.concat([{
-          program: state.program,
-          selectionPath: state.selectionPath,
-        }]);
-      }
+      // if (action.type !== 'UNDO') {
+      //   newUndoStack = newUndoStack.concat([{
+      //     program: state.program,
+      //     selectionPath: state.selectionPath,
+      //   }]);
+      // }
     }
 
     return addDerivedState(state, {
       program: newProgram,
-      selectionPath: newSelectionPath,
+      selectedNode: newProgram.mainDefinition,
       editingSelected: newEditingSelected,
       nativeFunctions: state.nativeFunctions,
       derivedLookups: {
-        streamIdToNode: null,
-        functionIdToNode: null,
-        nodeToPath: null,
+        // streamIdToNode: null,
+        functionIdToDef: null,
       },
-      liveMain: null,
+      // liveMain: null,
       undoStack: newUndoStack,
       clipboardStack: newClipboardStack,
     });
@@ -1356,6 +1550,10 @@ export function reducer(state: State, action: Action): State {
     console.log('not handled');
     return state;
   }
+  */
+
+  console.log('action not handled');
+  return state;
 }
 
 
@@ -1367,99 +1565,91 @@ globalNativeFunctions.forEach(([id, , , jsFunc]) => {
   nativeFunctionEnvironment.set(id, jsFunc);
 });
 
-function initialStateFromProgram(program: ProgramNode): State {
-  return addDerivedState(undefined, {
+function initialStateFromProgram(program: Program): State {
+  const nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode> = globalNativeFunctions.map(([fid, desc, signature, ]) => ({
+    kind: NodeKind.NativeFunctionDefinition,
+    fid,
+    desc: { kind: NodeKind.Description, text: desc },
+    sig: signature,
+  }));
+
+  return {
     program,
-    selectionPath: [0],
+    selectedNode: program.mainDefinition,
     editingSelected: null,
-    nativeFunctions: globalNativeFunctions.map(([id, name, signature, ]) => ({
-      type: 'NativeFunctionDefinition',
-      id,
-      name,
-      signature,
-      children: [],
-    })),
-    derivedLookups: {
-      streamIdToNode: null,
-      functionIdToNode: null,
-      nodeToPath: null,
-    },
-    liveMain: null,
+    nativeFunctions,
+    derivedLookups: computeDerivedLookups(program, nativeFunctions),
+    // liveMain: null,
     undoStack: [],
     clipboardStack: [],
-  });
+  };
 }
 
 const mdId = generateStreamId();
-const INITIAL_PROGRAM: ProgramNode = {
-  type: 'Program',
+const INITIAL_PROGRAM: Program = {
   programId: genuid(),
   name: 'my program',
-  children: [{
-    type: 'UserFunctionDefinition',
-    id: generateFunctionId(),
-    name: null,
-    signature: {
-      parameters: [],
-      yields: false,
+  mainDefinition: {
+    kind: NodeKind.TreeFunctionDefinition,
+    fid: generateFunctionId(),
+    desc: null,
+    sig: {
+      streamParams: [],
+      funcParams: [],
+      yields: [],
     },
-    children: [
+    spids: [],
+    fpids: [],
+    exprs: [
       {
-        type: 'UserFunctionDefinitionParameters',
-        children: [],
+        kind: NodeKind.RefApplication,
+        sids: [mdId],
+        desc: {
+          kind: NodeKind.Description,
+          text: 'md',
+        },
+        func: 'mouseDown',
+        sargs: [],
+        fargs: [],
       },
       {
-        type: 'UserFunctionDefinitionExpressions',
-        children: [
+        kind: NodeKind.RefApplication,
+        sids: [generateStreamId()],
+        desc: null,
+        func: 'showString',
+        sargs: [
           {
-            type: 'StreamIndirection',
-            id: mdId,
-            name: 'md',
-            children: [
+            kind: NodeKind.RefApplication,
+            sids: [generateStreamId()],
+            desc: null,
+            func: 'ifte',
+            sargs: [
               {
-                type: 'Application',
-                id: generateStreamId(),
-                functionId: 'mouseDown',
-                children: [],
+                kind: NodeKind.StreamReference,
+                sid: generateStreamId(),
+                desc: null,
+                ref: mdId,
+              },
+              {
+                kind: NodeKind.NumberLiteral,
+                sid: generateStreamId(),
+                desc: null,
+                val: 10,
+              },
+              {
+                kind: NodeKind.NumberLiteral,
+                sid: generateStreamId(),
+                desc: null,
+                val: 20,
               },
             ],
-          },
-          {
-            type: 'Application',
-            id: generateStreamId(),
-            functionId: 'showString',
-            children: [
-              {
-                type: 'Application',
-                id: generateStreamId(),
-                functionId: 'ifte',
-                children: [
-                  {
-                    type: 'StreamReference',
-                    id: generateStreamId(),
-                    targetStreamId: mdId,
-                    children: [],
-                  },
-                  {
-                    type: 'NumberLiteral',
-                    id: generateStreamId(),
-                    value: 10,
-                    children: [],
-                  },
-                  {
-                    type: 'NumberLiteral',
-                    id: generateStreamId(),
-                    value: 20,
-                    children: [],
-                  },
-                ],
-              },
-            ],
+            fargs: [],
           },
         ],
+        fargs: [],
       },
     ],
-  }],
+  },
 };
 
 export const initialState: State = initialStateFromProgram(INITIAL_PROGRAM);

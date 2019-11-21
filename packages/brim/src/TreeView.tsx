@@ -1,8 +1,7 @@
 import React, { createContext, useContext, useState } from 'react';
-import { Node, StreamCreationNode, FunctionDefinitionNode, isNamedNode, UserFunctionDefinitionNode, StreamIndirectionNode } from './Tree';
-import ExpressionChooser from './ExpressionChooser';
+import { StreamID, FunctionID, Node, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, isFunctionExpressionNode } from './Tree';
+// import ExpressionChooser from './ExpressionChooser';
 import './TreeView.css';
-import { StreamID, FunctionID } from './Identifier';
 import { State } from './State';
 
 const NORMAL_BOX_COLOR = '#d8d8d8';
@@ -11,8 +10,8 @@ const STREAM_INDIRECTION_BOX_COLOR = '#8cbcf2';
 
 export interface TreeViewContextData {
   selectedNode: Node,
-  streamIdToNode: ReadonlyMap<StreamID, StreamCreationNode>;
-  functionIdToNode: ReadonlyMap<FunctionID, FunctionDefinitionNode>;
+  // streamIdToNode: ReadonlyMap<StreamID, StreamDefinitionNode>;
+  functionIdToDef: ReadonlyMap<FunctionID, FunctionDefinitionNode>;
   mainState: State;
   dispatch: (action: any) => void; // TODO: tighten up type
   onSelectNode: (node: Node) => void;
@@ -137,39 +136,127 @@ const AppishNodeView: React.FC<AppishNodeProps> = ({node, name, boxColor, stream
   );
 };
 
-const UserFunctionDefinitionView: React.FC<{node: UserFunctionDefinitionNode, inheritedName?: string}> = ({ node, inheritedName }) => {
-  const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node);
+const StreamExpressionView: React.FC<{node: StreamExpressionNode}> = ({ node }) => {
+  const ctxData = useContext(TreeViewContext);
+  if (!ctxData) {
+    throw new Error();
+  }
 
-  const parameters = node.children[0].children;
-  const expressions = node.children[1].children;
+  const selected = (ctxData.selectedNode === node);
+
+  if (selected && ctxData.mainState.editingSelected) {
+    // return <ExpressionChooser mainState={ctxData.mainState} dispatch={ctxData.dispatch} />
+    return <div>chooser goes here</div>
+  }
+
+  switch (node.kind) {
+    case NodeKind.UndefinedLiteral:
+      return <SimpleNodeView node={node} contents={<span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>} boxColor={'red'} />
+
+    case NodeKind.NumberLiteral:
+      return <SimpleNodeView node={node} contents={node.val.toString()} boxColor="#cce8cc" />
+
+    case NodeKind.ArrayLiteral:
+      return <AppishNodeView node={node} name="[ ]" boxColor={NORMAL_BOX_COLOR} streamChildren={node.elems.map((elem, idx) => ({key: idx, name: undefined, child: <StreamExpressionView node={elem} />}))} functionChildren={[]} />
+
+    case NodeKind.RefApplication: {
+      const functionNode = ctxData.functionIdToDef.get(node.func);
+      if (!functionNode) {
+        throw new Error();
+      }
+      const displayedDesc = functionNode.desc ? functionNode.desc.text : ('<function ' + node.func + '>');
+
+      if (functionNode.sig.streamParams.length !== node.sargs.length) {
+        throw new Error('stream params and args length mismatch');
+      }
+      if (functionNode.sig.funcParams.length !== node.fargs.length) {
+        throw new Error('function params and args length mismatch');
+      }
+
+      const streamChildrenViews: Array<ChildView> = functionNode.sig.streamParams.map((param, idx) => {
+        const displayName = (param.desc && !param.desc.text.startsWith('_')) ? param.desc.text : undefined;
+        return {
+          key: idx,
+          name: displayName,
+          child: <StreamExpressionView node={node.sargs[idx]} />
+        };
+      });
+
+      /*
+      const functionChildrenViews: Array<ChildView> = functionNode.sig.funcParams.map((param, idx) => {
+        const displayName = (param.desc && param.desc.text) || undefined;
+        return {
+          key: idx,
+          name: displayName,
+          child: <TreeFunctionDefinitionView node={node.fargs[idx]} inheritedName={displayName} />
+        };
+      });
+      */
+     const functionChildrenViews: Array<ChildView> = [];
+
+      return <AppishNodeView node={node} name={displayedDesc} boxColor={NORMAL_BOX_COLOR} streamChildren={streamChildrenViews} functionChildren={functionChildrenViews} />
+    }
+
+    case NodeKind.StreamReference: {
+      // const targetExpressionNode = ctxData.streamIdToNode.get(node.ref);
+      // if (!targetExpressionNode) {
+      //   throw new Error();
+      // }
+      // const displayedDesc = ('desc' in targetExpressionNode) ? targetExpressionNode.desc : ('<stream ' + node.ref + '>');
+      const displayedDesc = 'ref';
+      return <SimpleNodeView node={node} contents={displayedDesc} boxColor={STREAM_REFERENCE_BOX_COLOR} />
+    }
+
+    default:
+      throw new Error();
+  }
+  return (
+    <div></div>
+  );
+}
+
+export const BodyExpressionView: React.FC<{node: BodyExpressionNode}> = ({node}) => {
+  if (isStreamExpressionNode(node)) {
+    return <StreamExpressionView node={node} />
+  } else if (isFunctionExpressionNode(node)) {
+    throw new Error('unimplemented');
+  } else if (node.kind === NodeKind.YieldExpression) {
+    throw new Error('unimplemented');
+  } else {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const exhaustive: never = node; // this will cause a type error if we haven't handled all cases
+    throw new Error('unreachable');
+  }
+};
+
+export const TreeFunctionDefinitionView: React.FC<{node: TreeFunctionDefinitionNode, inheritedName?: string}> = ({ node, inheritedName }) => {
+  const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node);
 
   return (
     <div className={selectionClasses.concat(['TreeView-udf-node']).join(' ')} {...selectionHandlers} style={{backgroundColor: NORMAL_BOX_COLOR}}>
-      <div className="TreeView-name-bar TreeView-common-padding">{node.name || (inheritedName || 'ƒ')}</div>
+      <div className="TreeView-name-bar TreeView-common-padding">{node.desc || (inheritedName || 'ƒ')}</div>
       <div className="TreeView-udf-node-main-container TreeView-common-padding">
-        <div className="TreeView-udf-node-expressions">{expressions.map(child => (
-          <NodeView key={child.id} node={child} />
-        ))}</div>
-        <div className="TreeView-udf-node-parameters">{parameters.map(child => (
-          <NodeView key={child.id} node={child} />
+        <div className="TreeView-udf-node-expressions">{node.exprs.map(expr => (
+          <BodyExpressionView node={expr} />
         ))}</div>
       </div>
     </div>
   );
-}
+};
 
-const StreamIndirectionView: React.FC<{node: StreamIndirectionNode}> = ({node}) => {
-  const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node);
+export const FunctionDefinitionView: React.FC<{node: FunctionDefinitionNode, inheritedName?: string}> = ({ node, inheritedName }) => {
+  if (node.kind === NodeKind.TreeFunctionDefinition) {
+    return <TreeFunctionDefinitionView node={node} inheritedName={inheritedName} />
+  } else if (node.kind === NodeKind.NativeFunctionDefinition) {
+    throw new Error('unimplemented');
+  } else {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const exhaustive: never = node; // this will cause a type error if we haven't handled all cases
+    throw new Error('unreachable');
+  }
+};
 
-  return (
-    <div className="TreeView-stream-indirection">
-      <div className={selectionClasses.concat(['TreeView-stream-indirection-name', 'TreeView-common-padding']).join(' ')} style={{background: STREAM_INDIRECTION_BOX_COLOR}} {...selectionHandlers} >{node.name}</div>
-      <div>=</div>
-      <div><NodeView node={node.children[0]} /></div>
-    </div>
-  );
-}
-
+/*
 export const NodeView: React.FC<{node: Node, inheritedName?: string}> = ({ node, inheritedName }) => {
   const ctxData = useContext(TreeViewContext);
   if (!ctxData) {
@@ -234,20 +321,18 @@ export const NodeView: React.FC<{node: Node, inheritedName?: string}> = ({ node,
       if (!targetExpressionNode) {
         throw new Error();
       }
-      const displayedName = isNamedNode(targetExpressionNode) ? targetExpressionNode.name : ('<stream ' + node.targetStreamId + '>');
-      return <SimpleNodeView node={node} contents={displayedName} boxColor={STREAM_REFERENCE_BOX_COLOR} />
+      const displayedDesc = ('desc' in targetExpressionNode) ? targetExpressionNode.desc : ('<stream ' + node.targetStreamId + '>');
+      return <SimpleNodeView node={node} contents={displayedDesc} boxColor={STREAM_REFERENCE_BOX_COLOR} />
     }
 
-    case 'StreamIndirection':
-      return <StreamIndirectionView node={node} />
-
     case 'StreamParameter':
-      return <SimpleNodeView node={node} contents={node.name} boxColor={'transparent'} />
+      return <SimpleNodeView node={node} contents={'?'} boxColor={'transparent'} />
 
-    case 'UserFunctionDefinition':
-      return <UserFunctionDefinitionView node={node} inheritedName={inheritedName} />
+    case 'TreeFunctionDefinition':
+      return <TreeFunctionDefinitionView node={node} inheritedName={inheritedName} />
 
     default:
       throw new Error();
   }
 }
+*/

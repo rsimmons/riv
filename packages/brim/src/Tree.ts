@@ -1,244 +1,173 @@
-import { StreamID, FunctionID } from './Identifier';
+import genuid from './uid';
 
 /**
- * NODE NAME
+ * IDS
  */
-type Name = string | null;
+export type StreamID = string;
+export type FunctionID = string;
+
+const STREAM_ID_PREFIX = 'S-';
+export function generateStreamId(): StreamID {
+  return STREAM_ID_PREFIX + genuid();
+}
+export function validStreamId(s: string): s is StreamID {
+  return s.startsWith(STREAM_ID_PREFIX);
+}
+
+const FUNCTION_ID_PREFIX = 'F-';
+export function generateFunctionId(): FunctionID {
+  return FUNCTION_ID_PREFIX + genuid();
+}
+export function validFunctionId(s: string): s is FunctionID {
+  return s.startsWith(FUNCTION_ID_PREFIX);
+}
 
 /**
- * STREAM LITERALS
+ * NODE KINDS
+ */
+export enum NodeKind {
+  Description = 'desc',
+  UndefinedLiteral = 'und',
+  NumberLiteral = 'num',
+  ArrayLiteral = 'arr',
+  StreamReference = 'sref',
+  RefApplication = 'rapp',
+  FunctionReference = 'fref',
+  SignatureStreamParameter = 'sparam',
+  SignatureFunctionParameter = 'fparam',
+  SignatureYield = 'yield',
+  YieldExpression = 'yexp',
+  TreeFunctionDefinition = 'tdef',
+  NativeFunctionDefinition = 'ndef',
+}
+
+/**
+ * COMMON NODES
+ */
+export interface DescriptionNode {
+  readonly kind: NodeKind.Description;
+  readonly text: string;
+}
+
+/**
+ * STREAM NODES
  */
 export interface UndefinedLiteralNode {
-  readonly type: 'UndefinedLiteral';
-  readonly id: StreamID;
-  readonly children: readonly [];
-}
-export function isUndefinedLiteralNode(node: Node): node is UndefinedLiteralNode {
-  return node.type === 'UndefinedLiteral';
+  readonly kind: NodeKind.UndefinedLiteral;
+  readonly sid: StreamID;
+  readonly desc: DescriptionNode | null;
 }
 
 export interface NumberLiteralNode {
-  readonly type: 'NumberLiteral';
-  readonly id: StreamID;
-  readonly children: readonly [];
-  readonly value: number;
-}
-export function isNumberLiteralNode(node: Node): node is NumberLiteralNode {
-  return node.type === 'NumberLiteral';
+  readonly kind: NodeKind.NumberLiteral;
+  readonly sid: StreamID;
+  readonly desc: DescriptionNode | null;
+  readonly val: number;
 }
 
 export interface ArrayLiteralNode {
-  readonly type: 'ArrayLiteral';
-  readonly id: StreamID;
-  readonly children: ReadonlyArray<StreamExpressionNode>;
-}
-export function isArrayLiteralNode(node: Node): node is ArrayLiteralNode {
-  return node.type === 'ArrayLiteral';
+  readonly kind: NodeKind.ArrayLiteral;
+  readonly sid: StreamID;
+  readonly desc: DescriptionNode | null;
+  readonly elems: ReadonlyArray<StreamExpressionNode>;
 }
 
-export type LiteralNode = UndefinedLiteralNode | NumberLiteralNode | ArrayLiteralNode; // stream literals only, we don't refer to function definitions as literals
-export function isLiteralNode(node: Node): node is LiteralNode {
-  return isUndefinedLiteralNode(node) || isNumberLiteralNode(node) || isArrayLiteralNode(node);
+export interface StreamReferenceNode {
+  readonly kind: NodeKind.StreamReference;
+  readonly sid: StreamID; // the new stream id we are defining
+  readonly desc: DescriptionNode | null;
+  readonly ref: StreamID; // the stream id we are referencing
+}
+
+export interface RefApplicationNode {
+  readonly kind: NodeKind.RefApplication;
+  readonly sids: ReadonlyArray<StreamID>; // array since there can be multiple yields
+  readonly desc: DescriptionNode | null;
+  readonly func: FunctionID; // function being applied
+  readonly sargs: ReadonlyArray<StreamExpressionNode>;
+  readonly fargs: ReadonlyArray<FunctionExpressionNode>;
+}
+
+// NOTE: We may add a InlineApplicationNode, that is similar to RefApplicationNode but has the definition inline
+// Doing it this way (vs. having ApplicationNode that takes a FunctionExpression) eliminates generating a lot of
+// superfluous function ids and descriptions.
+
+// Stream parameter definitions (on the "inside" of a function def) are _not_ expressions.
+export type StreamExpressionNode = UndefinedLiteralNode | NumberLiteralNode | ArrayLiteralNode | StreamReferenceNode | RefApplicationNode;
+export function isStreamExpressionNode(node: Node): node is StreamExpressionNode {
+  return (node.kind === NodeKind.UndefinedLiteral) || (node.kind === NodeKind.NumberLiteral) || (node.kind === NodeKind.ArrayLiteral) || (node.kind === NodeKind.StreamReference) || (node.kind === NodeKind.RefApplication);
 }
 
 /**
- * REFERENCES
+ * FUNCTION NODES
  */
-export interface StreamReferenceNode {
-  readonly type: 'StreamReference';
-  readonly id: StreamID;
-  readonly children: readonly [];
-  readonly targetStreamId: StreamID;
+
+export interface SignatureStreamParameterNode {
+  readonly kind: NodeKind.SignatureStreamParameter;
+  readonly desc: DescriptionNode | null;
 }
-export function isStreamReferenceNode(node: Node): node is StreamReferenceNode {
-  return node.type === 'StreamReference';
+
+export interface SignatureFunctionParameterNode {
+  readonly kind: NodeKind.SignatureFunctionParameter;
+  readonly desc: DescriptionNode | null;
+}
+
+export interface SignatureYieldNode {
+  readonly kind: NodeKind.SignatureYield;
+  readonly desc: DescriptionNode | null;
+}
+
+export interface Signature {
+  readonly streamParams: ReadonlyArray<SignatureStreamParameterNode>;
+  readonly funcParams: ReadonlyArray<SignatureFunctionParameterNode>;
+  readonly yields: ReadonlyArray<SignatureYieldNode>;
+}
+
+export interface YieldExpressionNode {
+  readonly kind: NodeKind.YieldExpression;
+  readonly idx: Number;
+}
+
+export type BodyExpressionNode = StreamExpressionNode | FunctionExpressionNode | YieldExpressionNode;
+export function isBodyExpressionNode(node: Node): node is BodyExpressionNode {
+  return isStreamExpressionNode(node) || isFunctionExpressionNode(node) || (node.kind === NodeKind.YieldExpression);
+}
+
+export interface TreeFunctionDefinitionNode {
+  readonly kind: NodeKind.TreeFunctionDefinition;
+  readonly fid: FunctionID;
+  readonly desc: DescriptionNode | null;
+  readonly sig: Signature;
+
+  readonly spids: ReadonlyArray<StreamID>;
+  readonly fpids: ReadonlyArray<FunctionID>;
+  readonly exprs: ReadonlyArray<BodyExpressionNode>;
+}
+
+export interface NativeFunctionDefinitionNode {
+  readonly kind: NodeKind.NativeFunctionDefinition;
+  readonly fid: FunctionID;
+  readonly desc: DescriptionNode | null;
+  readonly sig: Signature;
+
+  // TODO: JS code as string?
+}
+
+export type FunctionDefinitionNode = TreeFunctionDefinitionNode | NativeFunctionDefinitionNode;
+export function isFunctionDefinitionNode(node: Node): node is FunctionDefinitionNode {
+  return (node.kind === NodeKind.TreeFunctionDefinition) || (node.kind === NodeKind.NativeFunctionDefinition);
 }
 
 export interface FunctionReferenceNode {
-  readonly type: 'FunctionReference';
-  readonly id: FunctionID;
-  readonly children: readonly [];
-  readonly targetFunctionId: FunctionID;
-}
-export function isFunctionReferenceNode(node: Node): node is FunctionReferenceNode {
-  return node.type === 'FunctionReference';
+  readonly kind: NodeKind.FunctionReference;
+  readonly fid: FunctionID; // the new function id we are defining
+  readonly desc: DescriptionNode | null;
+  readonly ref: FunctionID; // the function id we are referencing
 }
 
-/**
- * INDIRECTION
- */
-export interface StreamIndirectionNode {
-  readonly type: 'StreamIndirection';
-  readonly id: StreamID;
-  readonly children: readonly [StreamExpressionNode];
-  readonly name: Name;
-}
-export function isStreamIndirectionNode(node: Node): node is StreamIndirectionNode {
-  return node.type === 'StreamIndirection';
-}
-
-/**
- * EXPRESSIONS
- *
- * An expression is a user-editable node that defines a stream/function.
- * Since parameters are "fixed" they are excluded.
- */
-export type StreamExpressionNode = LiteralNode |  ApplicationNode | StreamReferenceNode | StreamIndirectionNode;
-export function isStreamExpressionNode(node: Node): node is StreamExpressionNode {
-  return isLiteralNode(node) || isApplicationNode(node) || isStreamReferenceNode(node) || isStreamIndirectionNode(node);
-}
-
-export type FunctionExpressionNode = FunctionDefinitionNode | FunctionReferenceNode;
+export type FunctionExpressionNode = FunctionReferenceNode | FunctionDefinitionNode;
 export function isFunctionExpressionNode(node: Node): node is FunctionExpressionNode {
-  return isFunctionDefinitionNode(node) || isFunctionReferenceNode(node);
+  return (node.kind === NodeKind.FunctionReference) || isFunctionDefinitionNode(node);
 }
 
-export type ExpressionNode = StreamExpressionNode | FunctionExpressionNode;
-export function isExpressionNode(node: Node): node is ExpressionNode {
-  return isStreamExpressionNode(node) || isFunctionExpressionNode(node);
-}
-
-/**
- * STREAM CREATION
- *
- * A stream creation defines a new stream id.
- */
-export type StreamCreationNode = StreamExpressionNode | StreamParameterNode;
-export function isStreamCreationNode(node: Node): node is StreamCreationNode {
-  return isStreamExpressionNode(node) || isStreamParameterNode(node);
-}
-
-/**
- * APPLICATION
- */
-export interface ApplicationNode {
-  readonly type: 'Application';
-  readonly id: StreamID;
-  readonly children: ReadonlyArray<ExpressionNode>;
-  readonly functionId: FunctionID;
-}
-export function isApplicationNode(node: Node): node is ApplicationNode {
-  return node.type === 'Application';
-}
-
-
-/**
- * FUNCTION SIGNATURE
- */
-export type ParameterType = 'stream' | FunctionSignature;
-
-export interface FunctionSignature {
-  readonly parameters: ReadonlyArray<{
-    name: string;
-    type: ParameterType;
-  }>;
-  readonly yields: boolean;
-}
-
-/**
- * USER FUNCTION DEFINITION
- */
-export interface StreamParameterNode {
-  readonly type: 'StreamParameter';
-  readonly id: StreamID;
-  readonly children: readonly [];
-  readonly name: Name;
-}
-export function isStreamParameterNode(node: Node): node is StreamParameterNode {
-  return node.type === 'StreamParameter';
-}
-
-export interface FunctionParameterNode {
-  readonly type: 'FunctionParameter';
-  readonly id: FunctionID;
-  readonly children: readonly [];
-  readonly name: Name;
-}
-export function isFunctionParameterNode(node: Node): node is FunctionParameterNode {
-  return node.type === 'FunctionParameter';
-}
-
-export type ParameterNode = StreamParameterNode | FunctionParameterNode;
-export function isParameterNode(node: Node): node is ParameterNode {
-  return isStreamParameterNode(node) || isFunctionParameterNode(node);
-}
-
-export interface UserFunctionDefinitionParametersNode {
-  readonly type: 'UserFunctionDefinitionParameters';
-  readonly children: ReadonlyArray<ParameterNode>;
-}
-export function isUserFunctionDefinitionParametersNode(node: Node): node is UserFunctionDefinitionParametersNode {
-  return node.type === 'UserFunctionDefinitionParameters';
-}
-
-export interface UserFunctionDefinitionExpressionsNode {
-  readonly type: 'UserFunctionDefinitionExpressions';
-  readonly children: ReadonlyArray<ExpressionNode>;
-}
-export function isUserFunctionDefinitionExpressionsNode(node: Node): node is UserFunctionDefinitionExpressionsNode {
-  return node.type === 'UserFunctionDefinitionExpressions';
-}
-
-export interface UserFunctionDefinitionNode {
-  readonly type: 'UserFunctionDefinition';
-  readonly id: FunctionID;
-  readonly children: readonly [UserFunctionDefinitionParametersNode, UserFunctionDefinitionExpressionsNode];
-  readonly name: Name;
-  readonly signature: FunctionSignature;
-}
-export function isUserFunctionDefinitionNode(node: Node): node is UserFunctionDefinitionNode {
-  return node.type === 'UserFunctionDefinition';
-}
-
-/**
- * NATIVE FUNCTION DEFINITION
- */
-export interface NativeFunctionDefinitionNode {
-  readonly type: 'NativeFunctionDefinition';
-  readonly id: FunctionID;
-  readonly children: readonly [];
-  readonly name: Name;
-  readonly signature: FunctionSignature;
-}
-export function isNativeFunctionDefinitionNode(node: Node): node is NativeFunctionDefinitionNode {
-  return node.type === 'NativeFunctionDefinition';
-}
-
-/**
- * FUNCTION DEFINITION
- */
-export type FunctionDefinitionNode = NativeFunctionDefinitionNode | UserFunctionDefinitionNode;
-export function isFunctionDefinitionNode(node: Node): node is FunctionDefinitionNode {
-  return isNativeFunctionDefinitionNode(node) || isUserFunctionDefinitionNode(node);
-}
-
-/**
- * PROGRAM
- */
-export interface ProgramNode {
-  readonly type: 'Program';
-  readonly programId: string;
-  readonly children: readonly [UserFunctionDefinitionNode];
-  readonly name: string;
-}
-export function isProgramNode(node: Node): node is ProgramNode {
-  return node.type === 'Program';
-}
-
-/**
- * NODE
- */
-export type Node = ProgramNode | ExpressionNode | ParameterNode | UserFunctionDefinitionParametersNode | UserFunctionDefinitionExpressionsNode;
-export function isNode(node: Node): node is Node {
-  return isProgramNode(node) || isExpressionNode(node) || isParameterNode(node) || isUserFunctionDefinitionParametersNode(node) || isUserFunctionDefinitionExpressionsNode(node);
-}
-
-export type IDedNode = ExpressionNode | ParameterNode;
-export function isIDedNode(node: Node): node is IDedNode {
-  return isExpressionNode(node) || isParameterNode(node);
-}
-
-export type NamedNode = ParameterNode | StreamIndirectionNode;
-export function isNamedNode(node: Node): node is NamedNode {
-  return isParameterNode(node) || isStreamIndirectionNode(node);
-}
+export type Node = DescriptionNode | BodyExpressionNode | SignatureStreamParameterNode | SignatureFunctionParameterNode | SignatureYieldNode;
