@@ -30,18 +30,12 @@ export interface DirectionalLookups {
   nextSibling: ReadonlyMap<Node, Node>;
 }
 
-export interface DerivedLookups {
-  // streamIdToNode: ReadonlyMap<StreamID, StreamCreationNode> | null;
-  functionIdToDef: ReadonlyMap<FunctionID, FunctionDefinitionNode> | null;
-  directional: DirectionalLookups;
-}
-
 export interface State {
   readonly programInfo: ProgramInfo;
   readonly stableSelTree: SelTree;
+  readonly directionalLookups: DirectionalLookups;
   readonly editingSelected: NodeEditState;
   readonly nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>;
-  readonly derivedLookups: DerivedLookups;
   /*
   readonly liveMain: {
     context: ExecutionContext;

@@ -1,5 +1,5 @@
 import genuid from './uid';
-import { State, ProgramInfo, NodeEditState, DerivedLookups, DirectionalLookups, SelTree } from './State';
+import { State, ProgramInfo, NodeEditState, DirectionalLookups, SelTree } from './State';
 import { StreamID, FunctionID, generateStreamId, generateFunctionId, NodeKind, Node, TreeFunctionDefinitionNode, FunctionDefinitionNode, ArrayLiteralNode, isFunctionDefinitionNode, StreamExpressionNode, NativeFunctionDefinitionNode, isStreamExpressionNode, UndefinedLiteralNode } from './Tree';
 // import { CompiledDefinition } from './CompiledDefinition';
 // import { compileGlobalUserDefinition, CompilationError } from './Compiler';
@@ -1098,6 +1098,38 @@ function applyActionToCoreState(action: Action, coreState: CoreState): CoreState
 }
 */
 
+export interface ViewLookups {
+  // streamIdToNode: ReadonlyMap<StreamID, StreamCreationNode> | null;
+  functionIdToDef: ReadonlyMap<FunctionID, FunctionDefinitionNode> | null;
+}
+
+export function computeViewLookups(mainDefinition: TreeFunctionDefinitionNode, nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>): ViewLookups {
+  console.log('computeViewLookups');
+  // const streamIdToNode: Map<StreamID, StreamCreationNode> = new Map();
+  const functionIdToDef: Map<FunctionID, FunctionDefinitionNode> = new Map();
+
+  for (const extFunc of nativeFunctions) {
+    functionIdToDef.set(extFunc.fid, extFunc);
+  }
+
+  const visit = (node: Node): void => {
+    if (isFunctionDefinitionNode(node)) {
+      if (functionIdToDef.has(node.fid)) {
+        throw new Error('function ids must be unique');
+      }
+      functionIdToDef.set(node.fid, node);
+    }
+    visitChildren(node, visit);
+  };
+
+  visit(mainDefinition);
+
+  return {
+    // streamIdToNode,
+    functionIdToDef,
+  };
+}
+
 function nextArrowSelectableLeft(node: Node, directionalLookups: DirectionalLookups): Node | undefined {
   return directionalLookups.parent.get(node);
 }
@@ -1232,10 +1264,10 @@ function deleteNodeSubtree(node: Node, directionalLookups: DirectionalLookups): 
   }
 }
 
-function handleEditAction(action: Action, selTree: SelTree, derivedLookups: DerivedLookups): SelTree | void {
+function handleEditAction(action: Action, selTree: SelTree, directionalLookups: DirectionalLookups): SelTree | void {
   switch (action.type) {
     case 'DELETE_SUBTREE':
-      return deleteNodeSubtree(selTree.selectedNode, derivedLookups.directional);
+      return deleteNodeSubtree(selTree.selectedNode, directionalLookups);
   }
 }
 
@@ -1354,40 +1386,6 @@ function computeDirectionalLookups(root: Node): DirectionalLookups {
   };
 }
 
-function computeDerivedLookups(mainDefinition: TreeFunctionDefinitionNode, nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>): DerivedLookups {
-  // undefineDanglingStreamRefs needs up-to-date id lookups
-  /*
-  const danglingRemovedState = undefineDanglingStreamRefs(addStateIdLookups(newState));
-
-  return addStateCompiled(oldState, addStateIdLookups(danglingRemovedState));
-  */
-
-  // const streamIdToNode: Map<StreamID, StreamCreationNode> = new Map();
-  const functionIdToDef: Map<FunctionID, FunctionDefinitionNode> = new Map();
-
-  for (const extFunc of nativeFunctions) {
-    functionIdToDef.set(extFunc.fid, extFunc);
-  }
-
-  const visit = (node: Node): void => {
-    if (isFunctionDefinitionNode(node)) {
-      if (functionIdToDef.has(node.fid)) {
-        throw new Error('function ids must be unique');
-      }
-      functionIdToDef.set(node.fid, node);
-    }
-    visitChildren(node, visit);
-  };
-
-  visit(mainDefinition);
-
-  return {
-    // streamIdToNode,
-    functionIdToDef,
-    directional: computeDirectionalLookups(mainDefinition),
-  };
-}
-
 export function reducer(state: State, action: Action): State {
   console.log('action', action);
 
@@ -1407,7 +1405,7 @@ export function reducer(state: State, action: Action): State {
   }
   */
 
-  const handleSelectionActionResult = handleSelectionAction(action, state.stableSelTree.selectedNode, state.derivedLookups.directional);
+  const handleSelectionActionResult = handleSelectionAction(action, state.stableSelTree.selectedNode, state.directionalLookups);
   if (handleSelectionActionResult) {
     const newSelectedNode = handleSelectionActionResult;
     if (newSelectedNode !== state.stableSelTree.selectedNode) {
@@ -1421,24 +1419,16 @@ export function reducer(state: State, action: Action): State {
     }
   }
 
-  const handleEditActionResult = handleEditAction(action, state.stableSelTree, state.derivedLookups);
+  const handleEditActionResult = handleEditAction(action, state.stableSelTree, state.directionalLookups);
   if (handleEditActionResult) {
     const newSelTree = handleEditActionResult;
     console.log(newSelTree);
 
-    if (newSelTree.mainDefinition !== state.stableSelTree.mainDefinition) {
+    if (newSelTree !== state.stableSelTree) {
       return {
         ...state,
         stableSelTree: newSelTree,
-        derivedLookups: computeDerivedLookups(newSelTree.mainDefinition, state.nativeFunctions),
-      };
-    } else if (newSelTree.selectedNode !== state.stableSelTree.selectedNode) {
-      return {
-        ...state,
-        stableSelTree: {
-          ...state.stableSelTree,
-          selectedNode: newSelTree.selectedNode,
-        }
+        directionalLookups: computeDirectionalLookups(newSelTree.mainDefinition),
       };
     }
   }
@@ -1561,9 +1551,9 @@ function initialStateFromDefinition(mainDefinition: TreeFunctionDefinitionNode):
       mainDefinition,
       selectedNode: mainDefinition,
     },
+    directionalLookups: computeDirectionalLookups(mainDefinition),
     editingSelected: null,
     nativeFunctions,
-    derivedLookups: computeDerivedLookups(mainDefinition, nativeFunctions),
     // liveMain: null,
     undoStack: [],
     clipboardStack: [],
