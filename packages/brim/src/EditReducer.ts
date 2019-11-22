@@ -1386,6 +1386,17 @@ function computeDirectionalLookups(root: Node): DirectionalLookups {
   };
 }
 
+function beginEdit(state: State): State {
+  if (isStreamExpressionNode(state.stableSelTree.selectedNode)) {
+    return {
+      ...state,
+      editingSelTree: state.stableSelTree,
+    };
+  } else {
+    return state;
+  }
+}
+
 export function reducer(state: State, action: Action): State {
   console.log('action', action);
 
@@ -1405,6 +1416,11 @@ export function reducer(state: State, action: Action): State {
   }
   */
 
+  if (action.type === 'BEGIN_EDIT') {
+    if (!state.editingSelTree) {
+      return beginEdit(state);
+    }
+  }
   if (action.type === 'TOGGLE_EDIT') {
     // TODO: should not allow confirming unless it is valid
     if (state.editingSelTree) {
@@ -1412,12 +1428,10 @@ export function reducer(state: State, action: Action): State {
         ...state,
         stableSelTree: state.editingSelTree,
         directionalLookups: computeDirectionalLookups(state.editingSelTree.mainDefinition),
+        editingSelTree: null,
       };
     } else {
-      return {
-        ...state,
-        editingSelTree: state.stableSelTree,
-      };
+      return beginEdit(state);
     }
   } else if (action.type === 'ABORT_EDIT') {
     if (state.editingSelTree) {
@@ -1426,6 +1440,22 @@ export function reducer(state: State, action: Action): State {
         editingSelTree: null,
       };
     }
+  } else if (action.type === 'UPDATE_EDITING_NODE') {
+    if (!state.editingSelTree) {
+      throw new Error();
+    }
+    const dirs = computeDirectionalLookups(state.editingSelTree.mainDefinition);
+    const newMain = replaceNode(state.editingSelTree.selectedNode, action.newNode!, dirs);
+    if (newMain.kind !== NodeKind.TreeFunctionDefinition) {
+      throw new Error();
+    }
+    return {
+      ...state,
+      editingSelTree: {
+        mainDefinition: newMain,
+        selectedNode: action.newNode!,
+      }
+    };
   }
 
   const handleSelectionActionResult = handleSelectionAction(action, state.stableSelTree.selectedNode, state.directionalLookups);

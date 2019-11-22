@@ -1,8 +1,7 @@
 import React, { createContext, useContext, useState } from 'react';
 import { StreamID, FunctionID, Node, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, isFunctionExpressionNode, TreeFunctionBodyNode } from './Tree';
-// import ExpressionChooser from './ExpressionChooser';
+import ExpressionChooser from './ExpressionChooser';
 import './TreeView.css';
-import { State } from './State';
 
 const NORMAL_BOX_COLOR = '#d8d8d8';
 const STREAM_REFERENCE_BOX_COLOR = '#ccd9e8';
@@ -208,11 +207,10 @@ const StreamExpressionView: React.FC<{node: StreamExpressionNode}> = ({ node }) 
 
   const selected = (ctxData.selectedNode === node);
   if (selected && ctxData.editing) {
-    // return <ExpressionChooser mainState={ctxData.mainState} dispatch={ctxData.dispatch} />
     return (
       <div style={{position: 'relative'}}>
         {nodeView}
-        <div style={{position: 'absolute', top: 0, background: 'grey', padding: '5px'}}>chooser <input autoFocus /></div>
+        <div style={{position: 'absolute', top: 0}}><ExpressionChooser initNode={node} dispatch={ctxData.dispatch} /></div>
       </div>
     );
   } else {

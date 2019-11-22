@@ -89,7 +89,7 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
     // (https://www.w3.org/TR/uievents-key/#keys-whitespace)
     if (((e.target as Element).tagName.toLowerCase() !== 'input') && ([...e.key].length === 1) && !e.altKey && !e.ctrlKey && !e.metaKey && !COMMAND_CHARS.has(e.key)) {
       // Interestingly, the key here will still end up going into the input element, which is what we want.
-      dispatch({type: 'BEGIN_OVERWRITE_EDIT'});
+      dispatch({type: 'BEGIN_EDIT'});
     }
   };
 
