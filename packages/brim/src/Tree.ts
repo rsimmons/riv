@@ -36,7 +36,9 @@ export enum NodeKind {
   SignatureStreamParameter = 'sparam',
   SignatureFunctionParameter = 'fparam',
   SignatureYield = 'yield',
+  Signature = 'sig',
   YieldExpression = 'yexp',
+  TreeFunctionBody = 'tbody',
   TreeFunctionDefinition = 'tdef',
   NativeFunctionDefinition = 'ndef',
 }
@@ -117,7 +119,8 @@ export interface SignatureYieldNode {
   readonly desc: DescriptionNode | null;
 }
 
-export interface Signature {
+export interface SignatureNode {
+  readonly kind: NodeKind.Signature;
   readonly streamParams: ReadonlyArray<SignatureStreamParameterNode>;
   readonly funcParams: ReadonlyArray<SignatureFunctionParameterNode>;
   readonly yields: ReadonlyArray<SignatureYieldNode>;
@@ -133,22 +136,27 @@ export function isBodyExpressionNode(node: Node): node is BodyExpressionNode {
   return isStreamExpressionNode(node) || isFunctionExpressionNode(node) || (node.kind === NodeKind.YieldExpression);
 }
 
+export interface TreeFunctionBodyNode {
+  readonly kind: NodeKind.TreeFunctionBody;
+  readonly exprs: ReadonlyArray<BodyExpressionNode>;
+}
+
 export interface TreeFunctionDefinitionNode {
   readonly kind: NodeKind.TreeFunctionDefinition;
   readonly fid: FunctionID;
   readonly desc: DescriptionNode | null;
-  readonly sig: Signature;
+  readonly sig: SignatureNode;
 
   readonly spids: ReadonlyArray<StreamID>;
   readonly fpids: ReadonlyArray<FunctionID>;
-  readonly exprs: ReadonlyArray<BodyExpressionNode>;
+  readonly body: TreeFunctionBodyNode;
 }
 
 export interface NativeFunctionDefinitionNode {
   readonly kind: NodeKind.NativeFunctionDefinition;
   readonly fid: FunctionID;
   readonly desc: DescriptionNode | null;
-  readonly sig: Signature;
+  readonly sig: SignatureNode;
 
   // TODO: JS code as string?
 }
@@ -170,4 +178,4 @@ export function isFunctionExpressionNode(node: Node): node is FunctionExpression
   return (node.kind === NodeKind.FunctionReference) || isFunctionDefinitionNode(node);
 }
 
-export type Node = DescriptionNode | BodyExpressionNode | SignatureStreamParameterNode | SignatureFunctionParameterNode | SignatureYieldNode;
+export type Node = DescriptionNode | SignatureNode | TreeFunctionBodyNode | BodyExpressionNode | SignatureStreamParameterNode | SignatureFunctionParameterNode | SignatureYieldNode;

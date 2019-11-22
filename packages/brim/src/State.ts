@@ -44,13 +44,16 @@ export interface Program {
   readonly mainDefinition: TreeFunctionDefinitionNode;
 }
 
+export interface DirectionalLookups {
+  parent: ReadonlyMap<Node, Node>;
+  prevSibling: ReadonlyMap<Node, Node>;
+  nextSibling: ReadonlyMap<Node, Node>;
+}
+
 export interface DerivedLookups {
   // streamIdToNode: ReadonlyMap<StreamID, StreamCreationNode> | null;
   functionIdToDef: ReadonlyMap<FunctionID, FunctionDefinitionNode> | null;
-  nodeSelectionParent: ReadonlyMap<Node, Node>;
-  nodeSelectionPrevSibling: ReadonlyMap<Node, Node>;
-  nodeSelectionNextSibling: ReadonlyMap<Node, Node>;
-  nodeSelectionFirstChild: ReadonlyMap<Node, Node>;
+  directional: DirectionalLookups;
 }
 
 export interface State {

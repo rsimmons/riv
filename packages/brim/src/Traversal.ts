@@ -1,5 +1,81 @@
 // import { Path, pathIsPrefix } from './State';
-import { NodeKind, Node, Signature, DescriptionNode, StreamExpressionNode, isStreamExpressionNode, BodyExpressionNode, isBodyExpressionNode } from './Tree';
+import { NodeKind, Node, SignatureNode, DescriptionNode, StreamExpressionNode, isStreamExpressionNode, BodyExpressionNode, isBodyExpressionNode, TreeFunctionBodyNode } from './Tree';
+
+export function firstChild(node: Node): Node | undefined {
+  const res = iterChildren(node).next();
+  return res.done ? undefined : res.value;
+}
+
+export function lastChild(node: Node): Node | undefined {
+  const children = [...iterChildren(node)];
+  return children.pop();
+}
+
+export function* iterChildren(node: Node) {
+  switch (node.kind) {
+    case NodeKind.Description:
+    case NodeKind.YieldExpression:
+      // no children
+      break;
+
+    case NodeKind.UndefinedLiteral:
+    case NodeKind.NumberLiteral:
+    case NodeKind.StreamReference:
+    case NodeKind.SignatureStreamParameter:
+    case NodeKind.SignatureFunctionParameter:
+    case NodeKind.SignatureYield:
+    case NodeKind.FunctionReference:
+      if (node.desc) {
+        yield node.desc;
+      }
+      break;
+
+    case NodeKind.ArrayLiteral:
+      if (node.desc) {
+        yield node.desc;
+      }
+      yield* node.elems;
+      break;
+
+    case NodeKind.RefApplication:
+      if (node.desc) {
+        yield node.desc;
+      }
+      yield* node.sargs;
+      yield* node.fargs;
+      break;
+
+    case NodeKind.Signature:
+      yield* node.streamParams;
+      yield* node.funcParams;
+      yield* node.yields;
+      break;
+
+    case NodeKind.TreeFunctionBody:
+      yield* node.exprs;
+      break;
+
+    case NodeKind.TreeFunctionDefinition:
+      if (node.desc) {
+        yield node.desc;
+      }
+      yield node.sig;
+      yield node.body;
+      break;
+
+    case NodeKind.NativeFunctionDefinition:
+      if (node.desc) {
+        yield node.desc;
+      }
+      yield node.sig;
+      break;
+
+    default: {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const exhaustive: never = node; // this will cause a type error if we haven't handled all cases
+    }
+  }
+}
 
 function visitArray<T>(nodeArr: ReadonlyArray<Node>, visit: (node: Node) => T | undefined): T | undefined {
   for (const node of nodeArr) {
@@ -8,10 +84,6 @@ function visitArray<T>(nodeArr: ReadonlyArray<Node>, visit: (node: Node) => T | 
       return result;
     }
   }
-}
-
-function visitSignature<T>(sig: Signature, visit: (node: Node) => T | undefined): T | undefined {
-  return visitArray(sig.streamParams, visit) || visitArray(sig.funcParams, visit) || visitArray(sig.yields, visit);
 }
 
 /**
@@ -39,11 +111,17 @@ export function visitChildren<T>(node: Node, visit: (node: Node) => T | undefine
     case NodeKind.RefApplication:
       return (node.desc && visit(node.desc)) || visitArray(node.sargs, visit) || visitArray(node.fargs, visit);
 
+    case NodeKind.Signature:
+      return visitArray(node.streamParams, visit) || visitArray(node.funcParams, visit) || visitArray(node.yields, visit);
+
+    case NodeKind.TreeFunctionBody:
+      return visitArray(node.exprs, visit);
+
     case NodeKind.TreeFunctionDefinition:
-      return (node.desc && visit(node.desc)) || visitSignature(node.sig, visit) || visitArray(node.exprs, visit);
+      return (node.desc && visit(node.desc)) || visit(node.sig) || visit(node.body);
 
     case NodeKind.NativeFunctionDefinition:
-      return (node.desc && visit(node.desc)) || visitSignature(node.sig, visit);
+      return (node.desc && visit(node.desc)) || visit(node.sig);
 
     default: {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -59,6 +137,28 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
     }
     if (n === oldChild) {
       if (newChild.kind !== NodeKind.Description) {
+        throw new Error();
+      }
+      return newChild;
+    } else {
+      return n;
+    }
+  };
+
+  const replaceSignature = (n: SignatureNode): SignatureNode => {
+    if (n === oldChild) {
+      if (newChild.kind !== NodeKind.Signature) {
+        throw new Error();
+      }
+      return newChild;
+    } else {
+      return n;
+    }
+  };
+
+  const replaceTreeBody = (n: TreeFunctionBodyNode): TreeFunctionBodyNode => {
+    if (n === oldChild) {
+      if (newChild.kind !== NodeKind.TreeFunctionBody) {
         throw new Error();
       }
       return newChild;
@@ -125,19 +225,31 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
         // TODO: fargs
       };
 
+    case NodeKind.Signature:
+      return {
+        ...node,
+        // TODO: members
+      };
+
+    case NodeKind.TreeFunctionBody:
+      return {
+        ...node,
+        exprs: replaceBodyExprArr(node.exprs),
+      }
+
     case NodeKind.TreeFunctionDefinition:
       return {
         ...node,
         desc: replaceDesc(node.desc),
-        // TODO: signature
-        exprs: replaceBodyExprArr(node.exprs),
+        sig: replaceSignature(node.sig),
+        body: replaceTreeBody(node.body),
       };
 
     case NodeKind.NativeFunctionDefinition:
       return {
         ...node,
         desc: replaceDesc(node.desc),
-        // TODO: signature
+        sig: replaceSignature(node.sig),
       };
 
     default: {
@@ -161,6 +273,7 @@ export function deleteArrayElementChild(node: Node, child: Node): Node {
     case NodeKind.SignatureFunctionParameter:
     case NodeKind.SignatureYield:
     case NodeKind.FunctionReference:
+    case NodeKind.TreeFunctionDefinition:
       throw new Error('no array-children');
 
     case NodeKind.ArrayLiteral:
@@ -176,10 +289,17 @@ export function deleteArrayElementChild(node: Node, child: Node): Node {
         fargs: filterOut(node.fargs),
       };
 
-    case NodeKind.TreeFunctionDefinition:
+    case NodeKind.Signature:
       return {
         ...node,
-        // TODO: signature
+        streamParams: filterOut(node.streamParams),
+        funcParams: filterOut(node.funcParams),
+        yields: filterOut(node.yields),
+      };
+
+    case NodeKind.TreeFunctionBody:
+      return {
+        ...node,
         exprs: filterOut(node.exprs),
       };
 
@@ -193,75 +313,3 @@ export function deleteArrayElementChild(node: Node, child: Node): Node {
     }
   }
 }
-
-/*
-type TraversalVisitor = (node: Node, path: Path) => [boolean, Node];
-
-interface TraversalOptions {
-  onlyWithinFunctionId?: FunctionID; // so as to not traverse into contained function definitions
-  alongPath?: Path;
-}
-
-// Returns [exit, newNode]. exit indicates an early end to traversal. newNode returns replacement node, which may be the same node
-function recursiveTraverseTree(node: Node, path: Path, options: TraversalOptions, visit: TraversalVisitor): [boolean, Node] {
-  if (options.alongPath && !pathIsPrefix(path, options.alongPath)) {
-    return [false, node];
-  }
-
-  let newNode: Node = node;
-
-  // Recurse
-  if (!(options.onlyWithinFunctionId && (isTreeFunctionDefinitionNode(node) && (node.id !== options.onlyWithinFunctionId)))) {
-    let exited = false;
-
-    let newChildren: Array<Node> = [];
-    let anyNewChildren = false;
-
-    newNode.children.forEach((child: Node, idx: number) => {
-      if (exited) {
-        newChildren.push(child);
-      } else {
-        const [exit, newChild] = recursiveTraverseTree(child, path.concat([idx]), options, visit);
-        if (exit) exited = true;
-        newChildren.push(newChild);
-        if (newChild !== child) {
-          anyNewChildren = true;
-        }
-      }
-    });
-
-    if (anyNewChildren) {
-      newNode = {
-        ...newNode,
-        children: newChildren,
-      } as Node;
-    }
-
-    if (exited) {
-      return [exited, newNode];
-    }
-  }
-
-  return visit(newNode, path);
-}
-
-// Post-order traversal. Avoids returning new node unless something has changed.
-export function traverseTree(node: Node, options: TraversalOptions, visit: TraversalVisitor): Node {
-  const [, newNode] = recursiveTraverseTree(node, [], options, visit);
-  return newNode;
-}
-
-
-
-
-
-interface TraversalVisitors {
-  visitTreeDefinition: (node: TreeFunctionDefinitionNode) => void;
-}
-
-export function traverseTreeFunctionDefinition(node: TreeFunctionDefinitionNode, visitors: TraversalVisitors) {
-  if (visitors.visitTreeDefinition) {
-    visitors.visitTreeDefinition(node);
-  }
-}
-*/

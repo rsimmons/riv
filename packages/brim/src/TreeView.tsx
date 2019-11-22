@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState } from 'react';
-import { StreamID, FunctionID, Node, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, isFunctionExpressionNode } from './Tree';
+import { StreamID, FunctionID, Node, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, isFunctionExpressionNode, TreeFunctionBodyNode } from './Tree';
 // import ExpressionChooser from './ExpressionChooser';
 import './TreeView.css';
 import { State } from './State';
@@ -215,7 +215,7 @@ const StreamExpressionView: React.FC<{node: StreamExpressionNode}> = ({ node }) 
   );
 }
 
-export const BodyExpressionView: React.FC<{node: BodyExpressionNode}> = ({node}) => {
+const BodyExpressionView: React.FC<{node: BodyExpressionNode}> = ({node}) => {
   if (isStreamExpressionNode(node)) {
     return <StreamExpressionView node={node} />
   } else if (isFunctionExpressionNode(node)) {
@@ -229,6 +229,16 @@ export const BodyExpressionView: React.FC<{node: BodyExpressionNode}> = ({node})
   }
 };
 
+const TreeFunctionBodyView: React.FC<{node: TreeFunctionBodyNode, inheritedName?: string}> = ({ node, inheritedName }) => {
+  const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node);
+
+  return (
+    <div className={selectionClasses.concat(['TreeView-udf-node-expressions']).join(' ')} {...selectionHandlers}>{node.exprs.map(expr => (
+      <BodyExpressionView node={expr} />
+    ))}</div>
+  );
+}
+
 export const TreeFunctionDefinitionView: React.FC<{node: TreeFunctionDefinitionNode, inheritedName?: string}> = ({ node, inheritedName }) => {
   const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node);
 
@@ -236,15 +246,13 @@ export const TreeFunctionDefinitionView: React.FC<{node: TreeFunctionDefinitionN
     <div className={selectionClasses.concat(['TreeView-udf-node']).join(' ')} {...selectionHandlers} style={{backgroundColor: NORMAL_BOX_COLOR}}>
       <div className="TreeView-name-bar TreeView-common-padding">{node.desc || (inheritedName || 'ƒ')}</div>
       <div className="TreeView-udf-node-main-container TreeView-common-padding">
-        <div className="TreeView-udf-node-expressions">{node.exprs.map(expr => (
-          <BodyExpressionView node={expr} />
-        ))}</div>
+        <TreeFunctionBodyView node={node.body} />
       </div>
     </div>
   );
 };
 
-export const FunctionDefinitionView: React.FC<{node: FunctionDefinitionNode, inheritedName?: string}> = ({ node, inheritedName }) => {
+const FunctionDefinitionView: React.FC<{node: FunctionDefinitionNode, inheritedName?: string}> = ({ node, inheritedName }) => {
   if (node.kind === NodeKind.TreeFunctionDefinition) {
     return <TreeFunctionDefinitionView node={node} inheritedName={inheritedName} />
   } else if (node.kind === NodeKind.NativeFunctionDefinition) {

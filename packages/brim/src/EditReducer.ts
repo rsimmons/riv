@@ -1,12 +1,12 @@
 import genuid from './uid';
-import { State, Path, Program, NodeEditState, pathIsPrefix, DerivedLookups } from './State';
+import { State, Path, Program, NodeEditState, pathIsPrefix, DerivedLookups, DirectionalLookups } from './State';
 import { StreamID, FunctionID, generateStreamId, generateFunctionId, NodeKind, Node, TreeFunctionDefinitionNode, FunctionDefinitionNode, ArrayLiteralNode, isFunctionDefinitionNode, StreamExpressionNode, NativeFunctionDefinitionNode, isStreamExpressionNode, UndefinedLiteralNode } from './Tree';
 // import { CompiledDefinition } from './CompiledDefinition';
 // import { compileGlobalUserDefinition, CompilationError } from './Compiler';
 import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
 // import { createLiveFunction } from './LiveFunction';
 import Environment from './Environment';
-import { visitChildren, replaceChild, deleteArrayElementChild } from './Traversal';
+import { firstChild, lastChild, iterChildren, visitChildren, replaceChild, deleteArrayElementChild } from './Traversal';
 import globalNativeFunctions from './globalNatives';
 
 const REALIZE_TENTATIVE_EXPRESSION_EDITS = false;
@@ -1099,109 +1099,100 @@ function applyActionToCoreState(action: Action, coreState: CoreState): CoreState
 }
 */
 
-function moveSelectionUpDown(selectedNode: Node, up: boolean, derivedLookups: DerivedLookups): Node {
-  let n: Node | undefined = selectedNode;
+function nextArrowSelectableLeft(node: Node, directionalLookups: DirectionalLookups): Node | undefined {
+  return directionalLookups.parent.get(node);
+}
+
+function nextArrowSelectableRight(node: Node, directionalLookups: DirectionalLookups): Node | undefined {
+  const children = [...iterChildren(node)];
+  if (children.length) {
+    return children[0];
+  } else {
+    return undefined;
+  }
+}
+
+function nextArrowSelectableUpDown(node: Node, up: boolean, directionalLookups: DirectionalLookups): Node | undefined {
+  let n: Node = node;
   let depth = 0;
 
-  while (n) {
-    const sib = up ? derivedLookups.nodeSelectionPrevSibling.get(n) : derivedLookups.nodeSelectionNextSibling.get(n);
+  while (true) {
+    const sib = up ? directionalLookups.prevSibling.get(n) : directionalLookups.nextSibling.get(n);
     if (sib) {
       n = sib;
       break;
     }
-    n = derivedLookups.nodeSelectionParent.get(n);
-    depth++;
+    const parent = directionalLookups.parent.get(n);
+    if (!parent) {
+      // Made it to root without being able to move up/down
+      return undefined;
+    }
+    n = parent;
   }
 
-  if (!n) {
-    // We got to the top without being able to move up
-    return selectedNode;
+  while (depth > 0) {
+    const fc = up ? lastChild(n) : firstChild(n);
+    if (!fc) {
+      return n;
+    }
+    n = fc;
+    depth--;
   }
 
   return n;
-
-  /* TODO: update this code
-  // Try to move back down to same depth
-  let lastSelectable: Node | undefined;
-  while (true) {
-    if (n.selectable) {
-      lastSelectable = n;
-    }
-    if ((depth > 0) && (n.children.length > 0)) {
-      n = up ? n.children[n.children.length-1] : n.children[0];
-      depth--;
-    } else {
-      break;
-    }
-  }
-
-  if (!lastSelectable) {
-    return node;
-  }
-
-  return n;
-  */
 }
 
-function handleSelectionAction(action: Action, selectedNode: Node, derivedLookups: DerivedLookups): Node | void {
+function handleSelectionAction(action: Action, selectedNode: Node, directionalLookups: DirectionalLookups): Node | void {
   switch (action.type) {
     case 'SET_SELECTED_NODE':
       return action.newNode!;
 
+    case 'MOVE_LEFT':
+      return nextArrowSelectableLeft(selectedNode, directionalLookups);
 
-    case 'MOVE_LEFT': {
-      const parent = derivedLookups.nodeSelectionParent.get(selectedNode);
-      if (parent) {
-        return parent;
-      }
-      break;
-    }
-
-    case 'MOVE_RIGHT': {
-      const firstChild = derivedLookups.nodeSelectionFirstChild.get(selectedNode);
-      if (firstChild) {
-        return firstChild;
-      }
-      break;
-    }
+    case 'MOVE_RIGHT':
+      return nextArrowSelectableRight(selectedNode, directionalLookups);
 
     case 'MOVE_UP':
-      return moveSelectionUpDown(selectedNode, true, derivedLookups);
+      return nextArrowSelectableUpDown(selectedNode, true, directionalLookups);
 
     case 'MOVE_DOWN':
-      return moveSelectionUpDown(selectedNode, false, derivedLookups);
+      return nextArrowSelectableUpDown(selectedNode, false, directionalLookups);
   }
 }
 
 /**
  * Note that this returns the new _root_ of the whole tree
  */
-function replaceNode(node: Node, newNode: Node, derivedLookups: DerivedLookups): Node {
-  const parent = derivedLookups.nodeSelectionParent.get(node);
+function replaceNode(node: Node, newNode: Node, directionalLookups: DirectionalLookups): Node {
+  const parent = directionalLookups.parent.get(node);
   if (!parent) {
     return newNode;
   }
-  return replaceNode(parent, replaceChild(parent, node, newNode), derivedLookups);
+  return replaceNode(parent, replaceChild(parent, node, newNode), directionalLookups);
 }
 
 /**
  * Returns [newRoot, newSelectedNode]
  */
-function deleteArrayElementNode(node: Node, derivedLookups: DerivedLookups): [Node, Node] {
-  // TODO: find new selected by either getting previous sibling or parent
-  const parent = derivedLookups.nodeSelectionParent.get(node);
+function deleteArrayElementNode(node: Node, directionalLookups: DirectionalLookups): [Node, Node] {
+  const parent = directionalLookups.parent.get(node);
   if (!parent) {
     throw new Error();
   }
 
-  const selectedSib = derivedLookups.nodeSelectionPrevSibling.get(node) || derivedLookups.nodeSelectionNextSibling.get(node);
+  const sibling = directionalLookups.prevSibling.get(node) || directionalLookups.nextSibling.get(node);
   const newParent = deleteArrayElementChild(parent, node);
-  const newRoot = replaceNode(parent, newParent, derivedLookups);
-  return [newRoot, selectedSib || newParent];
+  const newRoot = replaceNode(parent, newParent, directionalLookups);
+  const newSelectedNode = sibling || newParent;
+  if (!newSelectedNode) {
+    throw new Error('should not be possible?');
+  }
+  return [newRoot, newSelectedNode];
 }
 
-function deleteNodeSubtree(node: Node, derivedLookups: DerivedLookups): [Node, Node] | void {
-  const parent = derivedLookups.nodeSelectionParent.get(node);
+function deleteNodeSubtree(node: Node, directionalLookups: DirectionalLookups): [Node, Node] | void {
+  const parent = directionalLookups.parent.get(node);
 
   if (!parent) {
     return;
@@ -1220,10 +1211,10 @@ function deleteNodeSubtree(node: Node, derivedLookups: DerivedLookups): [Node, N
         sid: newSid,
         desc: node.desc,
       };
-      const newRoot = replaceNode(node, newNode, derivedLookups);
+      const newRoot = replaceNode(node, newNode, directionalLookups);
       return [newRoot, newNode];
-    } else if ((parent.kind === NodeKind.ArrayLiteral) || (parent.kind === NodeKind.TreeFunctionDefinition)) {
-      return deleteArrayElementNode(node, derivedLookups);
+    } else if ((parent.kind === NodeKind.ArrayLiteral) || (parent.kind === NodeKind.TreeFunctionBody)) {
+      return deleteArrayElementNode(node, directionalLookups);
     } else {
       throw new Error();
     }
@@ -1233,7 +1224,7 @@ function deleteNodeSubtree(node: Node, derivedLookups: DerivedLookups): [Node, N
 function handleEditAction(action: Action, mainDefinition: TreeFunctionDefinitionNode, selectedNode: Node, derivedLookups: DerivedLookups): [Node, Node] | void {
   switch (action.type) {
     case 'DELETE_SUBTREE':
-      return deleteNodeSubtree(selectedNode, derivedLookups);
+      return deleteNodeSubtree(selectedNode, derivedLookups.directional);
   }
 }
 
@@ -1324,30 +1315,32 @@ function addStateCompiled(oldState: State | undefined, newState: State): State {
 }
 */
 
-function* selectionChildren(node: Node) {
-  switch (node.kind) {
-    case NodeKind.ArrayLiteral:
-      for (const elem of node.elems) {
-        yield elem;
-      }
-      break;
+function computeDirectionalLookups(root: Node): DirectionalLookups {
+  const parent: Map<Node, Node> = new Map();
+  const prevSibling: Map<Node, Node> = new Map();
+  const nextSibling: Map<Node, Node> = new Map();
 
-    case NodeKind.RefApplication:
-      for (const sarg of node.sargs) {
-        yield sarg;
+  const visit = (node: Node): void => {
+    let prev: Node | undefined;
+    for (const child of iterChildren(node)) {
+      parent.set(child, node);
+      if (prev) {
+        prevSibling.set(child, prev);
+        nextSibling.set(prev, child);
       }
-      for (const farg of node.fargs) {
-        yield farg;
-      }
-      break;
+      prev = child;
+    }
 
-    case NodeKind.TreeFunctionDefinition:
-      // TODO: include signature
-      for (const expr of node.exprs) {
-        yield expr;
-      }
-      break;
-  }
+    visitChildren(node, visit);
+  };
+
+  visit(root);
+
+  return {
+    parent,
+    prevSibling,
+    nextSibling,
+  };
 }
 
 function computeDerivedLookups(program: Program, nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>): DerivedLookups {
@@ -1360,10 +1353,6 @@ function computeDerivedLookups(program: Program, nativeFunctions: ReadonlyArray<
 
   // const streamIdToNode: Map<StreamID, StreamCreationNode> = new Map();
   const functionIdToDef: Map<FunctionID, FunctionDefinitionNode> = new Map();
-  const nodeSelectionParent: Map<Node, Node> = new Map();
-  const nodeSelectionPrevSibling: Map<Node, Node> = new Map();
-  const nodeSelectionNextSibling: Map<Node, Node> = new Map();
-  const nodeSelectionFirstChild: Map<Node, Node> = new Map();
 
   for (const extFunc of nativeFunctions) {
     functionIdToDef.set(extFunc.fid, extFunc);
@@ -1376,22 +1365,6 @@ function computeDerivedLookups(program: Program, nativeFunctions: ReadonlyArray<
       }
       functionIdToDef.set(node.fid, node);
     }
-
-    let prev: Node | undefined;
-    let setFirst = false;
-    for (const child of selectionChildren(node)) {
-      nodeSelectionParent.set(child, node);
-      if (prev) {
-        nodeSelectionPrevSibling.set(child, prev);
-        nodeSelectionNextSibling.set(prev, child);
-      }
-      if (!setFirst) {
-        nodeSelectionFirstChild.set(node, child);
-        setFirst = true;
-      }
-      prev = child;
-    }
-
     visitChildren(node, visit);
   };
 
@@ -1400,10 +1373,7 @@ function computeDerivedLookups(program: Program, nativeFunctions: ReadonlyArray<
   return {
     // streamIdToNode,
     functionIdToDef,
-    nodeSelectionParent,
-    nodeSelectionPrevSibling,
-    nodeSelectionNextSibling,
-    nodeSelectionFirstChild,
+    directional: computeDirectionalLookups(program.mainDefinition),
   };
 }
 
@@ -1426,7 +1396,7 @@ export function reducer(state: State, action: Action): State {
   }
   */
 
-  const handleSelectionActionResult = handleSelectionAction(action, state.selectedNode, state.derivedLookups);
+  const handleSelectionActionResult = handleSelectionAction(action, state.selectedNode, state.derivedLookups.directional);
   if (handleSelectionActionResult) {
     const newSelectedNode = handleSelectionActionResult;
     if (newSelectedNode !== state.selectedNode) {
@@ -1594,61 +1564,65 @@ const INITIAL_PROGRAM: Program = {
     fid: generateFunctionId(),
     desc: null,
     sig: {
+      kind: NodeKind.Signature,
       streamParams: [],
       funcParams: [],
       yields: [],
     },
     spids: [],
     fpids: [],
-    exprs: [
-      {
-        kind: NodeKind.RefApplication,
-        sids: [mdId],
-        desc: {
-          kind: NodeKind.Description,
-          text: 'md',
-        },
-        func: 'mouseDown',
-        sargs: [],
-        fargs: [],
-      },
-      {
-        kind: NodeKind.RefApplication,
-        sids: [generateStreamId()],
-        desc: null,
-        func: 'showString',
-        sargs: [
-          {
-            kind: NodeKind.RefApplication,
-            sids: [generateStreamId()],
-            desc: null,
-            func: 'ifte',
-            sargs: [
-              {
-                kind: NodeKind.StreamReference,
-                sid: generateStreamId(),
-                desc: null,
-                ref: mdId,
-              },
-              {
-                kind: NodeKind.NumberLiteral,
-                sid: generateStreamId(),
-                desc: null,
-                val: 10,
-              },
-              {
-                kind: NodeKind.NumberLiteral,
-                sid: generateStreamId(),
-                desc: null,
-                val: 20,
-              },
-            ],
-            fargs: [],
+    body: {
+      kind: NodeKind.TreeFunctionBody,
+      exprs: [
+        {
+          kind: NodeKind.RefApplication,
+          sids: [mdId],
+          desc: {
+            kind: NodeKind.Description,
+            text: 'md',
           },
-        ],
-        fargs: [],
-      },
-    ],
+          func: 'mouseDown',
+          sargs: [],
+          fargs: [],
+        },
+        {
+          kind: NodeKind.RefApplication,
+          sids: [generateStreamId()],
+          desc: null,
+          func: 'showString',
+          sargs: [
+            {
+              kind: NodeKind.RefApplication,
+              sids: [generateStreamId()],
+              desc: null,
+              func: 'ifte',
+              sargs: [
+                {
+                  kind: NodeKind.StreamReference,
+                  sid: generateStreamId(),
+                  desc: null,
+                  ref: mdId,
+                },
+                {
+                  kind: NodeKind.NumberLiteral,
+                  sid: generateStreamId(),
+                  desc: null,
+                  val: 10,
+                },
+                {
+                  kind: NodeKind.NumberLiteral,
+                  sid: generateStreamId(),
+                  desc: null,
+                  val: 20,
+                },
+              ],
+              fargs: [],
+            },
+          ],
+          fargs: [],
+        },
+      ],
+    }
   },
 };
 

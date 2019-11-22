@@ -1,4 +1,4 @@
-import { Signature, NodeKind } from './Tree';
+import { SignatureNode, NodeKind } from './Tree';
 const { showString, animationTime, mouseDown, changeCount, streamMap, audioDriver, random, mouseClickEvts, redCircle, mousePosition, latestValue } = require('riv-demo-lib');
 
 interface Vec2d {
@@ -25,15 +25,16 @@ function vec2sqgrid(count: number, size: number) {
   return vecs;
 }
 
-function simpleSig(pnames: Array<string>, yields: boolean): Signature {
+function simpleSig(pnames: Array<string>, yields: boolean): SignatureNode {
   return {
+    kind: NodeKind.Signature,
     streamParams: pnames.map(pn => ({kind: NodeKind.SignatureStreamParameter, desc: { kind: NodeKind.Description, text: pn }})),
     funcParams: [],
     yields: yields ? [{kind: NodeKind.SignatureYield, desc: null}] : [],
   }
 }
 
-const nativeFunctions: Array<[string, string, Signature, Function]> = [
+const nativeFunctions: Array<[string, string, SignatureNode, Function]> = [
   // simple
   ['ifte', 'if', simpleSig(['cond', 'then', 'else'], true), (cond: any, _then: any, _else: any) => (cond ? _then : _else)],
 
