@@ -3,22 +3,6 @@ import { CompiledDefinition } from './CompiledDefinition';
 
 import { StreamID, FunctionID, Node, FunctionDefinitionNode, NativeFunctionDefinitionNode, TreeFunctionDefinitionNode } from './Tree';
 
-export function pathIsPrefix(a: Path, b: Path): boolean {
-  if (a.length > b.length) {
-    return false;
-  }
-
-  for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i]) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-export type Path = ReadonlyArray<number>;
-
 export type NodeEditState = {
   readonly originalNode: Node,
   readonly tentativeNode: Node,
@@ -27,7 +11,7 @@ export type NodeEditState = {
 
 export interface UndoStackFrame {
   readonly program: Program;
-  readonly selectionPath: Path;
+  readonly selectedNode: Node;
 };
 
 export interface ClipboardStackFrame {
@@ -35,9 +19,6 @@ export interface ClipboardStackFrame {
   readonly streamId: StreamID;
 }
 
-/**
- * PROGRAM
- */
 export interface Program {
   readonly programId: string;
   readonly name: string;

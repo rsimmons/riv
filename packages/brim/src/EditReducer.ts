@@ -1,5 +1,5 @@
 import genuid from './uid';
-import { State, Path, Program, NodeEditState, pathIsPrefix, DerivedLookups, DirectionalLookups } from './State';
+import { State, Program, NodeEditState, DerivedLookups, DirectionalLookups } from './State';
 import { StreamID, FunctionID, generateStreamId, generateFunctionId, NodeKind, Node, TreeFunctionDefinitionNode, FunctionDefinitionNode, ArrayLiteralNode, isFunctionDefinitionNode, StreamExpressionNode, NativeFunctionDefinitionNode, isStreamExpressionNode, UndefinedLiteralNode } from './Tree';
 // import { CompiledDefinition } from './CompiledDefinition';
 // import { compileGlobalUserDefinition, CompilationError } from './Compiler';
@@ -17,7 +17,6 @@ interface Action {
   type: string;
   char?: string;
   newNode?: Node;
-  newPath?: Path;
   newName?: string;
   program?: Program;
 }
