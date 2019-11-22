@@ -68,21 +68,18 @@
 }
 
 .TreeView-udf-node-main-container {
-  margin: 0.5em 0;
   display: flex;
   flex-direction: row;
 }
 
 .TreeView-udf-node {
   width: max-content;
-  overflow: auto;
 }
 
 .TreeView-udf-node-expressions {
   background: white;
   padding: 0.5em;
-  margin: 0 0.4em;
-  box-shadow: inset 0 2px 5px 0 rgba(0,0,0,.5);
+  box-shadow: inset 0 1px 3px 0 rgba(0,0,0,.5);
 }
 
 .TreeView-udf-node-expressions > *:not(:last-child) {
@@ -108,10 +105,10 @@
 /* NOTE: This is awkward that we reference Editor classes, but don't know a nice way to fix */
 .Editor-workspace:focus .TreeView-selected, .ExpressionChooser-input:focus {
   outline: black solid 2px;
-  outline-offset: 0;
+  outline-offset: -2px;
 }
 
 .TreeView-hovered {
   outline: black dashed 1px;
-  outline-offset: 0;
+  outline-offset: -1px;
 }

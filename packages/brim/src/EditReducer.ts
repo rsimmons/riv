@@ -1,5 +1,5 @@
 import genuid from './uid';
-import { State, ProgramInfo, NodeEditState, DirectionalLookups, SelTree } from './State';
+import { State, ProgramInfo, DirectionalLookups, SelTree } from './State';
 import { StreamID, FunctionID, generateStreamId, generateFunctionId, NodeKind, Node, TreeFunctionDefinitionNode, FunctionDefinitionNode, ArrayLiteralNode, isFunctionDefinitionNode, StreamExpressionNode, NativeFunctionDefinitionNode, isStreamExpressionNode, UndefinedLiteralNode } from './Tree';
 // import { CompiledDefinition } from './CompiledDefinition';
 // import { compileGlobalUserDefinition, CompilationError } from './Compiler';
@@ -1264,7 +1264,7 @@ function deleteNodeSubtree(node: Node, directionalLookups: DirectionalLookups): 
   }
 }
 
-function handleEditAction(action: Action, selTree: SelTree, directionalLookups: DirectionalLookups): SelTree | void {
+function handleInstantEditAction(action: Action, selTree: SelTree, directionalLookups: DirectionalLookups): SelTree | void {
   switch (action.type) {
     case 'DELETE_SUBTREE':
       return deleteNodeSubtree(selTree.selectedNode, directionalLookups);
@@ -1405,6 +1405,29 @@ export function reducer(state: State, action: Action): State {
   }
   */
 
+  if (action.type === 'TOGGLE_EDIT') {
+    // TODO: should not allow confirming unless it is valid
+    if (state.editingSelTree) {
+      return {
+        ...state,
+        stableSelTree: state.editingSelTree,
+        directionalLookups: computeDirectionalLookups(state.editingSelTree.mainDefinition),
+      };
+    } else {
+      return {
+        ...state,
+        editingSelTree: state.stableSelTree,
+      };
+    }
+  } else if (action.type === 'ABORT_EDIT') {
+    if (state.editingSelTree) {
+      return {
+        ...state,
+        editingSelTree: null,
+      };
+    }
+  }
+
   const handleSelectionActionResult = handleSelectionAction(action, state.stableSelTree.selectedNode, state.directionalLookups);
   if (handleSelectionActionResult) {
     const newSelectedNode = handleSelectionActionResult;
@@ -1416,10 +1439,12 @@ export function reducer(state: State, action: Action): State {
           selectedNode: newSelectedNode,
         }
       };
+    } else {
+      return state;
     }
   }
 
-  const handleEditActionResult = handleEditAction(action, state.stableSelTree, state.directionalLookups);
+  const handleEditActionResult = handleInstantEditAction(action, state.stableSelTree, state.directionalLookups);
   if (handleEditActionResult) {
     const newSelTree = handleEditActionResult;
     console.log(newSelTree);
@@ -1430,6 +1455,8 @@ export function reducer(state: State, action: Action): State {
         stableSelTree: newSelTree,
         directionalLookups: computeDirectionalLookups(newSelTree.mainDefinition),
       };
+    } else {
+      return state;
     }
   }
 
@@ -1552,7 +1579,7 @@ function initialStateFromDefinition(mainDefinition: TreeFunctionDefinitionNode):
       selectedNode: mainDefinition,
     },
     directionalLookups: computeDirectionalLookups(mainDefinition),
-    editingSelected: null,
+    editingSelTree: null,
     nativeFunctions,
     // liveMain: null,
     undoStack: [],

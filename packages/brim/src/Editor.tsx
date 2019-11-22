@@ -67,10 +67,10 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
   // NOTE: This is hacky, but don't know better way to handle.
   const previouslyEditingSelected = useRef<boolean>(false);
   useEffect(() => {
-    if (previouslyEditingSelected.current && !state.editingSelected && editorElem.current) {
+    if (previouslyEditingSelected.current && !state.editingSelTree && editorElem.current) {
       editorElem.current.focus();
     }
-    previouslyEditingSelected.current = !!state.editingSelected;
+    previouslyEditingSelected.current = !!state.editingSelTree;
   });
 
   // TODO: memoize generation of this
@@ -101,15 +101,18 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
   //   dispatch({type: 'LOAD_PROGRAM', program});
   // };
 
-  const viewLookups = useMemo(() => computeViewLookups(state.stableSelTree.mainDefinition, state.nativeFunctions), [state.stableSelTree.mainDefinition, state.nativeFunctions]);
+  const displayedSelTree = state.editingSelTree || state.stableSelTree;
+  const editing = !!state.editingSelTree;
+
+  const viewLookups = useMemo(() => computeViewLookups(displayedSelTree.mainDefinition, state.nativeFunctions), [displayedSelTree.mainDefinition, state.nativeFunctions]);
 
   const treeViewCtxData: TreeViewContextData = {
-    selectedNode: state.stableSelTree.selectedNode,
+    selectedNode: displayedSelTree.selectedNode,
+    editing,
     // clipboardTopNode: (state.clipboardStack.length > 0) ? state.derivedLookups.streamIdToNode!.get(state.clipboardStack[state.clipboardStack.length-1].streamId) : null,
     // clipboardRestNodes: state.clipboardStack.slice(0, -1).map(frame => state.derivedLookups.streamIdToNode!.get(frame.streamId)),
     // streamIdToNode: state.derivedLookups.streamIdToNode!,
     functionIdToDef: viewLookups.functionIdToDef!,
-    mainState: state,
     dispatch,
     onSelectNode: (node: Node) => {
       dispatch({
@@ -125,7 +128,7 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
         <ObserveKeys only={CATCH_IN_INPUTS}>
           <div className="Editor-workspace" onKeyDown={onKeyDown} tabIndex={0} ref={editorElem}>
             <TreeViewContextProvider value={treeViewCtxData}>
-              <TreeFunctionDefinitionView node={state.stableSelTree.mainDefinition} inheritedName="main" />
+              <TreeFunctionDefinitionView node={displayedSelTree.mainDefinition} inheritedName="main" />
             </TreeViewContextProvider>
           </div>
         </ObserveKeys>
