@@ -9,20 +9,19 @@ export type NodeEditState = {
   readonly overwrite: boolean,
 } | null;
 
-export interface UndoStackFrame {
-  readonly program: Program;
-  readonly selectedNode: Node;
-};
-
 export interface ClipboardStackFrame {
   readonly mode: 'cut' | 'copy';
   readonly streamId: StreamID;
 }
 
-export interface Program {
-  readonly programId: string;
+export interface ProgramInfo {
+  readonly id: string;
   readonly name: string;
+}
+
+export interface SelTree {
   readonly mainDefinition: TreeFunctionDefinitionNode;
+  readonly selectedNode: Node;
 }
 
 export interface DirectionalLookups {
@@ -38,8 +37,8 @@ export interface DerivedLookups {
 }
 
 export interface State {
-  readonly program: Program;
-  readonly selectedNode: Node;
+  readonly programInfo: ProgramInfo;
+  readonly stableSelTree: SelTree;
   readonly editingSelected: NodeEditState;
   readonly nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>;
   readonly derivedLookups: DerivedLookups;
@@ -50,6 +49,6 @@ export interface State {
     updateCompiledDefinition: (newDefinition: CompiledDefinition) => void;
   } | null;
   */
-  readonly undoStack: ReadonlyArray<UndoStackFrame>;
+  readonly undoStack: ReadonlyArray<SelTree>;
   readonly clipboardStack: ReadonlyArray<ClipboardStackFrame>;
 }

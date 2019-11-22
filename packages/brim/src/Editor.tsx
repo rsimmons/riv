@@ -4,7 +4,6 @@ import { initialState, reducer } from './EditReducer';
 import StoragePanel from './StoragePanel';
 import './Editor.css';
 import { TreeFunctionDefinitionView, TreeViewContextProvider, TreeViewContextData } from './TreeView';
-import { Program } from './State';
 import { Node } from './Tree';
 
 const keyMap = {
@@ -98,12 +97,12 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
     dispatch({type: 'SET_PROGRAM_NAME', newName});
   };
 
-  const handleLoadProgram = (program: Program) => {
-    dispatch({type: 'LOAD_PROGRAM', program});
-  };
+  // const handleLoadProgram = (program: Program) => {
+  //   dispatch({type: 'LOAD_PROGRAM', program});
+  // };
 
   const treeViewCtxData: TreeViewContextData = {
-    selectedNode: state.selectedNode,
+    selectedNode: state.stableSelTree.selectedNode,
     // clipboardTopNode: (state.clipboardStack.length > 0) ? state.derivedLookups.streamIdToNode!.get(state.clipboardStack[state.clipboardStack.length-1].streamId) : null,
     // clipboardRestNodes: state.clipboardStack.slice(0, -1).map(frame => state.derivedLookups.streamIdToNode!.get(frame.streamId)),
     // streamIdToNode: state.derivedLookups.streamIdToNode!,
@@ -124,14 +123,14 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
         <ObserveKeys only={CATCH_IN_INPUTS}>
           <div className="Editor-workspace" onKeyDown={onKeyDown} tabIndex={0} ref={editorElem}>
             <TreeViewContextProvider value={treeViewCtxData}>
-              <TreeFunctionDefinitionView node={state.program.mainDefinition} inheritedName="main" />
+              <TreeFunctionDefinitionView node={state.stableSelTree.mainDefinition} inheritedName="main" />
             </TreeViewContextProvider>
           </div>
         </ObserveKeys>
       </HotKeys>
-      <div className="Editor-storage-panel-container Editor-panel">
+      {/* <div className="Editor-storage-panel-container Editor-panel">
         <StoragePanel currentProgram={state.program} onChangeName={handleChangeProgramName} onLoadProgram={handleLoadProgram} />
-      </div>
+      </div> */}
     </div>
   );
 }
