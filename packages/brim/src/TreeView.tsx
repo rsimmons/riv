@@ -111,7 +111,7 @@ const AppishNodeView: React.FC<AppishNodeProps> = ({node, name, boxColor, stream
   const totalRows = 1 + rowsForArray(streamChildren) + rowsForArray(functionChildren);
   return (
     <div className="TreeView-appish-node">
-      <div className={selectionClasses.join(' ')} style={{gridRowStart: 1, gridRowEnd: totalRows+1, gridColumnStart: 1, gridColumnEnd: 2, background: boxColor }} {...selectionHandlers} />
+      <div style={{gridRowStart: 1, gridRowEnd: totalRows+1, gridColumnStart: 1, gridColumnEnd: 2, background: boxColor }} {...selectionHandlers} />
       <div className="TreeView-name-bar TreeView-common-padding" style={{gridRow: 1, gridColumn: 1}}>{name}</div>
       <>{streamChildren.map(({key, name, child}, idx) => (
         <React.Fragment key={key}>
@@ -131,7 +131,7 @@ const AppishNodeView: React.FC<AppishNodeProps> = ({node, name, boxColor, stream
           <div className="TreeView-appish-node-function-argument" style={{gridRow: 1 + rowsForArray(streamChildren) + 2*idx+1, gridColumn: 1}}><div className="TreeView-appish-node-function-argument-inner">{child}</div></div>
         </React.Fragment>
       ))}</>
-      {/* <div className={selectionClasses.concat(['TreeView-appish-node-selection-overlay']).join(' ')} style={{gridRowStart: 1, gridRowEnd: totalRows+1, gridColumnStart: 1, gridColumnEnd: 2}} {...selectionHandlers} /> */}
+      <div className={selectionClasses.concat(['TreeView-appish-node-selection-overlay']).join(' ')} style={{gridRowStart: 1, gridRowEnd: totalRows+1, gridColumnStart: 1, gridColumnEnd: 2}} />
     </div>
   );
 };
