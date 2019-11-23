@@ -53,16 +53,6 @@ function addUserFunctionLocalEnvironment(func: TreeFunctionDefinitionNode, named
     return [false, node];
   });
 }
-
-function addEnvironmentAlongPath(root: Node, path: Path, namedStreams: Array<[string, StreamCreationNode]>, namedFunctions: Array<[string, FunctionDefinitionNode]>) {
-  let cur: Node = root;
-  for (const seg of path) {
-    if (cur.type === 'TreeFunctionDefinition') {
-      addUserFunctionLocalEnvironment(cur, namedStreams, namedFunctions);
-    }
-    cur = cur.children[seg];
-  }
-}
 */
 
 export function environmentForNode(node: Node, nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>, directionalLookups: DirectionalLookups): ChooserEnvironment {
@@ -1405,12 +1395,19 @@ export function computeDirectionalLookups(root: Node): DirectionalLookups {
 function beginEdit(state: State): State {
   if (isStreamExpressionNode(state.stableSelTree.selectedNode)) {
     return {
-      ...state,
+      ...pushUndo(state),
       editingSelTree: state.stableSelTree,
     };
   } else {
     return state;
   }
+}
+
+function pushUndo(state: State): State {
+  return {
+    ...state,
+    undoStack: state.undoStack.concat([state.stableSelTree]),
+  };
 }
 
 export function reducer(state: State, action: Action): State {
@@ -1436,8 +1433,7 @@ export function reducer(state: State, action: Action): State {
     if (!state.editingSelTree) {
       return beginEdit(state);
     }
-  }
-  if (action.type === 'TOGGLE_EDIT') {
+  } else if (action.type === 'TOGGLE_EDIT') {
     // TODO: should not allow confirming unless it is valid
     if (state.editingSelTree) {
       return {
@@ -1472,6 +1468,20 @@ export function reducer(state: State, action: Action): State {
         selectedNode: action.newNode!,
       }
     };
+  } else if (action.type === 'UNDO') {
+    if (state.undoStack.length > 0) {
+      const newSelTree = state.undoStack[state.undoStack.length-1];
+      return {
+        ...state,
+        stableSelTree: newSelTree,
+        directionalLookups: computeDirectionalLookups(newSelTree.mainDefinition),
+        editingSelTree: null,
+        undoStack: state.undoStack.slice(0, state.undoStack.length-1),
+      };
+    } else {
+      console.log('nothing to undo');
+      return state;
+    }
   }
 
   const handleSelectionActionResult = handleSelectionAction(action, state.stableSelTree.selectedNode, state.directionalLookups);
@@ -1497,32 +1507,13 @@ export function reducer(state: State, action: Action): State {
 
     if (newSelTree !== state.stableSelTree) {
       return {
-        ...state,
+        ...pushUndo(state),
         stableSelTree: newSelTree,
         directionalLookups: computeDirectionalLookups(newSelTree.mainDefinition),
       };
     } else {
       return state;
     }
-  }
-
-  /*
-  let newProgram = state.program;
-  let newSelectedNode = state.selectedNode;
-  let newEditingSelected = state.editingSelected;
-  let newUndoStack = state.undoStack;
-  let newClipboardStack = state.clipboardStack;
-  */
-
-  if (action.type === 'UNDO') {
-    /*
-    if (state.undoStack.length > 0) {
-      const topFrame = newUndoStack[newUndoStack.length-1];
-      newProgram = topFrame.program;
-      newSelectionPath = topFrame.selectionPath;
-      newUndoStack = newUndoStack.slice(0, newUndoStack.length-1);
-    }
-    */
   } else if (action.type === 'CUT') {
     /*
     const selectedNode = nodeFromPath(newProgram, newSelectionPath);
@@ -1544,55 +1535,7 @@ export function reducer(state: State, action: Action): State {
       [newProgram, newSelectionPath] = pasteExpressionNode(topNode, topFrame.streamId, newProgram, newSelectionPath);
     }
     */
-  } else {
-    /*
-    const newCoreState = applyActionToCoreState(action, {
-      program: newProgram,
-      selectionPath: newSelectionPath,
-      editingSelected: newEditingSelected,
-    });
-    newProgram = newCoreState.program;
-    newSelectionPath = newCoreState.selectionPath;
-    newEditingSelected = newCoreState.editingSelected;
-    */
-    /*
-    [newProgram, newSelectionPath, newEditingSelected] = applyActionToProgram(newProgram, newSelectionPath, newEditingSelected, action);
-    */
   }
-
-  /*
-  if ((newProgram !== state.program) || (newSelectedNode !== state.selectedNode) || (newEditingSelected !== state.editingSelected) || (newUndoStack !== state.undoStack) || (newClipboardStack !== state.clipboardStack)) {
-    console.log('handled! new prog', newProgram, 'new selectedNode is', newSelectedNode, 'newEditingSelected is', newEditingSelected);
-    if (newProgram !== state.program) {
-      console.log('program changed identity');
-
-      // Push the state of things _before_ this action onto the stack
-      // if (action.type !== 'UNDO') {
-      //   newUndoStack = newUndoStack.concat([{
-      //     program: state.program,
-      //     selectionPath: state.selectionPath,
-      //   }]);
-      // }
-    }
-
-    return addDerivedState(state, {
-      program: newProgram,
-      selectedNode: newProgram.mainDefinition,
-      editingSelected: newEditingSelected,
-      nativeFunctions: state.nativeFunctions,
-      derivedLookups: {
-        // streamIdToNode: null,
-        functionIdToDef: null,
-      },
-      // liveMain: null,
-      undoStack: newUndoStack,
-      clipboardStack: newClipboardStack,
-    });
-  } else {
-    console.log('not handled');
-    return state;
-  }
-  */
 
   console.log('action not handled');
   return state;
