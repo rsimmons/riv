@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState } from 'react';
 import { StreamID, FunctionID, Node, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, isFunctionExpressionNode, TreeFunctionBodyNode } from './Tree';
 import ExpressionChooser from './ExpressionChooser';
 import './TreeView.css';
+import { ChooserEnvironment } from './EditReducer';
 
 const NORMAL_BOX_COLOR = '#d8d8d8';
 const STREAM_REFERENCE_BOX_COLOR = '#ccd9e8';
@@ -12,6 +13,7 @@ export interface TreeViewContextData {
   editing: boolean;
   // streamIdToNode: ReadonlyMap<StreamID, StreamDefinitionNode>;
   functionIdToDef: ReadonlyMap<FunctionID, FunctionDefinitionNode>;
+  environment: ChooserEnvironment;
   dispatch: (action: any) => void; // TODO: tighten up type
   onSelectNode: (node: Node) => void;
 };
@@ -210,7 +212,7 @@ const StreamExpressionView: React.FC<{node: StreamExpressionNode}> = ({ node }) 
     return (
       <div style={{position: 'relative'}}>
         {nodeView}
-        <div style={{position: 'absolute', top: 0}}><ExpressionChooser initNode={node} dispatch={ctxData.dispatch} /></div>
+        <div style={{position: 'absolute', top: 0}}><ExpressionChooser initNode={node} environment={ctxData.environment} dispatch={ctxData.dispatch} /></div>
       </div>
     );
   } else {

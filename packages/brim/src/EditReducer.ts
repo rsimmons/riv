@@ -33,6 +33,11 @@ interface ParamStreamDefinition {
 
 type StreamDefinition = ExprStreamDefinition | ParamStreamDefinition;
 
+export interface ChooserEnvironment {
+  namedStreams: ReadonlyArray<[StreamID, StreamDefinition]>;
+  namedFunctions: ReadonlyArray<[FunctionID, FunctionDefinitionNode]>;
+}
+
 /*
 function addUserFunctionLocalEnvironment(func: TreeFunctionDefinitionNode, namedStreams: Array<[string, StreamCreationNode]>, namedFunctions: Array<[string, FunctionDefinitionNode]>) {
   traverseTree(func, {onlyWithinFunctionId: func.id}, (node, path) => {
@@ -58,25 +63,36 @@ function addEnvironmentAlongPath(root: Node, path: Path, namedStreams: Array<[st
     cur = cur.children[seg];
   }
 }
+*/
 
-export function environmentForSelectedNode(state: State) {
-  const namedStreams: Array<[string, StreamCreationNode]> = [];
-  const namedFunctions: Array<[string, FunctionDefinitionNode]> = [];
+export function environmentForNode(node: Node, nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>, directionalLookups: DirectionalLookups): ChooserEnvironment {
+  const namedStreams: Array<[StreamID, StreamDefinition]> = [];
+  const namedFunctions: Array<[FunctionID, FunctionDefinitionNode]> = [];
 
-  for (const extFunc of state.nativeFunctions) {
-    if (extFunc.name) {
-      namedFunctions.push([extFunc.name, extFunc]);
+  for (const extFunc of nativeFunctions) {
+    if (extFunc.desc && extFunc.desc.text) {
+      namedFunctions.push([extFunc.desc.text, extFunc]);
     }
   }
 
-  addEnvironmentAlongPath(state.program, state.selectionPath, namedStreams, namedFunctions);
+  let n: Node = node;
+  while (true) {
+    const parent = directionalLookups.parent.get(n);
+    if (!parent) {
+      break;
+    }
+    n = parent;
+
+    if (n.kind === NodeKind.TreeFunctionDefinition) {
+      // TODO: add environment from this definition
+    }
+  }
 
   return {
     namedStreams,
     namedFunctions,
   }
 }
-*/
 
 const equiv = (a: any, b: any): boolean => JSON.stringify(a) === JSON.stringify(b);
 
@@ -1358,7 +1374,7 @@ function addStateCompiled(oldState: State | undefined, newState: State): State {
 }
 */
 
-function computeDirectionalLookups(root: Node): DirectionalLookups {
+export function computeDirectionalLookups(root: Node): DirectionalLookups {
   const parent: Map<Node, Node> = new Map();
   const prevSibling: Map<Node, Node> = new Map();
   const nextSibling: Map<Node, Node> = new Map();

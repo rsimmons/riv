@@ -1,6 +1,6 @@
 import React, { useReducer, useRef, useEffect, useState, useMemo } from 'react';
 import { HotKeys, ObserveKeys } from "react-hotkeys";
-import { initialState, reducer, ViewLookups, computeViewLookups } from './EditReducer';
+import { initialState, reducer, computeViewLookups, computeDirectionalLookups, environmentForNode } from './EditReducer';
 import StoragePanel from './StoragePanel';
 import './Editor.css';
 import { TreeFunctionDefinitionView, TreeViewContextProvider, TreeViewContextData } from './TreeView';
@@ -113,6 +113,7 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
     // clipboardRestNodes: state.clipboardStack.slice(0, -1).map(frame => state.derivedLookups.streamIdToNode!.get(frame.streamId)),
     // streamIdToNode: state.derivedLookups.streamIdToNode!,
     functionIdToDef: viewLookups.functionIdToDef!,
+    environment: environmentForNode(displayedSelTree.selectedNode, state.nativeFunctions, computeDirectionalLookups(displayedSelTree.mainDefinition)),
     dispatch,
     onSelectNode: (node: Node) => {
       dispatch({
