@@ -1510,7 +1510,8 @@ export function reducer(state: State, action: Action): State {
         stableSelTree: {
           ...state.stableSelTree,
           selectedNode: newSelectedNode,
-        }
+        },
+        editingSelTree: null, // abort any edits
       };
     } else {
       return state;
