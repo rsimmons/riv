@@ -1,9 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './ExpressionChooser.css';
-import { generateStreamId, generateFunctionId, Node, FunctionDefinitionNode, TreeFunctionDefinitionNode, NodeKind, isStreamExpressionNode, SignatureStreamParameterNode, RefApplicationNode } from './Tree';
+import { generateStreamId, Node, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, SignatureStreamParameterNode, RefApplicationNode } from './Tree';
 import { fuzzy_match } from './vendor/fts_fuzzy_match';
-// import { environmentForSelectedNode } from './EditReducer';
-import { State } from './State';
 import { ChooserEnvironment } from './EditReducer';
 
 interface UndefinedChoice {

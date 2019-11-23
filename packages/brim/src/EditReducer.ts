@@ -1,16 +1,13 @@
 import genuid from './uid';
 import { State, ProgramInfo, DirectionalLookups, SelTree } from './State';
-import { StreamID, FunctionID, generateStreamId, generateFunctionId, NodeKind, Node, TreeFunctionDefinitionNode, FunctionDefinitionNode, ArrayLiteralNode, isFunctionDefinitionNode, StreamExpressionNode, NativeFunctionDefinitionNode, isStreamExpressionNode, UndefinedLiteralNode } from './Tree';
+import { StreamID, FunctionID, generateStreamId, generateFunctionId, NodeKind, Node, TreeFunctionDefinitionNode, FunctionDefinitionNode, isFunctionDefinitionNode, StreamExpressionNode, NativeFunctionDefinitionNode, isStreamExpressionNode, UndefinedLiteralNode } from './Tree';
 // import { CompiledDefinition } from './CompiledDefinition';
 // import { compileGlobalUserDefinition, CompilationError } from './Compiler';
-import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
+// import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
 // import { createLiveFunction } from './LiveFunction';
 import Environment from './Environment';
 import { firstChild, lastChild, iterChildren, visitChildren, replaceChild, deleteArrayElementChild } from './Traversal';
 import globalNativeFunctions from './globalNatives';
-
-const REALIZE_TENTATIVE_EXPRESSION_EDITS = false;
-// const REALIZE_TENTATIVE_IDENTIFIER_EDITS = true;
 
 // We don't make a discriminated union of specific actions, but maybe we could
 interface Action {
@@ -22,16 +19,16 @@ interface Action {
 }
 
 interface ExprStreamDefinition {
-  type: 'expr';
+  kind: 'expr';
   expr: StreamExpressionNode;
 }
 
 interface ParamStreamDefinition {
-  type: 'param';
+  kind: 'param';
   index: number;
 }
 
-type StreamDefinition = ExprStreamDefinition | ParamStreamDefinition;
+export type StreamDefinition = ExprStreamDefinition | ParamStreamDefinition;
 
 export interface ChooserEnvironment {
   namedStreams: ReadonlyArray<[StreamID, StreamDefinition]>;
@@ -84,9 +81,9 @@ export function environmentForNode(node: Node, nativeFunctions: ReadonlyArray<Na
   }
 }
 
+/*
 const equiv = (a: any, b: any): boolean => JSON.stringify(a) === JSON.stringify(b);
 
-/*
 interface HandlerArgs {
   node: Node,
   subpath: Path,
@@ -1105,13 +1102,12 @@ function applyActionToCoreState(action: Action, coreState: CoreState): CoreState
 */
 
 export interface ViewLookups {
-  // streamIdToNode: ReadonlyMap<StreamID, StreamCreationNode> | null;
-  functionIdToDef: ReadonlyMap<FunctionID, FunctionDefinitionNode> | null;
+  streamIdToDef: ReadonlyMap<StreamID, StreamDefinition>;
+  functionIdToDef: ReadonlyMap<FunctionID, FunctionDefinitionNode>;
 }
 
 export function computeViewLookups(mainDefinition: TreeFunctionDefinitionNode, nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>): ViewLookups {
-  console.log('computeViewLookups');
-  // const streamIdToNode: Map<StreamID, StreamCreationNode> = new Map();
+  const streamIdToDef: Map<StreamID, StreamDefinition> = new Map();
   const functionIdToDef: Map<FunctionID, FunctionDefinitionNode> = new Map();
 
   for (const extFunc of nativeFunctions) {
@@ -1119,6 +1115,27 @@ export function computeViewLookups(mainDefinition: TreeFunctionDefinitionNode, n
   }
 
   const visit = (node: Node): void => {
+    if (isStreamExpressionNode(node)) {
+      if (node.kind === NodeKind.RefApplication) {
+        node.sids.forEach(sid => {
+          if (streamIdToDef.has(sid)) {
+            throw new Error();
+          }
+          streamIdToDef.set(sid, {
+            kind: 'expr',
+            expr: node,
+          });
+        });
+      } else {
+        if (streamIdToDef.has(node.sid)) {
+          throw new Error();
+        }
+        streamIdToDef.set(node.sid, {
+          kind: 'expr',
+          expr: node,
+        });
+      }
+    }
     if (isFunctionDefinitionNode(node)) {
       if (functionIdToDef.has(node.fid)) {
         throw new Error('function ids must be unique');
@@ -1131,7 +1148,7 @@ export function computeViewLookups(mainDefinition: TreeFunctionDefinitionNode, n
   visit(mainDefinition);
 
   return {
-    // streamIdToNode,
+    streamIdToDef,
     functionIdToDef,
   };
 }

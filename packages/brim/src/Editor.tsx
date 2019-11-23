@@ -111,8 +111,8 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
     editing,
     // clipboardTopNode: (state.clipboardStack.length > 0) ? state.derivedLookups.streamIdToNode!.get(state.clipboardStack[state.clipboardStack.length-1].streamId) : null,
     // clipboardRestNodes: state.clipboardStack.slice(0, -1).map(frame => state.derivedLookups.streamIdToNode!.get(frame.streamId)),
-    // streamIdToNode: state.derivedLookups.streamIdToNode!,
-    functionIdToDef: viewLookups.functionIdToDef!,
+    streamIdToDef: viewLookups.streamIdToDef,
+    functionIdToDef: viewLookups.functionIdToDef,
     environment: environmentForNode(displayedSelTree.selectedNode, state.nativeFunctions, computeDirectionalLookups(displayedSelTree.mainDefinition)),
     dispatch,
     onSelectNode: (node: Node) => {
