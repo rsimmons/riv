@@ -112,6 +112,7 @@ export interface SignatureStreamParameterNode {
 export interface SignatureFunctionParameterNode {
   readonly kind: NodeKind.SignatureFunctionParameter;
   readonly desc: DescriptionNode | null;
+  readonly sig: SignatureNode;
 }
 
 export interface SignatureYieldNode {

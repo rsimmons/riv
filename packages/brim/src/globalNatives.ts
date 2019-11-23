@@ -66,49 +66,79 @@ const nativeFunctions: Array<[string, string, SignatureNode, Function]> = [
   ['vec2sqgrid', 'square grid of 2d vectors', simpleSig(['count', 'size'], true), vec2sqgrid],
 
   // higher-order
-  /*
-  ['streamMap', 'map', {parameters: [
-    {
-      name: 'array',
-      type: 'stream',
-    },
-    {
-      name: 'transform one value',
-      type: {
-        parameters: [
-          {
-            name: 'value',
-            type: 'stream',
-          }
-        ],
-        yields: true,
+  ['streamMap', 'map', {
+    kind: NodeKind.Signature,
+    streamParams: [
+      {
+        kind: NodeKind.SignatureStreamParameter,
+        desc: {kind: NodeKind.Description, text: 'array'},
       },
-    },
-  ], yields: true}, (arr: Array<any>, f: (v: any) => any) => streamMap(f, arr)],
+    ],
+    funcParams: [
+      {
+        kind: NodeKind.SignatureFunctionParameter,
+        desc: {kind: NodeKind.Description, text: 'xform one value'},
+        sig: {
+          kind: NodeKind.Signature,
+          streamParams: [
+            {
+              kind: NodeKind.SignatureStreamParameter,
+              desc: {kind: NodeKind.Description, text: 'value'},
+            }
+          ],
+          funcParams: [],
+          yields: [
+            {
+              kind: NodeKind.SignatureYield,
+              desc: null,
+            }
+          ],
+        },
+      },
+    ],
+    yields: [
+      {
+        kind: NodeKind.SignatureYield,
+        desc: null,
+      },
+    ],
+  }, (arr: Array<any>, f: (v: any) => any) => streamMap(f, arr)],
 
-  ['audioDriver', 'play computed audio', {parameters: [
-    {
-      name: 'compute one sample',
-      type: {
-        parameters: [
-          {
-            name: 'audio time',
-            type: 'stream',
-          },
-          {
-            name: 'next frame',
-            type: 'stream',
-          },
-          {
-            name: 'sample rate',
-            type: 'stream',
-          },
-        ],
-        yields: true,
+  ['audioDriver', 'play computed audio', {
+    kind: NodeKind.Signature,
+    streamParams: [],
+    funcParams: [
+      {
+        kind: NodeKind.SignatureFunctionParameter,
+        desc: {kind: NodeKind.Description, text: 'compute one sample'},
+        sig: {
+          kind: NodeKind.Signature,
+          streamParams: [
+            {
+              kind: NodeKind.SignatureStreamParameter,
+              desc: {kind: NodeKind.Description, text: 'audio time'},
+            },
+            {
+              kind: NodeKind.SignatureStreamParameter,
+              desc: {kind: NodeKind.Description, text: 'next frame'},
+            },
+            {
+              kind: NodeKind.SignatureStreamParameter,
+              desc: {kind: NodeKind.Description, text: 'sample rate'},
+            },
+          ],
+          funcParams: [],
+          yields: [
+            {
+              kind: NodeKind.SignatureYield,
+              desc: null,
+            }
+          ],
+        },
       },
-    },
-  ], yields: false}, audioDriver],
-  */
+    ],
+    yields: [],
+  }, audioDriver],
 ];
 
 export default nativeFunctions;
