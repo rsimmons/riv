@@ -76,7 +76,6 @@ export interface ArrayLiteralNode {
 
 export interface StreamReferenceNode {
   readonly kind: NodeKind.StreamReference;
-  readonly sid: StreamID; // the new stream id we are defining
   readonly desc: DescriptionNode | null;
   readonly ref: StreamID; // the stream id we are referencing
 }

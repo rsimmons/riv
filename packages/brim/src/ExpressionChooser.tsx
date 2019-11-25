@@ -177,14 +177,12 @@ const ExpressionChooser: React.FC<{initNode: Node, environment: ChooserEnvironme
     const choice = state.choices[state.index];
 
     if (isStreamExpressionNode(initNode)) {
-      const newSid = ('sid' in initNode) ? initNode.sid : initNode.sids[0];
-
       let newNode: Node;
       switch (choice.type) {
         case 'undefined':
           newNode = {
             kind: NodeKind.UndefinedLiteral,
-            sid: newSid,
+            sid: generateStreamId(),
             desc: initNode.desc,
           }
           break;
@@ -192,7 +190,7 @@ const ExpressionChooser: React.FC<{initNode: Node, environment: ChooserEnvironme
         case 'number':
           newNode = {
             kind: NodeKind.NumberLiteral,
-            sid: newSid,
+            sid: generateStreamId(),
             desc: initNode.desc,
             val: choice.value,
           }

@@ -1126,7 +1126,7 @@ export function computeViewLookups(mainDefinition: TreeFunctionDefinitionNode, n
             expr: node,
           });
         });
-      } else {
+      } else if ((node.kind === NodeKind.UndefinedLiteral) || (node.kind === NodeKind.NumberLiteral) || (node.kind === NodeKind.ArrayLiteral)) {
         if (streamIdToDef.has(node.sid)) {
           throw new Error();
         }
@@ -1260,15 +1260,9 @@ function deleteNodeSubtree(node: Node, directionalLookups: DirectionalLookups): 
 
   if (isStreamExpressionNode(node)) {
     if (parent.kind === NodeKind.RefApplication) {
-      let newSid: StreamID;
-      if (node.kind === NodeKind.RefApplication) {
-        newSid = node.sids[0];
-      } else {
-        newSid = node.sid;
-      }
       const newNode: UndefinedLiteralNode = {
         kind: NodeKind.UndefinedLiteral,
-        sid: newSid,
+        sid: generateStreamId(),
         desc: node.desc,
       };
       const newRoot = replaceNode(node, newNode, directionalLookups);
@@ -1632,7 +1626,6 @@ const INITIAL_MAIN: TreeFunctionDefinitionNode = {
             sargs: [
               {
                 kind: NodeKind.StreamReference,
-                sid: generateStreamId(),
                 desc: null,
                 ref: mdId,
               },
