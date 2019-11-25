@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './ExpressionChooser.css';
-import { generateStreamId, Node, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, SignatureStreamParameterNode, RefApplicationNode } from './Tree';
+import { generateStreamId, Node, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, SignatureStreamParameterNode, RefApplicationNode, SignatureFunctionParameterNode, generateFunctionId } from './Tree';
 import { fuzzy_match } from './vendor/fts_fuzzy_match';
 import { ChooserEnvironment } from './EditReducer';
 
@@ -235,44 +235,20 @@ const ExpressionChooser: React.FC<{initNode: Node, environment: ChooserEnvironme
               desc: null,
               sid: generateStreamId(),
             })),
-            fargs: [], // TODO:
-            /*
-                const psig = param.type;
-                const fdef: TreeFunctionDefinitionNode = {
-                  type: 'TreeFunctionDefinition',
-                  id: generateFunctionId(),
-                  name: null,
-                  signature: psig,
-                  children: [
-                    {
-                      type: 'TreeFunctionDefinitionParameters',
-                      children: psig.parameters.map(param => {
-                        if (param.type === 'stream') {
-                          return {
-                            type: 'StreamParameter',
-                            id: generateStreamId(),
-                            name: param.name,
-                            children: [],
-                          };
-                        } else {
-                          throw new Error('unimplemented');
-                        }
-                      }),
-                    },
-                    {
-                      type: 'TreeFunctionDefinitionExpressions',
-                      children: [
-                        {
-                          type: 'UndefinedLiteral',
-                          id: generateStreamId(),
-                          children: [],
-                        },
-                      ]
-                    }
-                  ],
-                };
-                return fdef;
-            */
+            fargs: choice.node.sig.funcParams.map((param: SignatureFunctionParameterNode) => {
+              return {
+                kind: NodeKind.TreeFunctionDefinition,
+                desc: null,
+                fid: generateFunctionId(),
+                sig: param.sig,
+                spids: param.sig.streamParams.map(() => generateStreamId()),
+                fpids: param.sig.funcParams.map(() => generateFunctionId()),
+                body: {
+                  kind: NodeKind.TreeFunctionBody,
+                  exprs: [], // TODO: create a YieldExpressionNode for each yield
+                },
+              }
+            }),
           }
           newNode = n;
           break;

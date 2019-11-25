@@ -129,7 +129,7 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
         <ObserveKeys only={CATCH_IN_INPUTS}>
           <div className="Editor-workspace" onKeyDown={onKeyDown} tabIndex={0} ref={editorElem}>
             <TreeViewContextProvider value={treeViewCtxData}>
-              <TreeFunctionDefinitionView node={displayedSelTree.mainDefinition} inheritedName="main" />
+              <TreeFunctionDefinitionView node={displayedSelTree.mainDefinition} />
             </TreeViewContextProvider>
           </div>
         </ObserveKeys>

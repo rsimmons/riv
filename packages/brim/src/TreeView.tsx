@@ -128,7 +128,10 @@ const AppishNodeView: React.FC<AppishNodeProps> = ({node, name, boxColor, stream
           {(idx > 0) ? (
             <div className="TreeView-appish-node-spacer-row" style={{gridRow: 1 + rowsForArray(streamChildren) + 2*idx, gridColumnStart: 1, gridColumnEnd: 5}} />
           ) : null}
-          <div className="TreeView-appish-node-function-argument" style={{gridRow: 1 + rowsForArray(streamChildren) + 2*idx+1, gridColumn: 1}}><div className="TreeView-appish-node-function-argument-inner">{child}</div></div>
+          <div className="TreeView-common-padding" style={{gridRow: 1 + rowsForArray(streamChildren) + 2*idx+1, gridColumn: 1}}>
+            <div className="TreeView-appish-node-child-name">{name}</div>
+            <div className="TreeView-appish-node-function-argument-inner">{child}</div>
+          </div>
         </React.Fragment>
       ))}</>
       <div className={selectionClasses.concat(['TreeView-appish-node-selection-overlay']).join(' ')} style={{gridRowStart: 1, gridRowEnd: totalRows+1, gridColumnStart: 1, gridColumnEnd: 2}} />
@@ -176,17 +179,18 @@ const StreamExpressionView: React.FC<{node: StreamExpressionNode}> = ({ node }) 
           };
         });
 
-        /*
         const functionChildrenViews: Array<ChildView> = functionNode.sig.funcParams.map((param, idx) => {
+          const farg = node.fargs[idx];
+          if (farg.kind !== NodeKind.TreeFunctionDefinition) {
+            throw new Error('not yet supported');
+          }
           const displayName = (param.desc && param.desc.text) || undefined;
           return {
             key: idx,
             name: displayName,
-            child: <TreeFunctionDefinitionView node={node.fargs[idx]} inheritedName={displayName} />
+            child: <TreeFunctionDefinitionView node={farg} />
           };
         });
-        */
-      const functionChildrenViews: Array<ChildView> = [];
 
         return <AppishNodeView node={node} name={displayedDesc} boxColor={NORMAL_BOX_COLOR} streamChildren={streamChildrenViews} functionChildren={functionChildrenViews} />
       }
@@ -240,7 +244,7 @@ const BodyExpressionView: React.FC<{node: BodyExpressionNode}> = ({node}) => {
   }
 };
 
-const TreeFunctionBodyView: React.FC<{node: TreeFunctionBodyNode, inheritedName?: string}> = ({ node, inheritedName }) => {
+const TreeFunctionBodyView: React.FC<{node: TreeFunctionBodyNode}> = ({ node }) => {
   const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node);
 
   return (
@@ -250,12 +254,12 @@ const TreeFunctionBodyView: React.FC<{node: TreeFunctionBodyNode, inheritedName?
   );
 }
 
-export const TreeFunctionDefinitionView: React.FC<{node: TreeFunctionDefinitionNode, inheritedName?: string}> = ({ node, inheritedName }) => {
+export const TreeFunctionDefinitionView: React.FC<{node: TreeFunctionDefinitionNode}> = ({ node }) => {
   const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node);
 
   return (
     <div className={selectionClasses.concat(['TreeView-udf-node']).join(' ')} {...selectionHandlers} style={{backgroundColor: NORMAL_BOX_COLOR}}>
-      <div className="TreeView-name-bar TreeView-common-padding">{node.desc || (inheritedName || 'ƒ')}</div>
+      {node.desc && <div className="TreeView-name-bar TreeView-common-padding">{node.desc.text}</div>}
       <div className="TreeView-udf-node-main-container">
         <TreeFunctionBodyView node={node.body} />
       </div>
@@ -263,9 +267,9 @@ export const TreeFunctionDefinitionView: React.FC<{node: TreeFunctionDefinitionN
   );
 };
 
-const FunctionDefinitionView: React.FC<{node: FunctionDefinitionNode, inheritedName?: string}> = ({ node, inheritedName }) => {
+const FunctionDefinitionView: React.FC<{node: FunctionDefinitionNode}> = ({ node }) => {
   if (node.kind === NodeKind.TreeFunctionDefinition) {
-    return <TreeFunctionDefinitionView node={node} inheritedName={inheritedName} />
+    return <TreeFunctionDefinitionView node={node} />
   } else if (node.kind === NodeKind.NativeFunctionDefinition) {
     throw new Error('unimplemented');
   } else {

@@ -1598,7 +1598,7 @@ const mdId = generateStreamId();
 const INITIAL_MAIN: TreeFunctionDefinitionNode = {
   kind: NodeKind.TreeFunctionDefinition,
   fid: generateFunctionId(),
-  desc: null,
+  desc: {kind: NodeKind.Description, text: 'main'},
   sig: {
     kind: NodeKind.Signature,
     streamParams: [],
@@ -1613,10 +1613,7 @@ const INITIAL_MAIN: TreeFunctionDefinitionNode = {
       {
         kind: NodeKind.RefApplication,
         sids: [mdId],
-        desc: {
-          kind: NodeKind.Description,
-          text: 'md',
-        },
+        desc: {kind: NodeKind.Description, text: 'md'},
         func: 'mouseDown',
         sargs: [],
         fargs: [],
