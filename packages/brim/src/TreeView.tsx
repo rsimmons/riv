@@ -103,6 +103,18 @@ const SimpleNodeView: React.FC<{node: Node, contents: React.ReactNode, boxColor:
   );
 };
 
+const SingleChildNodeView: React.FC<{node: Node, contents: React.ReactNode, boxColor: string, child: React.ReactNode}> = ({node, contents, boxColor, child}) => {
+  const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node);
+
+  return (
+    <div style={{display: 'flex'}}>
+      <div className={selectionClasses.concat(['TreeView-simple-node', 'TreeView-common-padding']).join(' ')} {...selectionHandlers} style={{background: boxColor}}>{contents}</div>
+      <div className="TreeView-appish-node-child-cxn-triangle"><div /></div>
+      {child}
+    </div>
+  );
+};
+
 const AppishNodeView: React.FC<AppishNodeProps> = ({node, name, boxColor, streamChildren, functionChildren}) => {
   const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node);
 
@@ -236,6 +248,7 @@ const BodyExpressionView: React.FC<{node: BodyExpressionNode}> = ({node}) => {
   } else if (isFunctionExpressionNode(node)) {
     throw new Error('unimplemented');
   } else if (node.kind === NodeKind.YieldExpression) {
+    return <div style={{marginLeft: '-0.5em'}}><SingleChildNodeView node={node} contents={'yield ' + node.idx} boxColor={'#d5bce4'} child={<StreamExpressionView node={node.expr} />} /></div>
     throw new Error('unimplemented');
   } else {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars

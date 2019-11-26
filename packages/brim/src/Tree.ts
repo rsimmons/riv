@@ -129,6 +129,7 @@ export interface SignatureNode {
 export interface YieldExpressionNode {
   readonly kind: NodeKind.YieldExpression;
   readonly idx: Number;
+  readonly expr: StreamExpressionNode;
 }
 
 export type BodyExpressionNode = StreamExpressionNode | FunctionExpressionNode | YieldExpressionNode;

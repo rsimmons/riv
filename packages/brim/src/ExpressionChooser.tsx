@@ -243,7 +243,15 @@ const ExpressionChooser: React.FC<{initNode: Node, environment: ChooserEnvironme
                 fpids: param.sig.funcParams.map(() => generateFunctionId()),
                 body: {
                   kind: NodeKind.TreeFunctionBody,
-                  exprs: [], // TODO: create a YieldExpressionNode for each yield
+                  exprs: param.sig.yields.map((y, idx) => ({
+                    kind: NodeKind.YieldExpression,
+                    idx,
+                    expr: {
+                      kind: NodeKind.UndefinedLiteral,
+                      desc: null,
+                      sid: generateStreamId(),
+                    },
+                  })),
                 },
               }
             }),

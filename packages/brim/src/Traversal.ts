@@ -14,7 +14,6 @@ export function lastChild(node: Node): Node | undefined {
 export function* iterChildren(node: Node) {
   switch (node.kind) {
     case NodeKind.Description:
-    case NodeKind.YieldExpression:
       // no children
       break;
 
@@ -49,6 +48,10 @@ export function* iterChildren(node: Node) {
       yield* node.streamParams;
       yield* node.funcParams;
       yield* node.yields;
+      break;
+
+    case NodeKind.YieldExpression:
+      yield node.expr;
       break;
 
     case NodeKind.TreeFunctionBody:
@@ -92,7 +95,6 @@ function visitArray<T>(nodeArr: ReadonlyArray<Node>, visit: (node: Node) => T | 
 export function visitChildren<T>(node: Node, visit: (node: Node) => T | undefined): T | undefined {
   switch (node.kind) {
     case NodeKind.Description:
-    case NodeKind.YieldExpression:
       // no children
       return;
 
@@ -113,6 +115,9 @@ export function visitChildren<T>(node: Node, visit: (node: Node) => T | undefine
 
     case NodeKind.Signature:
       return visitArray(node.streamParams, visit) || visitArray(node.funcParams, visit) || visitArray(node.yields, visit);
+
+    case NodeKind.YieldExpression:
+      return visit(node.expr);
 
     case NodeKind.TreeFunctionBody:
       return visitArray(node.exprs, visit);
@@ -167,6 +172,17 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
     }
   };
 
+  const replaceStreamExpr = (n: StreamExpressionNode): StreamExpressionNode => {
+    if (n === oldChild) {
+      if (!isStreamExpressionNode(newChild)) {
+        throw new Error();
+      }
+      return newChild;
+    } else {
+      return n;
+    }
+  };
+
   const replaceStreamExprArr = (arr: ReadonlyArray<StreamExpressionNode>): ReadonlyArray<StreamExpressionNode> => {
     return arr.map((n: StreamExpressionNode) => {
       if (n === oldChild) {
@@ -195,7 +211,6 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
 
   switch (node.kind) {
     case NodeKind.Description:
-    case NodeKind.YieldExpression:
       throw new Error('no children to replace');
 
     case NodeKind.UndefinedLiteral:
@@ -230,6 +245,12 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
         ...node,
         // TODO: members
       };
+
+    case NodeKind.YieldExpression:
+      return {
+        ...node,
+        expr: replaceStreamExpr(node.expr),
+      }
 
     case NodeKind.TreeFunctionBody:
       return {
