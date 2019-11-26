@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState } from 'react';
-import { StreamID, FunctionID, Node, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, isFunctionExpressionNode, TreeFunctionBodyNode } from './Tree';
+import { StreamID, FunctionID, Node, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, isFunctionExpressionNode, TreeFunctionBodyNode, FunctionExpressionNode, isFunctionDefinitionNode } from './Tree';
 import ExpressionChooser from './ExpressionChooser';
 import './TreeView.css';
 import { ChooserEnvironment, StreamDefinition } from './EditReducer';
@@ -168,8 +168,11 @@ const StreamExpressionView: React.FC<{node: StreamExpressionNode}> = ({ node }) 
       case NodeKind.ArrayLiteral:
         return <AppishNodeView node={node} name="[ ]" boxColor={NORMAL_BOX_COLOR} streamChildren={node.elems.map((elem, idx) => ({key: idx, name: undefined, child: <StreamExpressionView node={elem} />}))} functionChildren={[]} />
 
-      case NodeKind.RefApplication: {
-        const functionNode = ctxData.functionIdToDef.get(node.func);
+      case NodeKind.Application: {
+        if (node.func.kind !== NodeKind.FunctionReference) {
+          throw new Error('unimplemented');
+        }
+        const functionNode = ctxData.functionIdToDef.get(node.func.ref);
         if (!functionNode) {
           throw new Error();
         }
@@ -285,6 +288,18 @@ const FunctionDefinitionView: React.FC<{node: FunctionDefinitionNode}> = ({ node
     return <TreeFunctionDefinitionView node={node} />
   } else if (node.kind === NodeKind.NativeFunctionDefinition) {
     throw new Error('unimplemented');
+  } else {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const exhaustive: never = node; // this will cause a type error if we haven't handled all cases
+    throw new Error('unreachable');
+  }
+};
+
+const FunctionExpressionView: React.FC<{node: FunctionExpressionNode}> = ({ node }) => {
+  if (node.kind === NodeKind.FunctionReference) {
+    throw new Error('unimplemented');
+  } else if (isFunctionDefinitionNode(node)) {
+    return <FunctionDefinitionView node={node} />
   } else {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const exhaustive: never = node; // this will cause a type error if we haven't handled all cases

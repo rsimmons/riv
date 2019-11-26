@@ -1,5 +1,5 @@
 // import { Path, pathIsPrefix } from './State';
-import { NodeKind, Node, SignatureNode, DescriptionNode, StreamExpressionNode, isStreamExpressionNode, BodyExpressionNode, isBodyExpressionNode, TreeFunctionBodyNode } from './Tree';
+import { NodeKind, Node, SignatureNode, DescriptionNode, StreamExpressionNode, isStreamExpressionNode, BodyExpressionNode, isBodyExpressionNode, TreeFunctionBodyNode, FunctionExpressionNode, isFunctionExpressionNode } from './Tree';
 
 export function firstChild(node: Node): Node | undefined {
   const res = iterChildren(node).next();
@@ -14,6 +14,7 @@ export function lastChild(node: Node): Node | undefined {
 export function* iterChildren(node: Node) {
   switch (node.kind) {
     case NodeKind.Description:
+    case NodeKind.FunctionReference:
       // no children
       break;
 
@@ -23,7 +24,6 @@ export function* iterChildren(node: Node) {
     case NodeKind.SignatureStreamParameter:
     case NodeKind.SignatureFunctionParameter:
     case NodeKind.SignatureYield:
-    case NodeKind.FunctionReference:
       if (node.desc) {
         yield node.desc;
       }
@@ -36,10 +36,11 @@ export function* iterChildren(node: Node) {
       yield* node.elems;
       break;
 
-    case NodeKind.RefApplication:
+    case NodeKind.Application:
       if (node.desc) {
         yield node.desc;
       }
+      yield node.func;
       yield* node.sargs;
       yield* node.fargs;
       break;
@@ -95,6 +96,7 @@ function visitArray<T>(nodeArr: ReadonlyArray<Node>, visit: (node: Node) => T | 
 export function visitChildren<T>(node: Node, visit: (node: Node) => T | undefined): T | undefined {
   switch (node.kind) {
     case NodeKind.Description:
+    case NodeKind.FunctionReference:
       // no children
       return;
 
@@ -104,14 +106,13 @@ export function visitChildren<T>(node: Node, visit: (node: Node) => T | undefine
     case NodeKind.SignatureStreamParameter:
     case NodeKind.SignatureFunctionParameter:
     case NodeKind.SignatureYield:
-    case NodeKind.FunctionReference:
       return (node.desc && visit(node.desc)) || undefined;
 
     case NodeKind.ArrayLiteral:
       return (node.desc && visit(node.desc)) || visitArray(node.elems, visit);
 
-    case NodeKind.RefApplication:
-      return (node.desc && visit(node.desc)) || visitArray(node.sargs, visit) || visitArray(node.fargs, visit);
+    case NodeKind.Application:
+      return (node.desc && visit(node.desc)) || visit(node.func) || visitArray(node.sargs, visit) || visitArray(node.fargs, visit);
 
     case NodeKind.Signature:
       return visitArray(node.streamParams, visit) || visitArray(node.funcParams, visit) || visitArray(node.yields, visit);
@@ -196,6 +197,17 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
     });
   };
 
+  const replaceFunctionExpression = (n: FunctionExpressionNode): FunctionExpressionNode => {
+    if (n === oldChild) {
+      if (!isFunctionExpressionNode(newChild)) {
+        throw new Error();
+      }
+      return newChild;
+    } else {
+      return n;
+    }
+  };
+
   const replaceBodyExprArr = (arr: ReadonlyArray<BodyExpressionNode>): ReadonlyArray<BodyExpressionNode> => {
     return arr.map((n: BodyExpressionNode) => {
       if (n === oldChild) {
@@ -211,6 +223,7 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
 
   switch (node.kind) {
     case NodeKind.Description:
+    case NodeKind.FunctionReference:
       throw new Error('no children to replace');
 
     case NodeKind.UndefinedLiteral:
@@ -219,7 +232,6 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
     case NodeKind.SignatureStreamParameter:
     case NodeKind.SignatureFunctionParameter:
     case NodeKind.SignatureYield:
-    case NodeKind.FunctionReference:
       return {
         ...node,
         desc: replaceDesc(node.desc),
@@ -232,10 +244,11 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
         elems: replaceStreamExprArr(node.elems),
       };
 
-    case NodeKind.RefApplication:
+    case NodeKind.Application:
       return {
         ...node,
         desc: replaceDesc(node.desc),
+        func: replaceFunctionExpression(node.func),
         sargs: replaceStreamExprArr(node.sargs),
         // TODO: fargs
       };
@@ -303,7 +316,7 @@ export function deleteArrayElementChild(node: Node, child: Node): Node {
         elems: filterOut(node.elems),
       };
 
-    case NodeKind.RefApplication:
+    case NodeKind.Application:
       return {
         ...node,
         sargs: filterOut(node.sargs),

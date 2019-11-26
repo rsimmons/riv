@@ -1116,7 +1116,7 @@ export function computeViewLookups(mainDefinition: TreeFunctionDefinitionNode, n
 
   const visit = (node: Node): void => {
     if (isStreamExpressionNode(node)) {
-      if (node.kind === NodeKind.RefApplication) {
+      if (node.kind === NodeKind.Application) {
         node.sids.forEach(sid => {
           if (streamIdToDef.has(sid)) {
             throw new Error();
@@ -1259,7 +1259,7 @@ function deleteNodeSubtree(node: Node, directionalLookups: DirectionalLookups): 
   }
 
   if (isStreamExpressionNode(node)) {
-    if (parent.kind === NodeKind.RefApplication) {
+    if (parent.kind === NodeKind.Application) {
       const newNode: UndefinedLiteralNode = {
         kind: NodeKind.UndefinedLiteral,
         sid: generateStreamId(),
@@ -1605,24 +1605,33 @@ const INITIAL_MAIN: TreeFunctionDefinitionNode = {
     kind: NodeKind.TreeFunctionBody,
     exprs: [
       {
-        kind: NodeKind.RefApplication,
+        kind: NodeKind.Application,
         sids: [mdId],
         desc: {kind: NodeKind.Description, text: 'md'},
-        func: 'mouseDown',
+        func: {
+          kind: NodeKind.FunctionReference,
+          ref: 'mouseDown',
+        },
         sargs: [],
         fargs: [],
       },
       {
-        kind: NodeKind.RefApplication,
+        kind: NodeKind.Application,
         sids: [generateStreamId()],
         desc: null,
-        func: 'showString',
+        func: {
+          kind: NodeKind.FunctionReference,
+          ref: 'showString',
+        },
         sargs: [
           {
-            kind: NodeKind.RefApplication,
+            kind: NodeKind.Application,
             sids: [generateStreamId()],
             desc: null,
-            func: 'ifte',
+            func: {
+              kind: NodeKind.FunctionReference,
+              ref: 'ifte',
+            },
             sargs: [
               {
                 kind: NodeKind.StreamReference,

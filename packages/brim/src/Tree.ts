@@ -31,7 +31,7 @@ export enum NodeKind {
   NumberLiteral = 'num',
   ArrayLiteral = 'arr',
   StreamReference = 'sref',
-  RefApplication = 'rapp',
+  Application = 'app',
   FunctionReference = 'fref',
   SignatureStreamParameter = 'sparam',
   SignatureFunctionParameter = 'fparam',
@@ -80,23 +80,19 @@ export interface StreamReferenceNode {
   readonly ref: StreamID; // the stream id we are referencing
 }
 
-export interface RefApplicationNode {
-  readonly kind: NodeKind.RefApplication;
+export interface ApplicationNode {
+  readonly kind: NodeKind.Application;
   readonly sids: ReadonlyArray<StreamID>; // array since there can be multiple yields
   readonly desc: DescriptionNode | null;
-  readonly func: FunctionID; // function being applied
+  readonly func: FunctionExpressionNode; // function being applied
   readonly sargs: ReadonlyArray<StreamExpressionNode>;
   readonly fargs: ReadonlyArray<FunctionExpressionNode>;
 }
 
-// NOTE: We may add a InlineApplicationNode, that is similar to RefApplicationNode but has the definition inline
-// Doing it this way (vs. having ApplicationNode that takes a FunctionExpression) eliminates generating a lot of
-// superfluous function ids and descriptions.
-
 // Stream parameter definitions (on the "inside" of a function def) are _not_ expressions.
-export type StreamExpressionNode = UndefinedLiteralNode | NumberLiteralNode | ArrayLiteralNode | StreamReferenceNode | RefApplicationNode;
+export type StreamExpressionNode = UndefinedLiteralNode | NumberLiteralNode | ArrayLiteralNode | StreamReferenceNode | ApplicationNode;
 export function isStreamExpressionNode(node: Node): node is StreamExpressionNode {
-  return (node.kind === NodeKind.UndefinedLiteral) || (node.kind === NodeKind.NumberLiteral) || (node.kind === NodeKind.ArrayLiteral) || (node.kind === NodeKind.StreamReference) || (node.kind === NodeKind.RefApplication);
+  return (node.kind === NodeKind.UndefinedLiteral) || (node.kind === NodeKind.NumberLiteral) || (node.kind === NodeKind.ArrayLiteral) || (node.kind === NodeKind.StreamReference) || (node.kind === NodeKind.Application);
 }
 
 /**
@@ -169,8 +165,6 @@ export function isFunctionDefinitionNode(node: Node): node is FunctionDefinition
 
 export interface FunctionReferenceNode {
   readonly kind: NodeKind.FunctionReference;
-  readonly fid: FunctionID; // the new function id we are defining
-  readonly desc: DescriptionNode | null;
   readonly ref: FunctionID; // the function id we are referencing
 }
 

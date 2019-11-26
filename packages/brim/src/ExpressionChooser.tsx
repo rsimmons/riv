@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './ExpressionChooser.css';
-import { generateStreamId, Node, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, SignatureStreamParameterNode, RefApplicationNode, SignatureFunctionParameterNode, generateFunctionId } from './Tree';
+import { generateStreamId, Node, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, SignatureStreamParameterNode, ApplicationNode, SignatureFunctionParameterNode, generateFunctionId } from './Tree';
 import { fuzzy_match } from './vendor/fts_fuzzy_match';
 import { ChooserEnvironment } from './EditReducer';
 
@@ -111,7 +111,7 @@ const ExpressionChooser: React.FC<{initNode: Node, environment: ChooserEnvironme
         return initNode.val.toString();
 
       case NodeKind.StreamReference:
-      case NodeKind.RefApplication:
+      case NodeKind.Application:
         return ''; // Don't prefill with text
 
       default:
@@ -223,11 +223,14 @@ const ExpressionChooser: React.FC<{initNode: Node, environment: ChooserEnvironme
 */
 
         case 'app':
-          const n: RefApplicationNode = {
-            kind: NodeKind.RefApplication,
+          const n: ApplicationNode = {
+            kind: NodeKind.Application,
             desc: initNode.desc,
             sids: choice.node.sig.yields.map(() => generateStreamId()), // TODO: fix
-            func: choice.node.fid,
+            func: {
+              kind: NodeKind.FunctionReference,
+              ref: choice.node.fid,
+            },
             sargs: choice.node.sig.streamParams.map((param: SignatureStreamParameterNode) => ({
               kind: NodeKind.UndefinedLiteral,
               desc: null,
