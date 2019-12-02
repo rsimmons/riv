@@ -252,7 +252,6 @@ const BodyExpressionView: React.FC<{node: BodyExpressionNode}> = ({node}) => {
     throw new Error('unimplemented');
   } else if (node.kind === NodeKind.YieldExpression) {
     return <div style={{marginLeft: '-0.5em'}}><SingleChildNodeView node={node} contents={'yield ' + node.idx} boxColor={'#d5bce4'} child={<StreamExpressionView node={node.expr} />} /></div>
-    throw new Error('unimplemented');
   } else {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const exhaustive: never = node; // this will cause a type error if we haven't handled all cases
