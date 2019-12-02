@@ -1410,6 +1410,7 @@ function beginEdit(state: State): State {
       editingSelTree: state.stableSelTree,
     };
   } else {
+    console.log('Not starting edit because not a stream expression');
     return state;
   }
 }
