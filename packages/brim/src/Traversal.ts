@@ -208,6 +208,19 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
     }
   };
 
+  const replaceFuncExprArr = (arr: ReadonlyArray<FunctionExpressionNode>): ReadonlyArray<FunctionExpressionNode> => {
+    return arr.map((n: FunctionExpressionNode) => {
+      if (n === oldChild) {
+        if (!isFunctionExpressionNode(newChild)) {
+          throw new Error();
+        }
+        return newChild;
+      } else {
+        return n;
+      }
+    });
+  };
+
   const replaceBodyExprArr = (arr: ReadonlyArray<BodyExpressionNode>): ReadonlyArray<BodyExpressionNode> => {
     return arr.map((n: BodyExpressionNode) => {
       if (n === oldChild) {
@@ -250,7 +263,7 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
         desc: replaceDesc(node.desc),
         func: replaceFunctionExpression(node.func),
         sargs: replaceStreamExprArr(node.sargs),
-        // TODO: fargs
+        fargs: replaceFuncExprArr(node.fargs),
       };
 
     case NodeKind.Signature:
