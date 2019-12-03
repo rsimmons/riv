@@ -1,20 +1,28 @@
-// TODO: We could just make this an alias for {[key: string]: V}, use plain funcs instead of methods
-export default class Environment<V> {
-  private obj: {[key: string]: V};
+export default class Environment<K, V> {
+  private local: Map<K, V>;
+  private outer: Environment<K, V> | undefined;
 
-  constructor(outer: Environment<V> | undefined = undefined) {
-    this.obj = Object.create(outer ? outer.obj : null);
+  constructor(outer: Environment<K, V> | undefined = undefined) {
+    this.local = new Map();
+    this.outer = outer;
   }
 
-  get(name: string): V | undefined {
-    return this.obj[name];
+  has(key: K): boolean {
+    return this.local.has(key) || (!!this.outer && this.outer.has(key));
   }
 
-  set(name: string, value: V) {
-    this.obj[name] = value;
+  get(key: K): V | undefined {
+    return this.local.get(key) || (this.outer && this.outer.get(key));
   }
 
-  delete(name: string): void {
-    delete this.obj[name];
+  set(key: K, value: V): void {
+    this.local.set(key, value);
+  }
+
+  forEach(cb: (value: V, key: K, map: Map<K, V>) => void): void {
+    this.local.forEach(cb);
+    if (this.outer) {
+      this.outer.forEach(cb);
+    }
   }
 }

@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './ExpressionChooser.css';
-import { generateStreamId, Node, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, SignatureStreamParameterNode, ApplicationNode, SignatureFunctionParameterNode, generateFunctionId } from './Tree';
+import { generateStreamId, Node, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, SignatureStreamParameterNode, ApplicationNode, SignatureFunctionParameterNode, generateFunctionId, StreamID } from './Tree';
 import { fuzzy_match } from './vendor/fts_fuzzy_match';
-import { ChooserEnvironment } from './EditReducer';
+import { EnvironmentLookups, StreamDefinition } from './EditReducer';
 
 interface UndefinedChoice {
   readonly type: 'undefined';
@@ -13,17 +13,18 @@ interface NumberChoice {
   readonly value: number;
 }
 
-// interface StreamRefChoice {
-//   readonly type: 'streamref';
-//   readonly node: StreamDefinition;
-// }
+interface StreamRefChoice {
+  readonly type: 'streamref';
+  readonly sid: StreamID;
+  readonly desc: string;
+}
 
 interface AppChoice {
   readonly type: 'app';
-  readonly node: FunctionDefinitionNode;
+  readonly funcDefNode: FunctionDefinitionNode;
 }
 
-type Choice = UndefinedChoice | NumberChoice | AppChoice;
+type Choice = UndefinedChoice | StreamRefChoice | NumberChoice | AppChoice;
 
 interface SearchResult<T> {
   score: number;
@@ -70,13 +71,11 @@ function Choice({ choice }: ChoiceProps) {
     case 'number':
       return <span>{choice.value}</span>
 
-    /*
     case 'streamref':
-      return <span><em>S</em> {isNamedNode(choice.node) ? choice.node.name : <em>unnamed</em>} <small>(id {choice.node.id})</small></span>
-    */
+      return <span><em>S</em> {choice.desc} <small>(id {choice.sid})</small></span>
 
     case 'app':
-      return <span><em>F</em> {choice.node.desc && choice.node.desc.text}({/*choice.node.signature.parameters.map(param => (param.name.startsWith('_') ? '\u25A1' : param.name)).join(', ')*/})</span>
+      return <span><em>F</em> {choice.funcDefNode.desc && choice.funcDefNode.desc.text} {/*choice.node.signature.parameters.map(param => (param.name.startsWith('_') ? '\u25A1' : param.name)).join(', ')*/}</span>
 
     default:
       throw new Error();
@@ -88,7 +87,7 @@ interface DropdownState {
   index: number;
 }
 
-const ExpressionChooser: React.FC<{initNode: Node, environment: ChooserEnvironment, dispatch: (action: any) => void}> = ({ initNode, environment, dispatch }) => {
+const ExpressionChooser: React.FC<{initNode: Node, envLookups: EnvironmentLookups, dispatch: (action: any) => void}> = ({ initNode, envLookups, dispatch }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     inputRef.current && inputRef.current.select();
@@ -136,21 +135,46 @@ const ExpressionChooser: React.FC<{initNode: Node, environment: ChooserEnvironme
       });
     }
 
-    /*
-    const streamSearchResults = fuzzySearch(text, environment.namedStreams);
+    const nearestDef = envLookups.nodeToNearestTreeDef.get(initNode);
+    if (!nearestDef) {
+      throw new Error();
+    }
+    const streamEnv = envLookups.treeDefToStreamEnv.get(nearestDef);
+    if (!streamEnv) {
+      throw new Error();
+    }
+    const functionEnv = envLookups.treeDefToFunctionEnv.get(nearestDef);
+    if (!functionEnv) {
+      throw new Error();
+    }
+
+    const namedStreams: Array<[string, StreamDefinition]> = [];
+    streamEnv.forEach((sdef, ) => {
+      if (sdef.desc) {
+        namedStreams.push([sdef.desc.text, sdef]);
+      }
+    });
+
+    const streamSearchResults = fuzzySearch(text, namedStreams);
     for (const result of streamSearchResults) {
       choices.push({
         type: 'streamref',
-        node: result.data,
+        sid: result.data.sid,
+        desc: result.name,
       });
     }
-    */
 
-    const functionSearchResults = fuzzySearch(text, environment.namedFunctions);
+    const namedFunctions: Array<[string, FunctionDefinitionNode]> = [];
+    functionEnv.forEach((defNode, ) => {
+      if (defNode.desc) {
+        namedFunctions.push([defNode.desc.text, defNode]);
+      }
+    });
+    const functionSearchResults = fuzzySearch(text, namedFunctions);
     for (const result of functionSearchResults) {
       choices.push({
         type: 'app',
-        node: result.data,
+        funcDefNode: result.data,
       });
     }
 
@@ -196,16 +220,15 @@ const ExpressionChooser: React.FC<{initNode: Node, environment: ChooserEnvironme
           }
           break;
 
-        /*
         case 'streamref':
           newNode = {
-            type: 'StreamReference',
-            id: originalNode.id,
-            children: [],
-            targetStreamId: choice.node.id,
+            kind: NodeKind.StreamReference,
+            desc: null,
+            ref: choice.sid,
           };
           break;
 
+/*
         case 'streamind':
           newNode = {
             type: 'StreamIndirection',
@@ -226,17 +249,17 @@ const ExpressionChooser: React.FC<{initNode: Node, environment: ChooserEnvironme
           const n: ApplicationNode = {
             kind: NodeKind.Application,
             desc: initNode.desc,
-            sids: choice.node.sig.yields.map(() => generateStreamId()), // TODO: fix
+            sids: choice.funcDefNode.sig.yields.map(() => generateStreamId()),
             func: {
               kind: NodeKind.FunctionReference,
-              ref: choice.node.fid,
+              ref: choice.funcDefNode.fid,
             },
-            sargs: choice.node.sig.streamParams.map((param: SignatureStreamParameterNode) => ({
+            sargs: choice.funcDefNode.sig.streamParams.map((param: SignatureStreamParameterNode) => ({
               kind: NodeKind.UndefinedLiteral,
               desc: null,
               sid: generateStreamId(),
             })),
-            fargs: choice.node.sig.funcParams.map((param: SignatureFunctionParameterNode) => {
+            fargs: choice.funcDefNode.sig.funcParams.map((param: SignatureFunctionParameterNode) => {
               return {
                 kind: NodeKind.TreeFunctionDefinition,
                 desc: null,

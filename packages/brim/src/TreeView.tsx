@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState } from 'react';
 import { StreamID, FunctionID, Node, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, isFunctionExpressionNode, TreeFunctionBodyNode, FunctionExpressionNode, isFunctionDefinitionNode } from './Tree';
 import ExpressionChooser from './ExpressionChooser';
 import './TreeView.css';
-import { ChooserEnvironment, StreamDefinition } from './EditReducer';
+import { EnvironmentLookups } from './EditReducer';
 
 const NORMAL_BOX_COLOR = '#d8d8d8';
 const STREAM_REFERENCE_BOX_COLOR = '#ccd9e8';
@@ -10,9 +10,7 @@ const STREAM_REFERENCE_BOX_COLOR = '#ccd9e8';
 export interface TreeViewContextData {
   selectedNode: Node;
   editing: boolean;
-  streamIdToDef: ReadonlyMap<StreamID, StreamDefinition>;
-  functionIdToDef: ReadonlyMap<FunctionID, FunctionDefinitionNode>;
-  environment: ChooserEnvironment;
+  envLookups: EnvironmentLookups;
   dispatch: (action: any) => void; // TODO: tighten up type
   onSelectNode: (node: Node) => void;
 };
@@ -172,7 +170,16 @@ const StreamExpressionView: React.FC<{node: StreamExpressionNode}> = ({ node }) 
         if (node.func.kind !== NodeKind.FunctionReference) {
           throw new Error('unimplemented');
         }
-        const functionNode = ctxData.functionIdToDef.get(node.func.ref);
+
+        const nearestDef = ctxData.envLookups.nodeToNearestTreeDef.get(node);
+        if (!nearestDef) {
+          throw new Error();
+        }
+        const nodeFunctionEnv = ctxData.envLookups.treeDefToFunctionEnv.get(nearestDef);
+        if (!nodeFunctionEnv) {
+          throw new Error();
+        }
+        const functionNode = nodeFunctionEnv.get(node.func.ref);
         if (!functionNode) {
           throw new Error();
         }
@@ -211,19 +218,20 @@ const StreamExpressionView: React.FC<{node: StreamExpressionNode}> = ({ node }) 
       }
 
       case NodeKind.StreamReference: {
-        let displayedDesc: string;
-        const streamDef = ctxData.streamIdToDef.get(node.ref);
+        const nearestDef = ctxData.envLookups.nodeToNearestTreeDef.get(node);
+        if (!nearestDef) {
+          throw new Error();
+        }
+        const nodeStreamEnv = ctxData.envLookups.treeDefToStreamEnv.get(nearestDef);
+        if (!nodeStreamEnv) {
+          throw new Error();
+        }
+        const streamDef = nodeStreamEnv.get(node.ref);
         if (!streamDef) {
           throw new Error();
         }
-        if (streamDef.kind === 'expr') {
-          const expr = streamDef.expr;
-          displayedDesc = expr.desc ? expr.desc.text : ('<stream ' + node.ref + '>');
-        } else if (streamDef.kind === 'param') {
-          displayedDesc = 'param'; // TODO
-        } else {
-          throw new Error();
-        }
+
+        const displayedDesc: string = streamDef.desc ? streamDef.desc.text : ('<stream ' + node.ref + '>');
         return <SimpleNodeView node={node} contents={displayedDesc} boxColor={STREAM_REFERENCE_BOX_COLOR} />
       }
 
@@ -237,7 +245,7 @@ const StreamExpressionView: React.FC<{node: StreamExpressionNode}> = ({ node }) 
     return (
       <div style={{position: 'relative'}}>
         {nodeView}
-        <div style={{position: 'absolute', top: 0}}><ExpressionChooser initNode={node} environment={ctxData.environment} dispatch={ctxData.dispatch} /></div>
+        <div style={{position: 'absolute', top: 0}}><ExpressionChooser initNode={node} envLookups={ctxData.envLookups} dispatch={ctxData.dispatch} /></div>
       </div>
     );
   } else {

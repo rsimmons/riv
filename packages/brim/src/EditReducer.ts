@@ -1,6 +1,6 @@
 import genuid from './uid';
 import { State, ProgramInfo, DirectionalLookups, SelTree } from './State';
-import { StreamID, FunctionID, generateStreamId, generateFunctionId, NodeKind, Node, TreeFunctionDefinitionNode, FunctionDefinitionNode, isFunctionDefinitionNode, StreamExpressionNode, NativeFunctionDefinitionNode, isStreamExpressionNode, UndefinedLiteralNode } from './Tree';
+import { StreamID, FunctionID, generateStreamId, generateFunctionId, NodeKind, Node, TreeFunctionDefinitionNode, FunctionDefinitionNode, isFunctionDefinitionNode, StreamExpressionNode, NativeFunctionDefinitionNode, isStreamExpressionNode, UndefinedLiteralNode, DescriptionNode } from './Tree';
 // import { CompiledDefinition } from './CompiledDefinition';
 // import { compileGlobalUserDefinition, CompilationError } from './Compiler';
 // import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
@@ -16,69 +16,6 @@ interface Action {
   newNode?: Node;
   newName?: string;
   programInfo?: ProgramInfo;
-}
-
-interface ExprStreamDefinition {
-  kind: 'expr';
-  expr: StreamExpressionNode;
-}
-
-interface ParamStreamDefinition {
-  kind: 'param';
-  index: number;
-}
-
-export type StreamDefinition = ExprStreamDefinition | ParamStreamDefinition;
-
-export interface ChooserEnvironment {
-  namedStreams: ReadonlyArray<[StreamID, StreamDefinition]>;
-  namedFunctions: ReadonlyArray<[FunctionID, FunctionDefinitionNode]>;
-}
-
-/*
-function addUserFunctionLocalEnvironment(func: TreeFunctionDefinitionNode, namedStreams: Array<[string, StreamCreationNode]>, namedFunctions: Array<[string, FunctionDefinitionNode]>) {
-  traverseTree(func, {onlyWithinFunctionId: func.id}, (node, path) => {
-    if (isNamedNode(node)) {
-      if (isStreamCreationNode(node) && node.name) {
-        namedStreams.push([node.name, node]);
-      } else if (isFunctionDefinitionNode(node) && node.name) {
-        namedFunctions.push([node.name, node]);
-      } else {
-        throw new Error();
-      }
-    }
-    return [false, node];
-  });
-}
-*/
-
-export function environmentForNode(node: Node, nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>, directionalLookups: DirectionalLookups): ChooserEnvironment {
-  const namedStreams: Array<[StreamID, StreamDefinition]> = [];
-  const namedFunctions: Array<[FunctionID, FunctionDefinitionNode]> = [];
-
-  for (const extFunc of nativeFunctions) {
-    if (extFunc.desc && extFunc.desc.text) {
-      namedFunctions.push([extFunc.desc.text, extFunc]);
-    }
-  }
-
-  let n: Node = node;
-  while (true) {
-    const parent = directionalLookups.parent.get(n);
-    if (!parent) {
-      break;
-    }
-    n = parent;
-
-    if (n.kind === NodeKind.TreeFunctionDefinition) {
-      // TODO: add environment from this definition
-    }
-  }
-
-  return {
-    namedStreams,
-    namedFunctions,
-  }
 }
 
 /*
@@ -1101,55 +1038,106 @@ function applyActionToCoreState(action: Action, coreState: CoreState): CoreState
 }
 */
 
-export interface ViewLookups {
-  streamIdToDef: ReadonlyMap<StreamID, StreamDefinition>;
-  functionIdToDef: ReadonlyMap<FunctionID, FunctionDefinitionNode>;
+interface ExprStreamDefinition {
+  kind: 'expr';
+  sid: StreamID;
+  expr: StreamExpressionNode;
+  desc: DescriptionNode | null;
 }
 
-export function computeViewLookups(mainDefinition: TreeFunctionDefinitionNode, nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>): ViewLookups {
-  const streamIdToDef: Map<StreamID, StreamDefinition> = new Map();
-  const functionIdToDef: Map<FunctionID, FunctionDefinitionNode> = new Map();
+interface ParamStreamDefinition {
+  kind: 'param';
+  sid: StreamID;
+  desc: DescriptionNode | null;
+}
 
-  for (const extFunc of nativeFunctions) {
-    functionIdToDef.set(extFunc.fid, extFunc);
-  }
+export type StreamDefinition = ExprStreamDefinition | ParamStreamDefinition;
 
-  const visit = (node: Node): void => {
-    if (isStreamExpressionNode(node)) {
-      if (node.kind === NodeKind.Application) {
-        node.sids.forEach(sid => {
-          if (streamIdToDef.has(sid)) {
+export interface EnvironmentLookups {
+  nodeToNearestTreeDef: Map<Node, TreeFunctionDefinitionNode>;
+  treeDefToStreamEnv: Map<TreeFunctionDefinitionNode, Environment<StreamID, StreamDefinition>>;
+  treeDefToFunctionEnv: Map<TreeFunctionDefinitionNode, Environment<FunctionID, FunctionDefinitionNode>>;
+}
+
+export function computeEnvironmentLookups(mainDefinition: TreeFunctionDefinitionNode, nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>): EnvironmentLookups {
+  const nodeToNearestTreeDef: Map<Node, TreeFunctionDefinitionNode> = new Map();
+  const treeDefToStreamEnv: Map<TreeFunctionDefinitionNode, Environment<StreamID, StreamDefinition>> = new Map();
+  const treeDefToFunctionEnv: Map<TreeFunctionDefinitionNode, Environment<FunctionID, FunctionDefinitionNode>> = new Map();
+
+  const visitTreeDef = (def: TreeFunctionDefinitionNode, outerStreamEnv: Environment<StreamID, StreamDefinition> | undefined, outerFunctionEnv: Environment<FunctionID, FunctionDefinitionNode> | undefined): void => {
+    const streamEnv: Environment<StreamID, StreamDefinition> = new Environment(outerStreamEnv);
+    const functionEnv: Environment<FunctionID, FunctionDefinitionNode> = new Environment(outerFunctionEnv);
+
+    treeDefToStreamEnv.set(def, streamEnv);
+    treeDefToFunctionEnv.set(def, functionEnv);
+
+    def.sig.streamParams.forEach((sparam, idx) => {
+      const sid = def.spids[idx];
+      if (streamEnv.has(sid)) {
+        throw new Error();
+      }
+      streamEnv.set(sid, {
+        kind: 'param',
+        sid,
+        desc: sparam.desc,
+      });
+    });
+
+    const visitAny = (node: Node): void => {
+      if (node.kind === NodeKind.TreeFunctionDefinition) {
+        return visitTreeDef(node, streamEnv, functionEnv);
+      }
+
+      nodeToNearestTreeDef.set(node, def);
+
+      if (isStreamExpressionNode(node)) {
+        if (node.kind === NodeKind.Application) {
+          node.sids.forEach(sid => {
+            if (streamEnv.has(sid)) {
+              throw new Error();
+            }
+            streamEnv.set(sid, {
+              kind: 'expr',
+              sid: sid,
+              expr: node,
+              desc: node.desc,
+            });
+          });
+        } else if ((node.kind === NodeKind.UndefinedLiteral) || (node.kind === NodeKind.NumberLiteral) || (node.kind === NodeKind.ArrayLiteral)) {
+          if (streamEnv.has(node.sid)) {
             throw new Error();
           }
-          streamIdToDef.set(sid, {
+          streamEnv.set(node.sid, {
             kind: 'expr',
+            sid: node.sid,
             expr: node,
+            desc: node.desc,
           });
-        });
-      } else if ((node.kind === NodeKind.UndefinedLiteral) || (node.kind === NodeKind.NumberLiteral) || (node.kind === NodeKind.ArrayLiteral)) {
-        if (streamIdToDef.has(node.sid)) {
-          throw new Error();
         }
-        streamIdToDef.set(node.sid, {
-          kind: 'expr',
-          expr: node,
-        });
       }
-    }
-    if (isFunctionDefinitionNode(node)) {
-      if (functionIdToDef.has(node.fid)) {
-        throw new Error('function ids must be unique');
+      if (isFunctionDefinitionNode(node)) {
+        if (functionEnv.has(node.fid)) {
+          throw new Error('function ids must be unique');
+        }
+        functionEnv.set(node.fid, node);
       }
-      functionIdToDef.set(node.fid, node);
-    }
-    visitChildren(node, visit);
+      visitChildren(node, visitAny);
+    };
+
+    visitChildren(def.body, visitAny);
   };
 
-  visit(mainDefinition);
+  const nativeFuncEnv: Environment<FunctionID, FunctionDefinitionNode> = new Environment();
+  for (const extFunc of nativeFunctions) {
+    nativeFuncEnv.set(extFunc.fid, extFunc);
+  }
+
+  visitTreeDef(mainDefinition, undefined, nativeFuncEnv);
 
   return {
-    streamIdToDef,
-    functionIdToDef,
+    nodeToNearestTreeDef,
+    treeDefToStreamEnv,
+    treeDefToFunctionEnv,
   };
 }
 
@@ -1556,7 +1544,7 @@ export function reducer(state: State, action: Action): State {
 
 
 
-const nativeFunctionEnvironment: Environment<Function> = new Environment();
+const nativeFunctionEnvironment: Environment<FunctionID, Function> = new Environment();
 nativeFunctionEnvironment.set('id', (x: any) => x);
 nativeFunctionEnvironment.set('Array_of', Array.of);
 globalNativeFunctions.forEach(([id, , , jsFunc]) => {
