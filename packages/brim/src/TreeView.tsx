@@ -6,6 +6,7 @@ import { EnvironmentLookups } from './EditReducer';
 
 const NORMAL_BOX_COLOR = '#d8d8d8';
 const STREAM_REFERENCE_BOX_COLOR = '#ccd9e8';
+const STREAM_INDIRECTION_BOX_COLOR = '#efd2b5';
 
 export interface TreeViewContextData {
   selectedNode: Node;
@@ -235,8 +236,16 @@ const StreamExpressionView: React.FC<{node: StreamExpressionNode}> = ({ node }) 
         return <SimpleNodeView node={node} contents={displayedDesc} boxColor={STREAM_REFERENCE_BOX_COLOR} />
       }
 
-      default:
+      case NodeKind.StreamIndirection: {
+        const displayedDesc: string = node.desc ? node.desc.text : ('<stream ' + node.sid + '>');
+        return <SingleChildNodeView node={node} contents={displayedDesc} boxColor={STREAM_INDIRECTION_BOX_COLOR} child={<StreamExpressionView node={node.expr} />} />;
+      }
+
+      default: {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const exhaustive: never = node; // this will cause a type error if we haven't handled all cases
         throw new Error();
+      }
     }
   })();
 

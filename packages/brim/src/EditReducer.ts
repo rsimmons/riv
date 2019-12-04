@@ -1103,7 +1103,7 @@ export function computeEnvironmentLookups(mainDefinition: TreeFunctionDefinition
               desc: undefined,
             });
           });
-        } else if ((node.kind === NodeKind.UndefinedLiteral) || (node.kind === NodeKind.NumberLiteral) || (node.kind === NodeKind.ArrayLiteral)) {
+        } else if ((node.kind === NodeKind.UndefinedLiteral) || (node.kind === NodeKind.NumberLiteral) || (node.kind === NodeKind.ArrayLiteral) || (node.kind === NodeKind.StreamIndirection)) {
           if (streamEnv.has(node.sid)) {
             throw new Error();
           }
@@ -1111,7 +1111,7 @@ export function computeEnvironmentLookups(mainDefinition: TreeFunctionDefinition
             kind: 'expr',
             sid: node.sid,
             expr: node,
-            desc: undefined,
+            desc: ('desc' in node) ? node.desc : undefined,
           });
         }
       }
@@ -1391,10 +1391,14 @@ export function computeSelectionMovementLookups(root: Node): SelectionMovementLo
 
   const visit = (node: Node): void => {
     switch (node.kind) {
-      case NodeKind.Application: {
+      case NodeKind.StreamIndirection:
+        leafward.set(node, node.expr);
+        rootward.set(node.expr, node);
+        break;
+
+      case NodeKind.Application:
         setForArr(([] as ReadonlyArray<Node>).concat(node.sargs, node.fargs), node);
         break;
-      }
 
       case NodeKind.TreeFunctionDefinition:
         setForArr(node.body.exprs, node);
@@ -1621,14 +1625,19 @@ const INITIAL_MAIN: TreeFunctionDefinitionNode = {
     kind: NodeKind.TreeFunctionBody,
     exprs: [
       {
-        kind: NodeKind.Application,
-        sids: [mdId],
-        func: {
-          kind: NodeKind.FunctionReference,
-          ref: 'mouseDown',
+        kind: NodeKind.StreamIndirection,
+        sid: mdId,
+        desc: {kind: NodeKind.Description, text: 'md'},
+        expr: {
+          kind: NodeKind.Application,
+          sids: [generateStreamId()],
+          func: {
+            kind: NodeKind.FunctionReference,
+            ref: 'mouseDown',
+          },
+          sargs: [],
+          fargs: [],
         },
-        sargs: [],
-        fargs: [],
       },
       {
         kind: NodeKind.Application,

@@ -19,12 +19,17 @@ interface StreamRefChoice {
   readonly desc: string;
 }
 
+interface StreamIndChoice {
+  readonly type: 'streamind';
+  readonly text: string;
+}
+
 interface AppChoice {
   readonly type: 'app';
   readonly funcDefNode: FunctionDefinitionNode;
 }
 
-type Choice = UndefinedChoice | StreamRefChoice | NumberChoice | AppChoice;
+type Choice = UndefinedChoice | StreamRefChoice | StreamIndChoice | NumberChoice | AppChoice;
 
 interface SearchResult<T> {
   score: number;
@@ -73,6 +78,9 @@ function Choice({ choice }: ChoiceProps) {
 
     case 'streamref':
       return <span><em>S</em> {choice.desc} <small>(id {choice.sid})</small></span>
+
+    case 'streamind':
+      return <span><em>I</em> {choice.text}</span>
 
     case 'app':
       return <span><em>F</em> {choice.funcDefNode.desc && choice.funcDefNode.desc.text} {/*choice.node.signature.parameters.map(param => (param.name.startsWith('_') ? '\u25A1' : param.name)).join(', ')*/}</span>
@@ -178,14 +186,12 @@ const ExpressionChooser: React.FC<{initNode: Node, envLookups: EnvironmentLookup
       });
     }
 
-    /*
     if (text.trim() !== '') {
       choices.push({
         type: 'streamind',
-        name: text.trim(),
+        text: text.trim(),
       });
     }
-    */
 
     if (choices.length === 0) {
       choices.push({
@@ -225,22 +231,17 @@ const ExpressionChooser: React.FC<{initNode: Node, envLookups: EnvironmentLookup
           };
           break;
 
-/*
         case 'streamind':
           newNode = {
-            type: 'StreamIndirection',
-            id: originalNode.id,
-            children: (originalNode && isStreamIndirectionNode(originalNode)) ? originalNode.children : [
-              {
-                type: 'UndefinedLiteral',
-                id: generateStreamId(),
-                children: [],
-              }
-            ],
-            name: choice.name,
+            kind: NodeKind.StreamIndirection,
+            sid: generateStreamId(),
+            desc: {kind: NodeKind.Description, text: choice.text},
+            expr: {
+              kind: NodeKind.UndefinedLiteral,
+              sid: generateStreamId(),
+            },
           };
           break;
-*/
 
         case 'app':
           const n: ApplicationNode = {

@@ -33,6 +33,13 @@ export function* iterChildren(node: Node) {
       yield* node.elems;
       break;
 
+    case NodeKind.StreamIndirection:
+      if (node.desc) {
+        yield node.desc;
+      }
+      yield node.expr;
+      break;
+
     case NodeKind.Application:
       yield node.func;
       yield* node.sargs;
@@ -100,10 +107,13 @@ export function visitChildren<T>(node: Node, visit: (node: Node) => T | undefine
     case NodeKind.SignatureStreamParameter:
     case NodeKind.SignatureFunctionParameter:
     case NodeKind.SignatureYield:
-      return (node.desc && visit(node.desc)) || undefined;
+      return (node.desc && visit(node.desc));
 
     case NodeKind.ArrayLiteral:
       return visitArray(node.elems, visit);
+
+    case NodeKind.StreamIndirection:
+      return (node.desc && visit(node.desc)) || visit(node.expr);
 
     case NodeKind.Application:
       return visit(node.func) || visitArray(node.sargs, visit) || visitArray(node.fargs, visit);
@@ -250,6 +260,13 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
         elems: replaceStreamExprArr(node.elems),
       };
 
+    case NodeKind.StreamIndirection:
+      return {
+        ...node,
+        desc: replaceDesc(node.desc),
+        expr: replaceStreamExpr(node.expr),
+      };
+
     case NodeKind.Application:
       return {
         ...node,
@@ -308,6 +325,7 @@ export function deleteArrayElementChild(node: Node, child: Node): Node {
     case NodeKind.UndefinedLiteral:
     case NodeKind.NumberLiteral:
     case NodeKind.StreamReference:
+    case NodeKind.StreamIndirection:
     case NodeKind.SignatureStreamParameter:
     case NodeKind.SignatureFunctionParameter:
     case NodeKind.SignatureYield:
