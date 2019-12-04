@@ -1426,7 +1426,7 @@ export function computeSelectionMovementLookups(root: Node): SelectionMovementLo
 function beginEdit(state: State): State {
   if (isStreamExpressionNode(state.stableSelTree.selectedNode)) {
     return {
-      ...pushUndo(state),
+      ...state,
       editingSelTree: state.stableSelTree,
     };
   } else {
@@ -1469,7 +1469,7 @@ export function reducer(state: State, action: Action): State {
     // TODO: should not allow confirming unless it is valid
     if (state.editingSelTree) {
       return {
-        ...state,
+        ...pushUndo(state),
         stableSelTree: state.editingSelTree,
         editingSelTree: null,
       };
