@@ -57,33 +57,28 @@ export interface DescriptionNode {
 export interface UndefinedLiteralNode {
   readonly kind: NodeKind.UndefinedLiteral;
   readonly sid: StreamID;
-  readonly desc: DescriptionNode | null;
 }
 
 export interface NumberLiteralNode {
   readonly kind: NodeKind.NumberLiteral;
   readonly sid: StreamID;
-  readonly desc: DescriptionNode | null;
   readonly val: number;
 }
 
 export interface ArrayLiteralNode {
   readonly kind: NodeKind.ArrayLiteral;
   readonly sid: StreamID;
-  readonly desc: DescriptionNode | null;
   readonly elems: ReadonlyArray<StreamExpressionNode>;
 }
 
 export interface StreamReferenceNode {
   readonly kind: NodeKind.StreamReference;
-  readonly desc: DescriptionNode | null;
   readonly ref: StreamID; // the stream id we are referencing
 }
 
 export interface ApplicationNode {
   readonly kind: NodeKind.Application;
   readonly sids: ReadonlyArray<StreamID>; // array since there can be multiple yields
-  readonly desc: DescriptionNode | null;
   readonly func: FunctionExpressionNode; // function being applied
   readonly sargs: ReadonlyArray<StreamExpressionNode>;
   readonly fargs: ReadonlyArray<FunctionExpressionNode>;
@@ -101,18 +96,18 @@ export function isStreamExpressionNode(node: Node): node is StreamExpressionNode
 
 export interface SignatureStreamParameterNode {
   readonly kind: NodeKind.SignatureStreamParameter;
-  readonly desc: DescriptionNode | null;
+  readonly desc?: DescriptionNode;
 }
 
 export interface SignatureFunctionParameterNode {
   readonly kind: NodeKind.SignatureFunctionParameter;
-  readonly desc: DescriptionNode | null;
+  readonly desc?: DescriptionNode;
   readonly sig: SignatureNode;
 }
 
 export interface SignatureYieldNode {
   readonly kind: NodeKind.SignatureYield;
-  readonly desc: DescriptionNode | null;
+  readonly desc?: DescriptionNode;
 }
 
 export interface SignatureNode {
@@ -141,7 +136,7 @@ export interface TreeFunctionBodyNode {
 export interface TreeFunctionDefinitionNode {
   readonly kind: NodeKind.TreeFunctionDefinition;
   readonly fid: FunctionID;
-  readonly desc: DescriptionNode | null;
+  readonly desc?: DescriptionNode;
   readonly sig: SignatureNode;
 
   readonly spids: ReadonlyArray<StreamID>;
@@ -152,7 +147,7 @@ export interface TreeFunctionDefinitionNode {
 export interface NativeFunctionDefinitionNode {
   readonly kind: NodeKind.NativeFunctionDefinition;
   readonly fid: FunctionID;
-  readonly desc: DescriptionNode | null;
+  readonly desc?: DescriptionNode;
   readonly sig: SignatureNode;
 
   // TODO: JS code as string?

@@ -1042,13 +1042,13 @@ interface ExprStreamDefinition {
   kind: 'expr';
   sid: StreamID;
   expr: StreamExpressionNode;
-  desc: DescriptionNode | null;
+  desc: DescriptionNode | undefined;
 }
 
 interface ParamStreamDefinition {
   kind: 'param';
   sid: StreamID;
-  desc: DescriptionNode | null;
+  desc: DescriptionNode | undefined;
 }
 
 export type StreamDefinition = ExprStreamDefinition | ParamStreamDefinition;
@@ -1100,7 +1100,7 @@ export function computeEnvironmentLookups(mainDefinition: TreeFunctionDefinition
               kind: 'expr',
               sid: sid,
               expr: node,
-              desc: node.desc,
+              desc: undefined,
             });
           });
         } else if ((node.kind === NodeKind.UndefinedLiteral) || (node.kind === NodeKind.NumberLiteral) || (node.kind === NodeKind.ArrayLiteral)) {
@@ -1111,7 +1111,7 @@ export function computeEnvironmentLookups(mainDefinition: TreeFunctionDefinition
             kind: 'expr',
             sid: node.sid,
             expr: node,
-            desc: node.desc,
+            desc: undefined,
           });
         }
       }
@@ -1251,7 +1251,6 @@ function deleteNodeSubtree(node: Node, directionalLookups: DirectionalLookups): 
       const newNode: UndefinedLiteralNode = {
         kind: NodeKind.UndefinedLiteral,
         sid: generateStreamId(),
-        desc: node.desc,
       };
       const newRoot = replaceNode(node, newNode, directionalLookups);
       if (newRoot.kind !== NodeKind.TreeFunctionDefinition) {
@@ -1596,7 +1595,6 @@ const INITIAL_MAIN: TreeFunctionDefinitionNode = {
       {
         kind: NodeKind.Application,
         sids: [mdId],
-        desc: {kind: NodeKind.Description, text: 'md'},
         func: {
           kind: NodeKind.FunctionReference,
           ref: 'mouseDown',
@@ -1607,7 +1605,6 @@ const INITIAL_MAIN: TreeFunctionDefinitionNode = {
       {
         kind: NodeKind.Application,
         sids: [generateStreamId()],
-        desc: null,
         func: {
           kind: NodeKind.FunctionReference,
           ref: 'showString',
@@ -1616,7 +1613,6 @@ const INITIAL_MAIN: TreeFunctionDefinitionNode = {
           {
             kind: NodeKind.Application,
             sids: [generateStreamId()],
-            desc: null,
             func: {
               kind: NodeKind.FunctionReference,
               ref: 'ifte',
@@ -1624,19 +1620,16 @@ const INITIAL_MAIN: TreeFunctionDefinitionNode = {
             sargs: [
               {
                 kind: NodeKind.StreamReference,
-                desc: null,
                 ref: mdId,
               },
               {
                 kind: NodeKind.NumberLiteral,
                 sid: generateStreamId(),
-                desc: null,
                 val: 10,
               },
               {
                 kind: NodeKind.NumberLiteral,
                 sid: generateStreamId(),
-                desc: null,
                 val: 20,
               },
             ],

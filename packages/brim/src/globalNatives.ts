@@ -30,7 +30,7 @@ function simpleSig(pnames: Array<string>, yields: boolean): SignatureNode {
     kind: NodeKind.Signature,
     streamParams: pnames.map(pn => ({kind: NodeKind.SignatureStreamParameter, desc: { kind: NodeKind.Description, text: pn }})),
     funcParams: [],
-    yields: yields ? [{kind: NodeKind.SignatureYield, desc: null}] : [],
+    yields: yields ? [{kind: NodeKind.SignatureYield}] : [],
   }
 }
 
@@ -90,7 +90,6 @@ const nativeFunctions: Array<[string, string, SignatureNode, Function]> = [
           yields: [
             {
               kind: NodeKind.SignatureYield,
-              desc: null,
             }
           ],
         },
@@ -99,7 +98,6 @@ const nativeFunctions: Array<[string, string, SignatureNode, Function]> = [
     yields: [
       {
         kind: NodeKind.SignatureYield,
-        desc: null,
       },
     ],
   }, (arr: Array<any>, f: (v: any) => any) => streamMap(f, arr)],
@@ -131,7 +129,6 @@ const nativeFunctions: Array<[string, string, SignatureNode, Function]> = [
           yields: [
             {
               kind: NodeKind.SignatureYield,
-              desc: null,
             }
           ],
         },

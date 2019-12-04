@@ -13,14 +13,14 @@ export function lastChild(node: Node): Node | undefined {
 
 export function* iterChildren(node: Node) {
   switch (node.kind) {
-    case NodeKind.Description:
-    case NodeKind.FunctionReference:
-      // no children
-      break;
-
     case NodeKind.UndefinedLiteral:
     case NodeKind.NumberLiteral:
     case NodeKind.StreamReference:
+    case NodeKind.FunctionReference:
+    case NodeKind.Description:
+      // no children
+      break;
+
     case NodeKind.SignatureStreamParameter:
     case NodeKind.SignatureFunctionParameter:
     case NodeKind.SignatureYield:
@@ -30,16 +30,10 @@ export function* iterChildren(node: Node) {
       break;
 
     case NodeKind.ArrayLiteral:
-      if (node.desc) {
-        yield node.desc;
-      }
       yield* node.elems;
       break;
 
     case NodeKind.Application:
-      if (node.desc) {
-        yield node.desc;
-      }
       yield node.func;
       yield* node.sargs;
       yield* node.fargs;
@@ -95,24 +89,24 @@ function visitArray<T>(nodeArr: ReadonlyArray<Node>, visit: (node: Node) => T | 
  */
 export function visitChildren<T>(node: Node, visit: (node: Node) => T | undefined): T | undefined {
   switch (node.kind) {
+    case NodeKind.UndefinedLiteral:
+    case NodeKind.NumberLiteral:
     case NodeKind.Description:
+    case NodeKind.StreamReference:
     case NodeKind.FunctionReference:
       // no children
       return;
 
-    case NodeKind.UndefinedLiteral:
-    case NodeKind.NumberLiteral:
-    case NodeKind.StreamReference:
     case NodeKind.SignatureStreamParameter:
     case NodeKind.SignatureFunctionParameter:
     case NodeKind.SignatureYield:
       return (node.desc && visit(node.desc)) || undefined;
 
     case NodeKind.ArrayLiteral:
-      return (node.desc && visit(node.desc)) || visitArray(node.elems, visit);
+      return visitArray(node.elems, visit);
 
     case NodeKind.Application:
-      return (node.desc && visit(node.desc)) || visit(node.func) || visitArray(node.sargs, visit) || visitArray(node.fargs, visit);
+      return visit(node.func) || visitArray(node.sargs, visit) || visitArray(node.fargs, visit);
 
     case NodeKind.Signature:
       return visitArray(node.streamParams, visit) || visitArray(node.funcParams, visit) || visitArray(node.yields, visit);
@@ -137,8 +131,8 @@ export function visitChildren<T>(node: Node, visit: (node: Node) => T | undefine
 }
 
 export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
-  const replaceDesc = (n: DescriptionNode | null): DescriptionNode | null => {
-    if (n === null) {
+  const replaceDesc = (n: DescriptionNode | undefined): DescriptionNode | undefined => {
+    if (!n) {
       return n;
     }
     if (n === oldChild) {
@@ -235,13 +229,13 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
   };
 
   switch (node.kind) {
-    case NodeKind.Description:
-    case NodeKind.FunctionReference:
-      throw new Error('no children to replace');
-
     case NodeKind.UndefinedLiteral:
     case NodeKind.NumberLiteral:
     case NodeKind.StreamReference:
+    case NodeKind.FunctionReference:
+    case NodeKind.Description:
+      throw new Error('no children to replace');
+
     case NodeKind.SignatureStreamParameter:
     case NodeKind.SignatureFunctionParameter:
     case NodeKind.SignatureYield:
@@ -253,14 +247,12 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
     case NodeKind.ArrayLiteral:
       return {
         ...node,
-        desc: replaceDesc(node.desc),
         elems: replaceStreamExprArr(node.elems),
       };
 
     case NodeKind.Application:
       return {
         ...node,
-        desc: replaceDesc(node.desc),
         func: replaceFunctionExpression(node.func),
         sargs: replaceStreamExprArr(node.sargs),
         fargs: replaceFuncExprArr(node.fargs),

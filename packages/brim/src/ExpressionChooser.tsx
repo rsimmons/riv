@@ -207,7 +207,6 @@ const ExpressionChooser: React.FC<{initNode: Node, envLookups: EnvironmentLookup
           newNode = {
             kind: NodeKind.UndefinedLiteral,
             sid: generateStreamId(),
-            desc: initNode.desc,
           }
           break;
 
@@ -215,7 +214,6 @@ const ExpressionChooser: React.FC<{initNode: Node, envLookups: EnvironmentLookup
           newNode = {
             kind: NodeKind.NumberLiteral,
             sid: generateStreamId(),
-            desc: initNode.desc,
             val: choice.value,
           }
           break;
@@ -223,7 +221,6 @@ const ExpressionChooser: React.FC<{initNode: Node, envLookups: EnvironmentLookup
         case 'streamref':
           newNode = {
             kind: NodeKind.StreamReference,
-            desc: null,
             ref: choice.sid,
           };
           break;
@@ -248,7 +245,6 @@ const ExpressionChooser: React.FC<{initNode: Node, envLookups: EnvironmentLookup
         case 'app':
           const n: ApplicationNode = {
             kind: NodeKind.Application,
-            desc: initNode.desc,
             sids: choice.funcDefNode.sig.yields.map(() => generateStreamId()),
             func: {
               kind: NodeKind.FunctionReference,
@@ -262,7 +258,6 @@ const ExpressionChooser: React.FC<{initNode: Node, envLookups: EnvironmentLookup
             fargs: choice.funcDefNode.sig.funcParams.map((param: SignatureFunctionParameterNode) => {
               return {
                 kind: NodeKind.TreeFunctionDefinition,
-                desc: null,
                 fid: generateFunctionId(),
                 sig: param.sig,
                 spids: param.sig.streamParams.map(() => generateStreamId()),
