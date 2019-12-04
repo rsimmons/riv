@@ -1,12 +1,12 @@
 import genuid from './uid';
-import { State, ProgramInfo, DirectionalLookups, SelTree } from './State';
+import { State, ProgramInfo, SelTree } from './State';
 import { StreamID, FunctionID, generateStreamId, generateFunctionId, NodeKind, Node, TreeFunctionDefinitionNode, FunctionDefinitionNode, isFunctionDefinitionNode, StreamExpressionNode, NativeFunctionDefinitionNode, isStreamExpressionNode, UndefinedLiteralNode, DescriptionNode } from './Tree';
 // import { CompiledDefinition } from './CompiledDefinition';
 // import { compileGlobalUserDefinition, CompilationError } from './Compiler';
 // import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
 // import { createLiveFunction } from './LiveFunction';
 import Environment from './Environment';
-import { firstChild, lastChild, iterChildren, visitChildren, replaceChild, deleteArrayElementChild } from './Traversal';
+import { iterChildren, visitChildren, replaceChild, deleteArrayElementChild } from './Traversal';
 import globalNativeFunctions from './globalNatives';
 
 // We don't make a discriminated union of specific actions, but maybe we could
@@ -1141,92 +1141,74 @@ export function computeEnvironmentLookups(mainDefinition: TreeFunctionDefinition
   };
 }
 
-function nextArrowSelectableLeft(node: Node, directionalLookups: DirectionalLookups): Node | undefined {
-  return directionalLookups.parent.get(node);
+function nextArrowSelectableLeft(node: Node, selMoveLookups: SelectionMovementLookups): Node | undefined {
+  return selMoveLookups.rootward.get(node);
 }
 
-function nextArrowSelectableRight(node: Node, directionalLookups: DirectionalLookups): Node | undefined {
-  const children = [...iterChildren(node)];
-  if (children.length) {
-    return children[0];
-  } else {
-    return undefined;
-  }
+function nextArrowSelectableRight(node: Node, selMoveLookups: SelectionMovementLookups): Node | undefined {
+  return selMoveLookups.leafward.get(node);
 }
 
-function nextArrowSelectableUpDown(node: Node, up: boolean, directionalLookups: DirectionalLookups): Node | undefined {
+function nextArrowSelectableUpDown(node: Node, up: boolean, selMoveLookups: SelectionMovementLookups): Node | undefined {
   let n: Node = node;
-  let depth = 0;
 
   while (true) {
-    const sib = up ? directionalLookups.prevSibling.get(n) : directionalLookups.nextSibling.get(n);
+    const sib = up ? selMoveLookups.prev.get(n) : selMoveLookups.next.get(n);
     if (sib) {
-      n = sib;
-      break;
+      return sib;
     }
-    const parent = directionalLookups.parent.get(n);
+    const parent = selMoveLookups.rootward.get(n);
     if (!parent) {
       // Made it to root without being able to move up/down
       return undefined;
     }
     n = parent;
   }
-
-  while (depth > 0) {
-    const fc = up ? lastChild(n) : firstChild(n);
-    if (!fc) {
-      return n;
-    }
-    n = fc;
-    depth--;
-  }
-
-  return n;
 }
 
-function handleSelectionAction(action: Action, selectedNode: Node, directionalLookups: DirectionalLookups): Node | void {
+function handleSelectionAction(action: Action, selectedNode: Node, selMoveLookups: SelectionMovementLookups): Node | void {
   switch (action.type) {
     case 'SET_SELECTED_NODE':
       return action.newNode!;
 
     case 'MOVE_LEFT':
-      return nextArrowSelectableLeft(selectedNode, directionalLookups);
+      return nextArrowSelectableLeft(selectedNode, selMoveLookups);
 
     case 'MOVE_RIGHT':
-      return nextArrowSelectableRight(selectedNode, directionalLookups);
+      return nextArrowSelectableRight(selectedNode, selMoveLookups);
 
     case 'MOVE_UP':
-      return nextArrowSelectableUpDown(selectedNode, true, directionalLookups);
+      return nextArrowSelectableUpDown(selectedNode, true, selMoveLookups);
 
     case 'MOVE_DOWN':
-      return nextArrowSelectableUpDown(selectedNode, false, directionalLookups);
+      return nextArrowSelectableUpDown(selectedNode, false, selMoveLookups);
   }
 }
 
 /**
  * Note that this returns the new _root_ of the whole tree
  */
-function replaceNode(node: Node, newNode: Node, directionalLookups: DirectionalLookups): Node {
-  const parent = directionalLookups.parent.get(node);
+function replaceNode(node: Node, newNode: Node, parentLookup: Map<Node, Node>): Node {
+  const parent = parentLookup.get(node);
   if (!parent) {
     return newNode;
   }
-  return replaceNode(parent, replaceChild(parent, node, newNode), directionalLookups);
+  return replaceNode(parent, replaceChild(parent, node, newNode), parentLookup);
 }
 
 /**
  * Returns [newRoot, newSelectedNode]
  */
-function deleteArrayElementNode(node: Node, directionalLookups: DirectionalLookups): SelTree {
-  const parent = directionalLookups.parent.get(node);
+function deleteArrayElementNode(node: Node, parentLookup: Map<Node, Node>, selMoveLookups: SelectionMovementLookups): SelTree {
+  const parent = parentLookup.get(node);
   if (!parent) {
     throw new Error();
   }
 
-  const sibling = directionalLookups.prevSibling.get(node) || directionalLookups.nextSibling.get(node);
+  const sibling = selMoveLookups.prev.get(node) || selMoveLookups.next.get(node);
   const newParent = deleteArrayElementChild(parent, node);
-  const newRoot = replaceNode(parent, newParent, directionalLookups);
-  const newSelectedNode = sibling || newParent;
+  const newRoot = replaceNode(parent, newParent, parentLookup);
+  const newSelectedNode = sibling; // TODO: fall back on new rootward-selectable
   if (!newSelectedNode) {
     throw new Error('should not be possible?');
   }
@@ -1239,8 +1221,8 @@ function deleteArrayElementNode(node: Node, directionalLookups: DirectionalLooku
   };
 }
 
-function deleteNodeSubtree(node: Node, directionalLookups: DirectionalLookups): SelTree | void {
-  const parent = directionalLookups.parent.get(node);
+function deleteNodeSubtree(node: Node, parentLookup: Map<Node, Node>, selMoveLookups: SelectionMovementLookups): SelTree | void {
+  const parent = parentLookup.get(node);
 
   if (!parent) {
     return;
@@ -1252,7 +1234,7 @@ function deleteNodeSubtree(node: Node, directionalLookups: DirectionalLookups): 
         kind: NodeKind.UndefinedLiteral,
         sid: generateStreamId(),
       };
-      const newRoot = replaceNode(node, newNode, directionalLookups);
+      const newRoot = replaceNode(node, newNode, parentLookup);
       if (newRoot.kind !== NodeKind.TreeFunctionDefinition) {
         throw new Error();
       }
@@ -1261,17 +1243,17 @@ function deleteNodeSubtree(node: Node, directionalLookups: DirectionalLookups): 
         selectedNode: newNode,
       };
     } else if ((parent.kind === NodeKind.ArrayLiteral) || (parent.kind === NodeKind.TreeFunctionBody)) {
-      return deleteArrayElementNode(node, directionalLookups);
+      return deleteArrayElementNode(node, parentLookup, selMoveLookups);
     } else {
       throw new Error();
     }
   }
 }
 
-function handleInstantEditAction(action: Action, selTree: SelTree, directionalLookups: DirectionalLookups): SelTree | void {
+function handleInstantEditAction(action: Action, selTree: SelTree, parentLookup: Map<Node, Node>, selMoveLookups: SelectionMovementLookups): SelTree | void {
   switch (action.type) {
     case 'DELETE_SUBTREE':
-      return deleteNodeSubtree(selTree.selectedNode, directionalLookups);
+      return deleteNodeSubtree(selTree.selectedNode, parentLookup, selMoveLookups);
   }
 }
 
@@ -1362,20 +1344,66 @@ function addStateCompiled(oldState: State | undefined, newState: State): State {
 }
 */
 
-export function computeDirectionalLookups(root: Node): DirectionalLookups {
+export function computeParentLookup(root: Node): Map<Node, Node> {
   const parent: Map<Node, Node> = new Map();
-  const prevSibling: Map<Node, Node> = new Map();
-  const nextSibling: Map<Node, Node> = new Map();
 
   const visit = (node: Node): void => {
-    let prev: Node | undefined;
     for (const child of iterChildren(node)) {
       parent.set(child, node);
-      if (prev) {
-        prevSibling.set(child, prev);
-        nextSibling.set(prev, child);
+    }
+
+    visitChildren(node, visit);
+  };
+
+  visit(root);
+
+  return parent;
+}
+
+interface SelectionMovementLookups {
+  prev: Map<Node, Node>;
+  next: Map<Node, Node>;
+  rootward: Map<Node, Node>;
+  leafward: Map<Node, Node>;
+}
+
+export function computeSelectionMovementLookups(root: Node): SelectionMovementLookups {
+  const prev: Map<Node, Node> = new Map();
+  const next: Map<Node, Node> = new Map();
+  const rootward: Map<Node, Node> = new Map();
+  const leafward: Map<Node, Node> = new Map();
+
+  const setForArr = (arr: ReadonlyArray<Node>, parent: Node): void => {
+    if (arr.length) {
+      leafward.set(parent, arr[0]);
+    }
+
+    let p: Node | undefined;
+    for (const n of arr) {
+      rootward.set(n, parent);
+      if (p) {
+        prev.set(n, p);
+        next.set(p, n);
       }
-      prev = child;
+      p = n;
+    }
+  };
+
+  const visit = (node: Node): void => {
+    switch (node.kind) {
+      case NodeKind.Application: {
+        setForArr(([] as ReadonlyArray<Node>).concat(node.sargs, node.fargs), node);
+        break;
+      }
+
+      case NodeKind.TreeFunctionDefinition:
+        setForArr(node.body.exprs, node);
+        break;
+
+      case NodeKind.YieldExpression:
+        leafward.set(node, node.expr);
+        rootward.set(node.expr, node);
+        break;
     }
 
     visitChildren(node, visit);
@@ -1384,9 +1412,10 @@ export function computeDirectionalLookups(root: Node): DirectionalLookups {
   visit(root);
 
   return {
-    parent,
-    prevSibling,
-    nextSibling,
+    prev,
+    next,
+    rootward,
+    leafward,
   };
 }
 
@@ -1438,7 +1467,6 @@ export function reducer(state: State, action: Action): State {
       return {
         ...state,
         stableSelTree: state.editingSelTree,
-        directionalLookups: computeDirectionalLookups(state.editingSelTree.mainDefinition),
         editingSelTree: null,
       };
     } else {
@@ -1455,8 +1483,9 @@ export function reducer(state: State, action: Action): State {
     if (!state.editingSelTree) {
       throw new Error();
     }
-    const dirs = computeDirectionalLookups(state.editingSelTree.mainDefinition);
-    const newMain = replaceNode(state.editingSelTree.selectedNode, action.newNode!, dirs);
+    const parentLookup = computeParentLookup(state.editingSelTree.mainDefinition); // TODO: memoize
+    const newMain = replaceNode(state.editingSelTree.selectedNode, action.newNode!, parentLookup);
+    console.log('newMain', newMain);
     if (newMain.kind !== NodeKind.TreeFunctionDefinition) {
       throw new Error();
     }
@@ -1473,7 +1502,6 @@ export function reducer(state: State, action: Action): State {
       return {
         ...state,
         stableSelTree: newSelTree,
-        directionalLookups: computeDirectionalLookups(newSelTree.mainDefinition),
         editingSelTree: null,
         undoStack: state.undoStack.slice(0, state.undoStack.length-1),
       };
@@ -1483,7 +1511,8 @@ export function reducer(state: State, action: Action): State {
     }
   }
 
-  const handleSelectionActionResult = handleSelectionAction(action, state.stableSelTree.selectedNode, state.directionalLookups);
+  const selMoveLookups = computeSelectionMovementLookups(state.stableSelTree.mainDefinition); // TODO: memoize
+  const handleSelectionActionResult = handleSelectionAction(action, state.stableSelTree.selectedNode, selMoveLookups);
   if (handleSelectionActionResult) {
     const newSelectedNode = handleSelectionActionResult;
     if (newSelectedNode !== state.stableSelTree.selectedNode) {
@@ -1500,7 +1529,8 @@ export function reducer(state: State, action: Action): State {
     }
   }
 
-  const handleEditActionResult = handleInstantEditAction(action, state.stableSelTree, state.directionalLookups);
+  const parentLookup = computeParentLookup(state.stableSelTree.mainDefinition); // TODO: memoize
+  const handleEditActionResult = handleInstantEditAction(action, state.stableSelTree, parentLookup, selMoveLookups);
   if (handleEditActionResult) {
     const newSelTree = handleEditActionResult;
     console.log(newSelTree);
@@ -1509,7 +1539,6 @@ export function reducer(state: State, action: Action): State {
       return {
         ...pushUndo(state),
         stableSelTree: newSelTree,
-        directionalLookups: computeDirectionalLookups(newSelTree.mainDefinition),
       };
     } else {
       return state;
@@ -1567,7 +1596,6 @@ function initialStateFromDefinition(mainDefinition: TreeFunctionDefinitionNode):
       mainDefinition,
       selectedNode: mainDefinition,
     },
-    directionalLookups: computeDirectionalLookups(mainDefinition),
     editingSelTree: null,
     nativeFunctions,
     // liveMain: null,

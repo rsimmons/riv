@@ -18,16 +18,9 @@ export interface SelTree {
   readonly selectedNode: Node;
 }
 
-export interface DirectionalLookups {
-  parent: ReadonlyMap<Node, Node>;
-  prevSibling: ReadonlyMap<Node, Node>;
-  nextSibling: ReadonlyMap<Node, Node>;
-}
-
 export interface State {
   readonly programInfo: ProgramInfo;
   readonly stableSelTree: SelTree;
-  readonly directionalLookups: DirectionalLookups;
   readonly editingSelTree: SelTree | null;
   readonly nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>;
   /*
