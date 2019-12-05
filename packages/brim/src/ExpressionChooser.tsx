@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './ExpressionChooser.css';
-import { generateStreamId, Node, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, SignatureStreamParameterNode, ApplicationNode, SignatureFunctionParameterNode, generateFunctionId, StreamID } from './Tree';
+import { generateStreamId, Node, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, SignatureStreamParameterNode, ApplicationNode, SignatureFunctionParameterNode, generateFunctionId, StreamID, ArrayLiteralNode, UndefinedLiteralNode } from './Tree';
 import { fuzzy_match } from './vendor/fts_fuzzy_match';
 import { EnvironmentLookups, StreamDefinition } from './EditReducer';
 
@@ -316,8 +316,19 @@ const ExpressionChooser: React.FC<{initNode: Node, envLookups: EnvironmentLookup
 
     if (newText === '[') {
       // This is a special case, we bypass the normal dropdown/choice stuff
-      // dispatch({type: 'END_EXPRESSION_EDIT'});
-      // dispatch({type: 'CREATE_ARRAY'});
+      const initElemNode: UndefinedLiteralNode = {
+        kind: NodeKind.UndefinedLiteral,
+        sid: generateStreamId(),
+      };
+      const newArrNode: ArrayLiteralNode = {
+        kind: NodeKind.ArrayLiteral,
+        sid: generateStreamId(),
+        elems: [initElemNode],
+      };
+      dispatch({type: 'UPDATE_EDITING_NODE', newNode: newArrNode});
+      dispatch({type: 'TOGGLE_EDIT'});
+      dispatch({type: 'SET_SELECTED_NODE', newNode: initElemNode});
+      dispatch({type: 'TOGGLE_EDIT'});
     } else {
       setText(newText);
       setDropdownState(recomputeDropdownChoices(newText));
