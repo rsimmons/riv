@@ -140,6 +140,225 @@ export function visitChildren<T>(node: Node, visit: (node: Node) => T | undefine
   }
 }
 
+// This will always return a node of the same kind, but I can't seem to express this with generics,
+// which makes the code way more complicated than it should be, but we ensure type safety.
+export function transformChildren(node: Node, transform: (node: Node) => Node): Node {
+  const xDesc = (n: DescriptionNode): DescriptionNode => {
+    const tn = transform(n);
+    if (tn.kind !== NodeKind.Description) {
+      throw new Error();
+    }
+    return tn;
+  };
+
+  const xStreamExpr = (n: StreamExpressionNode): StreamExpressionNode => {
+    const tn = transform(n);
+    if (!isStreamExpressionNode(tn)) {
+      throw new Error();
+    }
+    return tn;
+  };
+
+  const xStreamExprArr = (arr: ReadonlyArray<StreamExpressionNode>): ReadonlyArray<StreamExpressionNode> => {
+    let changed = false;
+    const newArr = arr.map(el => {
+      const nel = transform(el);
+      if (!isStreamExpressionNode(nel)) {
+        throw new Error();
+      }
+      if (nel !== el) {
+        changed = true;
+      }
+      return nel;
+    });
+    return changed ? newArr : arr;
+  };
+
+  const xBodyExprArr = (arr: ReadonlyArray<BodyExpressionNode>): ReadonlyArray<BodyExpressionNode> => {
+    let changed = false;
+    const newArr = arr.map(el => {
+      const nel = transform(el);
+      if (!isBodyExpressionNode(nel)) {
+        throw new Error();
+      }
+      if (nel !== el) {
+        changed = true;
+      }
+      return nel;
+    });
+    return changed ? newArr : arr;
+  };
+
+  const xFuncExpr = (n: FunctionExpressionNode): FunctionExpressionNode => {
+    const tn = transform(n);
+    if (!isFunctionExpressionNode(tn)) {
+      throw new Error();
+    }
+    return tn;
+  };
+
+  const xFuncExprArr = (arr: ReadonlyArray<FunctionExpressionNode>): ReadonlyArray<FunctionExpressionNode> => {
+    let changed = false;
+    const newArr = arr.map(el => {
+      const nel = transform(el);
+      if (!isFunctionExpressionNode(nel)) {
+        throw new Error();
+      }
+      if (nel !== el) {
+        changed = true;
+      }
+      return nel;
+    });
+    return changed ? newArr : arr;
+  };
+
+  const xSignature = (n: SignatureNode): SignatureNode => {
+    const tn = transform(n);
+    if (tn.kind !== NodeKind.Signature) {
+      throw new Error();
+    }
+    return tn;
+  };
+
+  const xTreeBody = (n: TreeFunctionBodyNode): TreeFunctionBodyNode => {
+    const tn = transform(n);
+    if (tn.kind !== NodeKind.TreeFunctionBody) {
+      throw new Error();
+    }
+    return tn;
+  };
+
+  switch (node.kind) {
+    case NodeKind.UndefinedLiteral:
+    case NodeKind.NumberLiteral:
+    case NodeKind.Description:
+    case NodeKind.StreamReference:
+    case NodeKind.FunctionReference:
+      // no children to transform
+      return node;
+
+    case NodeKind.SignatureStreamParameter:
+    case NodeKind.SignatureFunctionParameter:
+    case NodeKind.SignatureYield: {
+      const newDesc = node.desc && xDesc(node.desc);
+      if (newDesc === node.desc) {
+        return node;
+      } else {
+        return {
+          ...node,
+          desc: newDesc,
+        };
+      }
+    }
+
+    case NodeKind.ArrayLiteral: {
+      const newElems = xStreamExprArr(node.elems);
+      if (newElems === node.elems) {
+        return node;
+      } else {
+        return {
+          ...node,
+          elems: newElems,
+        };
+      }
+    }
+
+    case NodeKind.StreamIndirection: {
+      const newDesc = node.desc && xDesc(node.desc);
+      const newExpr = xStreamExpr(node.expr);
+      if ((newDesc === node.desc) && (newExpr === node.expr)) {
+        return node;
+      } else {
+        return {
+          ...node,
+          desc: newDesc,
+          expr: newExpr,
+        };
+      }
+    }
+
+    case NodeKind.Application: {
+      const newFunc = xFuncExpr(node.func);
+      const newSargs = xStreamExprArr(node.sargs);
+      const newFargs = xFuncExprArr(node.fargs);
+      if ((newFunc === node.func) && (newSargs === node.sargs) && (newFargs === node.fargs)) {
+        return node;
+      } else {
+        return {
+          ...node,
+          func: newFunc,
+          sargs: newSargs,
+          fargs: newFargs,
+        };
+      }
+    }
+
+    case NodeKind.Signature:
+      // TODO: implement
+      return node;
+
+    case NodeKind.YieldExpression: {
+      const newExpr = xStreamExpr(node.expr);
+      if (newExpr === node.expr) {
+        return node;
+      } else {
+        return {
+          ...node,
+          expr: newExpr,
+        };
+      }
+    }
+
+    case NodeKind.TreeFunctionBody: {
+      const newExprs = xBodyExprArr(node.exprs);
+      if (newExprs === node.exprs) {
+        return node;
+      } else {
+        return {
+          ...node,
+          exprs: newExprs,
+        };
+      }
+    }
+
+    case NodeKind.TreeFunctionDefinition: {
+      const newDesc = node.desc && xDesc(node.desc);
+      const newSig = xSignature(node.sig);
+      const newBody = xTreeBody(node.body);
+      if ((newDesc === node.desc) && (newSig === node.sig) && (newBody === node.body)) {
+        return node;
+      } else {
+        return {
+          ...node,
+          desc: newDesc,
+          sig: newSig,
+          body: newBody,
+        };
+      }
+    }
+
+    case NodeKind.NativeFunctionDefinition: {
+      const newDesc = node.desc && xDesc(node.desc);
+      const newSig = xSignature(node.sig);
+      if ((newDesc === node.desc) && (newSig === node.sig)) {
+        return node;
+      } else {
+        return {
+          ...node,
+          desc: newDesc,
+          sig: newSig,
+        };
+      }
+    }
+
+    default: {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const exhaustive: never = node; // this will cause a type error if we haven't handled all cases
+      throw new Error();
+    }
+  }
+}
+
 export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
   const replaceDesc = (n: DescriptionNode | undefined): DescriptionNode | undefined => {
     if (!n) {

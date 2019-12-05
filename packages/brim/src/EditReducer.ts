@@ -6,7 +6,7 @@ import { StreamID, FunctionID, generateStreamId, generateFunctionId, NodeKind, N
 // import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
 // import { createLiveFunction } from './LiveFunction';
 import Environment from './Environment';
-import { iterChildren, visitChildren, replaceChild, deleteArrayElementChild } from './Traversal';
+import { iterChildren, visitChildren, replaceChild, deleteArrayElementChild, transformChildren } from './Traversal';
 import globalNativeFunctions from './globalNatives';
 
 // We don't make a discriminated union of specific actions, but maybe we could
@@ -1257,93 +1257,6 @@ function handleInstantEditAction(action: Action, selTree: SelTree, parentLookup:
   }
 }
 
-/*
-function undefineDanglingStreamRefs(state: State): State {
-  const newProgram = traverseTree(state.program, {}, (node, ) => {
-    if (node.type === 'StreamReference') {
-      return [false, state.derivedLookups.streamIdToNode!.has(node.targetStreamId) ? node : {
-        type: 'UndefinedLiteral',
-        id: generateStreamId(),
-        name: null,
-        children: [],
-      }];
-    } else {
-      return [false, node];
-    }
-  });
-
-  return (newProgram === state.program) ? state : {
-    ...state,
-    program: newProgram as Program,
-  }
-}
-
-function addStateCompiled(oldState: State | undefined, newState: State): State {
-  // We initialize with an "empty" definition, which we fall back on if compilation fails
-  let newCompiledDefinition: CompiledDefinition = {
-    parameters: [],
-    constantStreamValues: [],
-    applications: [],
-    containedFunctionDefinitions: [],
-    yieldStreamId: null,
-    externalReferencedStreamIds: new Set(),
-    externalReferencedFunctionIds: new Set(),
-  };
-
-  try {
-    // NOTE: We could avoid repeating this work, but this is sort of temporary anyways
-    const globalFunctionEnvironment: Environment<FunctionDefinitionNode> = new Environment();
-    for (const nf of newState.nativeFunctions) {
-      globalFunctionEnvironment.set(nf.id, nf);
-    }
-
-    newCompiledDefinition = compileGlobalUserDefinition(newState.program.mainDefinition, globalFunctionEnvironment);
-    // console.log('compiled to', newCompiledDefinition);
-  } catch (e) {
-    if (e instanceof CompilationError) {
-      console.log('COMPILATION ERROR', e.message);
-    } else {
-      throw e;
-    }
-  }
-
-  let newLiveMain;
-
-  if (oldState) {
-    const { context, updateCompiledDefinition } = oldState.liveMain!;
-
-    // console.log('updating compiled definition to', newCompiledDefinition);
-    beginBatch();
-    updateCompiledDefinition(newCompiledDefinition);
-    endBatch();
-
-    newLiveMain = {
-      context,
-      updateCompiledDefinition,
-      compiledDefinition: newCompiledDefinition,
-    };
-  } else {
-    // There is no old state, so we need to create the long-lived stuff
-    // console.log('initializing compiled definition to', newCompiledDefinition);
-    const [liveStreamFunc, updateCompiledDefinition] = createLiveFunction(newCompiledDefinition, nativeFunctionEnvironment);
-    const context = createNullaryVoidRootExecutionContext(liveStreamFunc);
-
-    context.update(); // first update that generally kicks off further async updates
-
-    newLiveMain = {
-      context,
-      updateCompiledDefinition,
-      compiledDefinition: newCompiledDefinition,
-    };
-  }
-
-  return {
-    ...newState,
-    liveMain: newLiveMain,
-  };
-}
-*/
-
 export function computeParentLookup(root: Node): Map<Node, Node> {
   const parent: Map<Node, Node> = new Map();
 
@@ -1442,6 +1355,146 @@ function pushUndo(state: State): State {
   };
 }
 
+function fixupDanglingRefs(selTree: SelTree, nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>): SelTree {
+  const envLookups = computeEnvironmentLookups(selTree.mainDefinition, nativeFunctions);
+
+  const oldNodeToNew: Map<Node, Node> = new Map();
+
+  const transform = (node: Node): Node => {
+    let newNode: Node = node;
+    if (node.kind === NodeKind.StreamReference) {
+      const nearestDef = envLookups.nodeToNearestTreeDef.get(node);
+      if (!nearestDef) {
+        throw new Error();
+      }
+      const nodeStreamEnv = envLookups.treeDefToStreamEnv.get(nearestDef);
+      if (!nodeStreamEnv) {
+        throw new Error();
+      }
+      const streamDef = nodeStreamEnv.get(node.ref);
+      if (!streamDef) {
+        newNode = {
+          kind: NodeKind.UndefinedLiteral,
+          sid: generateStreamId(),
+        };
+      }
+
+    }
+
+    const newNewNode = transformChildren(newNode, transform);
+
+    if (newNewNode !== node) {
+      oldNodeToNew.set(node, newNewNode);
+    }
+
+    return newNewNode;
+  };
+
+  const newMain = transform(selTree.mainDefinition);
+  if (newMain.kind !== NodeKind.TreeFunctionDefinition) {
+    throw new Error();
+  }
+
+  const newSelectedNode = oldNodeToNew.get(selTree.selectedNode) || selTree.selectedNode;
+  // TODO: verify that newSelectedNode is in newMain
+
+  // console.log('fixupDanglingRefs', 'tree changed?', newMain !== selTree.mainDefinition, 'selnode changed?', newSelectedNode !== selTree.selectedNode);
+
+  return {
+    mainDefinition: newMain,
+    selectedNode: newSelectedNode,
+  };
+}
+
+// NOTE: May throw a compiler exception
+function fixupAndCompileTree(selTree: SelTree, nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>): [SelTree, undefined] {
+  const fixedSelTree = fixupDanglingRefs(selTree, nativeFunctions);
+
+  // TODO: compile (may throw error)
+
+  // TODO: return new tree and compiled definition
+  return [fixedSelTree, undefined];
+}
+
+function updateLiveExecution(state: State): State {
+  /*
+  // We initialize with an "empty" definition, which we fall back on if compilation fails
+  let newCompiledDefinition: CompiledDefinition = {
+    parameters: [],
+    constantStreamValues: [],
+    applications: [],
+    containedFunctionDefinitions: [],
+    yieldStreamId: null,
+    externalReferencedStreamIds: new Set(),
+    externalReferencedFunctionIds: new Set(),
+  };
+
+  try {
+    // NOTE: We could avoid repeating this work, but this is sort of temporary anyways
+    const globalFunctionEnvironment: Environment<FunctionDefinitionNode> = new Environment();
+    for (const nf of newState.nativeFunctions) {
+      globalFunctionEnvironment.set(nf.id, nf);
+    }
+
+    newCompiledDefinition = compileGlobalUserDefinition(newState.program.mainDefinition, globalFunctionEnvironment);
+    // console.log('compiled to', newCompiledDefinition);
+  } catch (e) {
+    if (e instanceof CompilationError) {
+      console.log('COMPILATION ERROR', e.message);
+    } else {
+      throw e;
+    }
+  }
+
+  let newLiveMain;
+
+  if (oldState) {
+    const { context, updateCompiledDefinition } = oldState.liveMain!;
+
+    // console.log('updating compiled definition to', newCompiledDefinition);
+    beginBatch();
+    updateCompiledDefinition(newCompiledDefinition);
+    endBatch();
+
+    newLiveMain = {
+      context,
+      updateCompiledDefinition,
+      compiledDefinition: newCompiledDefinition,
+    };
+  } else {
+    // There is no old state, so we need to create the long-lived stuff
+    // console.log('initializing compiled definition to', newCompiledDefinition);
+    const [liveStreamFunc, updateCompiledDefinition] = createLiveFunction(newCompiledDefinition, nativeFunctionEnvironment);
+    const context = createNullaryVoidRootExecutionContext(liveStreamFunc);
+
+    context.update(); // first update that generally kicks off further async updates
+
+    newLiveMain = {
+      context,
+      updateCompiledDefinition,
+      compiledDefinition: newCompiledDefinition,
+    };
+  }
+
+  return {
+    ...newState,
+    liveMain: newLiveMain,
+  };
+  */
+
+  return state;
+}
+
+// NOTE: may throw a compiler exception
+function updateAfterEdit(state: State): State {
+  const [newSelTree, compiledDef] = fixupAndCompileTree(state.stableSelTree, state.nativeFunctions);
+  return updateLiveExecution({
+    ...state,
+    stableSelTree: newSelTree,
+    // TODO: put in compiledDef
+  });
+}
+
 export function reducer(state: State, action: Action): State {
   console.log('action', action);
 
@@ -1468,11 +1521,11 @@ export function reducer(state: State, action: Action): State {
   } else if (action.type === 'TOGGLE_EDIT') {
     // TODO: should not allow confirming unless it is valid
     if (state.editingSelTree) {
-      return {
+      return updateAfterEdit({
         ...pushUndo(state),
         stableSelTree: state.editingSelTree,
         editingSelTree: null,
-      };
+      });
     } else {
       return beginEdit(state);
     }
@@ -1489,7 +1542,6 @@ export function reducer(state: State, action: Action): State {
     }
     const parentLookup = computeParentLookup(state.editingSelTree.mainDefinition); // TODO: memoize
     const newMain = replaceNode(state.editingSelTree.selectedNode, action.newNode!, parentLookup);
-    console.log('newMain', newMain);
     if (newMain.kind !== NodeKind.TreeFunctionDefinition) {
       throw new Error();
     }
@@ -1503,12 +1555,12 @@ export function reducer(state: State, action: Action): State {
   } else if (action.type === 'UNDO') {
     if (state.undoStack.length > 0) {
       const newSelTree = state.undoStack[state.undoStack.length-1];
-      return {
+      return updateAfterEdit({
         ...state,
         stableSelTree: newSelTree,
         editingSelTree: null,
         undoStack: state.undoStack.slice(0, state.undoStack.length-1),
-      };
+      });
     } else {
       console.log('nothing to undo');
       return state;
@@ -1537,13 +1589,12 @@ export function reducer(state: State, action: Action): State {
   const handleEditActionResult = handleInstantEditAction(action, state.stableSelTree, parentLookup, selMoveLookups);
   if (handleEditActionResult) {
     const newSelTree = handleEditActionResult;
-    console.log(newSelTree);
 
     if (newSelTree !== state.stableSelTree) {
-      return {
+      return updateAfterEdit({
         ...pushUndo(state),
         stableSelTree: newSelTree,
-      };
+      });
     } else {
       return state;
     }
