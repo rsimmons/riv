@@ -1,6 +1,6 @@
 import genuid from './uid';
 import { State, ProgramInfo, SelTree } from './State';
-import { StreamID, FunctionID, generateStreamId, generateFunctionId, NodeKind, Node, TreeFunctionDefinitionNode, FunctionDefinitionNode, isFunctionDefinitionNode, StreamExpressionNode, NativeFunctionDefinitionNode, isStreamExpressionNode, UndefinedLiteralNode, DescriptionNode } from './Tree';
+import { StreamID, FunctionID, generateStreamId, generateFunctionId, NodeKind, Node, TreeFunctionDefinitionNode, FunctionDefinitionNode, isFunctionDefinitionNode, StreamExpressionNode, NativeFunctionDefinitionNode, isStreamExpressionNode, UndefinedLiteralNode, DescriptionNode, BodyExpressionNode } from './Tree';
 // import { CompiledDefinition } from './CompiledDefinition';
 // import { compileGlobalUserDefinition, CompilationError } from './Compiler';
 // import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
@@ -1304,6 +1304,10 @@ export function computeSelectionMovementLookups(root: Node): SelectionMovementLo
 
   const visit = (node: Node): void => {
     switch (node.kind) {
+      case NodeKind.ArrayLiteral:
+        setForArr(node.elems, node);
+        break;
+
       case NodeKind.StreamIndirection:
         leafward.set(node, node.expr);
         rootward.set(node.expr, node);
@@ -1336,7 +1340,7 @@ export function computeSelectionMovementLookups(root: Node): SelectionMovementLo
   };
 }
 
-function beginEdit(state: State): State {
+function attemptBeginEditSelected(state: State): State {
   if (isStreamExpressionNode(state.stableSelTree.selectedNode)) {
     return {
       ...state,
@@ -1345,6 +1349,73 @@ function beginEdit(state: State): State {
   } else {
     console.log('Not starting edit because not a stream expression');
     return state;
+  }
+}
+
+function arrInsertBeforeAfter<T>(arr: ReadonlyArray<T>, idx: number, before: boolean, elem: T) {
+  const newIdx = before ? idx : idx+1;
+  return [
+    ...arr.slice(0, newIdx),
+    elem,
+    ...arr.slice(newIdx),
+  ];
+}
+
+function attemptInsertBeforeAfter(state: State, before: boolean): State {
+  const parentLookup = computeParentLookup(state.stableSelTree.mainDefinition); // TODO: memoize
+
+  let n: Node = state.stableSelTree.selectedNode;
+  while (true) {
+    const parent = parentLookup.get(n);
+    if (!parent) {
+      return state;
+    }
+
+    if (parent.kind === NodeKind.ArrayLiteral) {
+      const idx = parent.elems.indexOf(n as StreamExpressionNode);
+      const newElem: UndefinedLiteralNode = {
+        kind: NodeKind.UndefinedLiteral,
+        sid: generateStreamId(),
+      };
+      const newArrNode = {
+        ...parent,
+        elems: arrInsertBeforeAfter(parent.elems, idx, before, newElem),
+      };
+      const newMain = replaceNode(parent, newArrNode, parentLookup);
+      if (newMain.kind !== NodeKind.TreeFunctionDefinition) {
+        throw new Error();
+      }
+      return {
+        ...state,
+        editingSelTree: {
+          mainDefinition: newMain,
+          selectedNode: newElem,
+        },
+      };
+    } else if (parent.kind === NodeKind.TreeFunctionBody) {
+      const idx = parent.exprs.indexOf(n as BodyExpressionNode);
+      const newElem: UndefinedLiteralNode = {
+        kind: NodeKind.UndefinedLiteral,
+        sid: generateStreamId(),
+      };
+      const newBodyNode = {
+        ...parent,
+        exprs: arrInsertBeforeAfter(parent.exprs, idx, before, newElem),
+      };
+      const newMain = replaceNode(parent, newBodyNode, parentLookup);
+      if (newMain.kind !== NodeKind.TreeFunctionDefinition) {
+        throw new Error();
+      }
+      return {
+        ...state,
+        editingSelTree: {
+          mainDefinition: newMain,
+          selectedNode: newElem,
+        },
+      };
+    } else {
+      n = parent;
+    }
   }
 }
 
@@ -1516,10 +1587,17 @@ export function reducer(state: State, action: Action): State {
 
   if (action.type === 'BEGIN_EDIT') {
     if (!state.editingSelTree) {
-      return beginEdit(state);
+      return attemptBeginEditSelected(state);
+    }
+  } else if (action.type === 'INSERT_BEFORE') {
+    if (!state.editingSelTree) {
+      return attemptInsertBeforeAfter(state, true);
+    }
+  } else if (action.type === 'INSERT_AFTER') {
+    if (!state.editingSelTree) {
+      return attemptInsertBeforeAfter(state, false);
     }
   } else if (action.type === 'TOGGLE_EDIT') {
-    // TODO: should not allow confirming unless it is valid
     if (state.editingSelTree) {
       return updateAfterEdit({
         ...pushUndo(state),
@@ -1527,7 +1605,7 @@ export function reducer(state: State, action: Action): State {
         editingSelTree: null,
       });
     } else {
-      return beginEdit(state);
+      return attemptBeginEditSelected(state);
     }
   } else if (action.type === 'ABORT_EDIT') {
     if (state.editingSelTree) {

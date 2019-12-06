@@ -15,7 +15,8 @@ const keyMap = {
   TOGGLE_EDIT: 'enter',
   ABORT_EDIT: 'escape',
 
-  EDIT_AFTER: ['shift+enter', ','],
+  INSERT_BEFORE: 'shift+up',
+  INSERT_AFTER: 'shift+down',
 
   DELETE_SUBTREE: 'backspace',
 
