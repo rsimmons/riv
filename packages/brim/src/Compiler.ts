@@ -159,6 +159,8 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
           throw new CompilationError();
         }
 
+        // TODO: make sure that sargs, fargs, yields all match signature
+
         const streamArgIds: Array<StreamID> = [];
 
         temporaryMarked.add(node);
