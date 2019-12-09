@@ -136,13 +136,15 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
       case NodeKind.StreamReference:
         if (localStreamIds.has(node.ref)) {
           const targetExpressionNode = streamEnvironment.get(node.ref);
-          if (!targetExpressionNode) {
+          if (targetExpressionNode === null) {
+            // The reference is to a parameter, so we don't need to traverse
+          } else if (targetExpressionNode === undefined) {
             throw Error();
+          } else {
+            temporaryMarked.add(node); // not really necessary to mark node here but might as well
+            traverseStreamExpr(targetExpressionNode);
+            temporaryMarked.delete(node);
           }
-
-          temporaryMarked.add(node); // not really necessary to mark node here but might as well
-          traverseStreamExpr(targetExpressionNode);
-          temporaryMarked.delete(node);
         } else {
           if (!streamEnvironment.has(node.ref)) {
             throw new CompilationError();
