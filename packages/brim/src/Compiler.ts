@@ -1,118 +1,186 @@
-import { StreamID, FunctionID, Node } from './Tree';
-import { CompiledDefinition } from './CompiledDefinition';
+import { StreamID, FunctionID, Node, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, NodeKind, isFunctionDefinitionNode, isStreamExpressionNode, SignatureNode, streamExprReturnedId, functionExprId } from './Tree';
+import { CompiledDefinition, ConstStreamSpec, DynStreamSpec, LocalFunctionDefinition } from './CompiledDefinition';
 import Environment from './Environment';
 import { visitChildren } from './Traversal';
 
 export class CompilationError extends Error {
 };
 
-/*
-interface TraversalContext {
-  streamEnvironment: Environment<StreamCreationNode>;
-  functionEnvironment: Environment<FunctionDefinitionNode>;
-  localStreamIds: Set<StreamID>;
-  localFunctionIds: Set<FunctionID>;
-  temporaryMarkedStreamIds: Set<StreamID>;
-  permanentMarkedStreamIds: Set<StreamID>;
-  compiledDefinition: CompiledDefinition;
-}
+// A stream id can be defined by either a stream expression or a parameter. If a stream id was
+// created by a parameter, then it maps to null (because we don't need to traverse from the param).
+type CompilationStreamEnvironment = Environment<StreamID, StreamExpressionNode | null>;
+type CompilationFunctionEnvironment = Environment<FunctionID, SignatureNode>;
 
-function traverseFromStreamCreation(node: StreamCreationNode, context: TraversalContext) {
-  const {streamEnvironment, functionEnvironment, localStreamIds, temporaryMarkedStreamIds, permanentMarkedStreamIds, compiledDefinition} = context;
+function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStreamEnvironment: CompilationStreamEnvironment, outerFunctionEnvironment: CompilationFunctionEnvironment): CompiledDefinition {
+  const streamEnvironment: CompilationStreamEnvironment = new Environment(outerStreamEnvironment);
+  const functionEnvironment: CompilationFunctionEnvironment = new Environment(outerFunctionEnvironment);
+  const localStreamIds: Set<StreamID> = new Set();
+  const localFunctionIds: Set<FunctionID> = new Set();
 
-  if (permanentMarkedStreamIds.has(node.id)) {
-    return;
-  }
+  // Identify locally defined stream and function ids
+  definition.sig.streamParams.forEach((_sparam, idx) => {
+    const spid = definition.spids[idx];
 
-  if (temporaryMarkedStreamIds.has(node.id)) {
-    throw new CompilationError('graph cycle');
-  }
+    if (streamEnvironment.has(spid)) {
+      throw new Error('must be unique');
+    }
+    streamEnvironment.set(spid, null);
+    localStreamIds.add(spid);
+  });
 
-  switch (node.type) {
-    case 'StreamParameter':
-      // Nothing to do
-      break;
+  definition.sig.funcParams.forEach((fparam, idx) => {
+    const fpid = definition.fpids[idx];
+    if (functionEnvironment.has(fpid)) {
+      throw new Error('must be unique');
+    }
+    functionEnvironment.set(fpid, fparam.sig);
+    localFunctionIds.add(fpid);
+  });
 
-    case 'UndefinedLiteral':
-      compiledDefinition.constantStreamValues.push({streamId: node.id, value: undefined});
-      break;
+  const visitToFindLocals = (node: Node): void => {
+    if (isStreamExpressionNode(node)) {
+      switch (node.kind) {
+        case NodeKind.UndefinedLiteral:
+        case NodeKind.NumberLiteral:
+        case NodeKind.ArrayLiteral:
+        case NodeKind.StreamIndirection:
+          if (streamEnvironment.has(node.sid)) {
+            throw new Error('must be unique');
+          }
+          streamEnvironment.set(node.sid, node);
+          localStreamIds.add(node.sid);
+          break;
 
-    case 'NumberLiteral':
-      compiledDefinition.constantStreamValues.push({streamId: node.id, value: node.value});
-      break;
+        case NodeKind.StreamReference:
+          // ignore because it doesn't define a stream id
+          break;
 
-    case 'ArrayLiteral':
-      const itemStreamIds: Array<StreamID> = [];
+        case NodeKind.Application:
+          node.sids.forEach(sid => {
+            if (streamEnvironment.has(sid)) {
+              throw new Error('must be unique');
+            }
+            streamEnvironment.set(sid, node);
+            localStreamIds.add(sid);
+          });
+          break;
 
-      temporaryMarkedStreamIds.add(node.id);
-      for (const item of node.children) {
-        traverseFromStreamCreation(item, context);
-        itemStreamIds.push(item.id);
-      }
-      temporaryMarkedStreamIds.delete(node.id);
-
-      // An array literal is handled as a function application, where the function is Array.of() which builds an array from its arguments.
-      compiledDefinition.applications.push({
-        resultStreamId: node.id,
-        appliedFunction: 'Array_of',
-        argumentIds: itemStreamIds,
-      });
-      break;
-
-    case 'StreamReference':
-      if (localStreamIds.has(node.targetStreamId)) {
-        const targetExpressionNode = streamEnvironment.get(node.targetStreamId);
-        if (!targetExpressionNode) {
-          throw Error();
-        }
-
-        temporaryMarkedStreamIds.add(node.id);
-        traverseFromStreamCreation(targetExpressionNode, context);
-        temporaryMarkedStreamIds.delete(node.id);
-      } else {
-        if (streamEnvironment.get(node.targetStreamId) === undefined) {
+        default: {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const exhaustive: never = node; // this will cause a type error if we haven't handled all cases
           throw new Error();
         }
-        compiledDefinition.externalReferencedStreamIds.add(node.targetStreamId);
+      }
+    } else if (isFunctionDefinitionNode(node)) {
+      // A local definition
+      if (functionEnvironment.has(node.fid)) {
+        throw new Error('must be unique');
+      }
+      functionEnvironment.set(node.fid, node.sig);
+      localFunctionIds.add(node.fid);
+    }
+
+    if (!isFunctionDefinitionNode(node)) {
+      // Don't traverse into definitions, we want to stay local
+      visitChildren(node, visitToFindLocals);
+    }
+  };
+  visitChildren(definition.body, visitToFindLocals);
+
+  const constStreams: Array<ConstStreamSpec> = [];
+  const dynStreams: Array<DynStreamSpec> = [];
+  const localDefs: Array<LocalFunctionDefinition> = [];
+  const yieldIds: Array<StreamID> = [];
+  const externalReferencedStreamIds: Set<StreamID> = new Set();
+
+  // Using terminology from https://en.wikipedia.org/wiki/Topological_sorting#Depth-first_search
+  const temporaryMarked: Set<StreamExpressionNode> = new Set();
+  const permanentMarked: Set<StreamExpressionNode> = new Set();
+
+  function traverseStreamExpr(node: StreamExpressionNode): void {
+    if (permanentMarked.has(node)) {
+      return;
+    }
+
+    if (temporaryMarked.has(node)) {
+      throw new CompilationError('graph cycle');
+    }
+
+    switch (node.kind) {
+      case NodeKind.UndefinedLiteral:
+        constStreams.push({sid: node.sid, val: undefined});
+        break;
+
+      case NodeKind.NumberLiteral:
+        constStreams.push({sid: node.sid, val: node.val});
+        break;
+
+      case NodeKind.ArrayLiteral: {
+        const elemStreamIds: Array<StreamID> = [];
+
+        temporaryMarked.add(node);
+        for (const elem of node.elems) {
+          traverseStreamExpr(elem);
+          elemStreamIds.push(streamExprReturnedId(elem));
+        }
+        temporaryMarked.delete(node);
+
+        dynStreams.push({
+          kind: 'arr',
+          sid: node.sid,
+          elems: elemStreamIds,
+        });
+        break;
       }
 
-      // For now, we do an inefficient copy rather than being smart
-      compiledDefinition.applications.push({
-        resultStreamId: node.id,
-        appliedFunction: 'id',
-        argumentIds: [node.targetStreamId],
-      });
-      break;
+      case NodeKind.StreamReference:
+        if (localStreamIds.has(node.ref)) {
+          const targetExpressionNode = streamEnvironment.get(node.ref);
+          if (!targetExpressionNode) {
+            throw Error();
+          }
 
-    case 'StreamIndirection':
-      temporaryMarkedStreamIds.add(node.id);
-      traverseFromStreamCreation(node.children[0], context);
-      temporaryMarkedStreamIds.delete(node.id);
+          temporaryMarked.add(node); // not really necessary to mark node here but might as well
+          traverseStreamExpr(targetExpressionNode);
+          temporaryMarked.delete(node);
+        } else {
+          if (!streamEnvironment.has(node.ref)) {
+            throw new CompilationError();
+          }
+          externalReferencedStreamIds.add(node.ref);
+        }
+        break;
 
-      // For now, we do an inefficient copy rather than being smart
-      compiledDefinition.applications.push({
-        resultStreamId: node.id,
-        appliedFunction: 'id',
-        argumentIds: [node.children[0].id],
-      });
-      break;
+      case NodeKind.StreamIndirection:
+        temporaryMarked.add(node);
+        traverseStreamExpr(node.expr);
+        temporaryMarked.delete(node);
 
-    case 'Application':
-      // const functionNode = functionEnvironment.get(node.functionId);
-      // if (!functionNode) {
-      //   throw Error();
-      // }
+        dynStreams.push({
+          kind: 'copy',
+          sid: node.sid,
+          from: streamExprReturnedId(node.expr),
+        });
+        break;
 
-      const argumentIds: Array<AnyID> = [];
+      case NodeKind.Application:
+        const functionNode = functionEnvironment.get(functionExprId(node.func));
+        if (!functionNode) {
+          throw new CompilationError();
+        }
 
-      temporaryMarkedStreamIds.add(node.id);
+        const streamArgIds: Array<StreamID> = [];
 
-      for (const argument of node.children) {
-        if (isStreamExpressionNode(argument)) {
-          traverseFromStreamCreation(argument, context);
-          argumentIds.push(argument.id);
-        } else if (isTreeFunctionDefinitionNode(argument)) {
-          const compiledContainedDef = compileUserDefinition(argument, streamEnvironment, functionEnvironment);
+        temporaryMarked.add(node);
+
+        for (const sarg of node.sargs) {
+          traverseStreamExpr(sarg);
+          streamArgIds.push(streamExprReturnedId(sarg));
+        }
+
+        for (const farg of node.fargs) {
+          /*
+          const compiledContainedDef = compileTreeDefinition(argument, streamEnvironment, functionEnvironment);
 
           compiledContainedDef.externalReferencedStreamIds.forEach((sid) => {
             compiledDefinition.externalReferencedStreamIds.add(sid);
@@ -137,93 +205,58 @@ function traverseFromStreamCreation(node: StreamCreationNode, context: Traversal
           });
 
           argumentIds.push(argument.id);
-        } else {
-          // TODO: There are legitimate unhandled cases
-          throw new Error();
+          */
         }
-      }
 
-      temporaryMarkedStreamIds.delete(node.id);
+        temporaryMarked.delete(node);
 
-      compiledDefinition.applications.push({
-        resultStreamId: node.id,
-        appliedFunction: node.functionId,
-        argumentIds,
-      });
-      break;
+        dynStreams.push({
+          kind: 'app',
+          sids: node.sids,
+          funcId: functionExprId(node.func),
+          sargIds: streamArgIds,
+          fargIds: [],
+        });
+        break;
 
-    default:
-      throw new Error();
+      default:
+        throw new Error();
+    }
+
+    permanentMarked.add(node);
   }
 
-  permanentMarkedStreamIds.add(node.id);
-}
-
-function compileUserDefinition(definition: TreeFunctionDefinitionNode, outerStreamEnvironment: Environment<StreamCreationNode>, outerFunctionEnvironment: Environment<FunctionDefinitionNode>): CompiledDefinition {
-  const streamEnvironment: Environment<StreamCreationNode> = new Environment(outerStreamEnvironment);
-  const functionEnvironment: Environment<FunctionDefinitionNode> = new Environment(outerFunctionEnvironment);
-  const localStreamIds: Set<StreamID> = new Set();
-  const localFunctionIds: Set<FunctionID> = new Set();
-
-  // Traverse (just local scope) to find defined streams/functions
-  traverseTree(definition, {onlyWithinFunctionId: definition.id}, (node, ) => {
-    if (isStreamCreationNode(node)) {
-      if (streamEnvironment.get(node.id) !== undefined) {
-        throw new Error('must be unique');
-      }
-      streamEnvironment.set(node.id, node);
-      localStreamIds.add(node.id);
-    }
-
-    if (isTreeFunctionDefinitionNode(node) && (node.id !== definition.id)) {
-      if (functionEnvironment.get(node.id) !== undefined) {
-        throw new Error('must be unique');
-      }
-      functionEnvironment.set(node.id, node);
-      localFunctionIds.add(node.id);
-    }
-
-    return [false, node];
-  });
-
-  // Using terminology from https://en.wikipedia.org/wiki/Topological_sorting#Depth-first_search
-  const temporaryMarkedStreamIds: Set<StreamID> = new Set();
-  const permanentMarkedStreamIds: Set<StreamID> = new Set();
-  const compiledDefinition: CompiledDefinition = {
-    parameters: definition.children[0].children.map(param => ({id: param.id})),
-    constantStreamValues: [],
-    applications: [],
-    containedFunctionDefinitions: [],
-    yieldStreamId: null,
-    externalReferencedStreamIds: new Set(),
-    externalReferencedFunctionIds: new Set(),
-  };
-
-  for (const expr of definition.children[1].children) {
-    if (isStreamExpressionNode(expr)) {
-      traverseFromStreamCreation(expr, {
-        streamEnvironment,
-        functionEnvironment,
-        localStreamIds,
-        localFunctionIds,
-        temporaryMarkedStreamIds,
-        permanentMarkedStreamIds,
-        compiledDefinition,
-      });
-      compiledDefinition.yieldStreamId = expr.id; // yield the last stream expression
+  for (const node of definition.body.exprs) {
+    if (node.kind === NodeKind.YieldExpression) {
+      yieldIds[node.idx] = streamExprReturnedId(node.expr);
+    } else if (isStreamExpressionNode(node)) {
+      traverseStreamExpr(node);
     } else {
-      // TODO: eventually, this could also be a function expression
+      // TODO: this could also be a function expression
       throw new Error();
     }
   }
 
-  return compiledDefinition;
+  // TODO: verify that yieldIds doesn't have any "holes" and matches signature
+
+  return {
+    paramStreamIds: definition.spids,
+    paramFuncIds: definition.fpids,
+    constStreams,
+    dynStreams,
+    localDefs,
+    yieldIds,
+  };
 }
 
-export function compileGlobalUserDefinition(definition: TreeFunctionDefinitionNode, globalFunctionEnvironment: Environment<FunctionDefinitionNode>): CompiledDefinition {
-  const streamEnvironment: Environment<StreamCreationNode> = new Environment();
-  const functionEnvironment: Environment<FunctionDefinitionNode> = new Environment(globalFunctionEnvironment);
+export function compileGlobalTreeDefinition(definition: TreeFunctionDefinitionNode, globalFunctionEnvironment: Environment<FunctionID, FunctionDefinitionNode>): CompiledDefinition {
+  const streamEnv: CompilationStreamEnvironment = new Environment();
 
-  return compileUserDefinition(definition, streamEnvironment, functionEnvironment);
+  const compGlobalFuncEnv: CompilationFunctionEnvironment = new Environment();
+  globalFunctionEnvironment.forEach((defNode, fid) => {
+    compGlobalFuncEnv.set(fid, defNode.sig);
+  });
+  const funcEnv: CompilationFunctionEnvironment = new Environment(compGlobalFuncEnv);
+
+  return compileTreeDefinition(definition, streamEnv, funcEnv);
 }
-*/

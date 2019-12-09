@@ -87,6 +87,7 @@ export interface StreamIndirectionNode {
 export interface ApplicationNode {
   readonly kind: NodeKind.Application;
   readonly sids: ReadonlyArray<StreamID>; // array since there can be multiple yields
+  readonly reti: number; // index of which of sids is "returned" to parent
   readonly func: FunctionExpressionNode; // function being applied
   readonly sargs: ReadonlyArray<StreamExpressionNode>;
   readonly fargs: ReadonlyArray<FunctionExpressionNode>;
@@ -96,6 +97,28 @@ export interface ApplicationNode {
 export type StreamExpressionNode = UndefinedLiteralNode | NumberLiteralNode | ArrayLiteralNode | StreamReferenceNode | StreamIndirectionNode | ApplicationNode;
 export function isStreamExpressionNode(node: Node): node is StreamExpressionNode {
   return (node.kind === NodeKind.UndefinedLiteral) || (node.kind === NodeKind.NumberLiteral) || (node.kind === NodeKind.ArrayLiteral) || (node.kind === NodeKind.StreamReference) || (node.kind === NodeKind.StreamIndirection) || (node.kind === NodeKind.Application);
+}
+
+export function streamExprReturnedId(node: StreamExpressionNode): StreamID {
+  switch (node.kind) {
+    case NodeKind.UndefinedLiteral:
+    case NodeKind.NumberLiteral:
+    case NodeKind.ArrayLiteral:
+    case NodeKind.StreamIndirection:
+      return node.sid;
+
+    case NodeKind.StreamReference:
+      return node.ref;
+
+    case NodeKind.Application:
+      return node.sids[node.reti];
+
+    default: {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const exhaustive: never = node; // this will cause a type error if we haven't handled all cases
+      throw new Error();
+    }
+  }
 }
 
 /**
@@ -127,7 +150,7 @@ export interface SignatureNode {
 
 export interface YieldExpressionNode {
   readonly kind: NodeKind.YieldExpression;
-  readonly idx: Number;
+  readonly idx: number;
   readonly expr: StreamExpressionNode;
 }
 
@@ -174,6 +197,23 @@ export interface FunctionReferenceNode {
 export type FunctionExpressionNode = FunctionReferenceNode | FunctionDefinitionNode;
 export function isFunctionExpressionNode(node: Node): node is FunctionExpressionNode {
   return (node.kind === NodeKind.FunctionReference) || isFunctionDefinitionNode(node);
+}
+
+export function functionExprId(node: FunctionExpressionNode): FunctionID {
+  switch (node.kind) {
+    case NodeKind.FunctionReference:
+      return node.ref;
+
+    case NodeKind.TreeFunctionDefinition:
+    case NodeKind.NativeFunctionDefinition:
+      return node.fid;
+
+    default: {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const exhaustive: never = node; // this will cause a type error if we haven't handled all cases
+      throw new Error();
+    }
+  }
 }
 
 export type Node = DescriptionNode | SignatureNode | TreeFunctionBodyNode | BodyExpressionNode | SignatureStreamParameterNode | SignatureFunctionParameterNode | SignatureYieldNode;

@@ -247,6 +247,7 @@ const ExpressionChooser: React.FC<{initNode: Node, envLookups: EnvironmentLookup
           const n: ApplicationNode = {
             kind: NodeKind.Application,
             sids: choice.funcDefNode.sig.yields.map(() => generateStreamId()),
+            reti: 0,
             func: {
               kind: NodeKind.FunctionReference,
               ref: choice.funcDefNode.fid,

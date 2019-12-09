@@ -1,8 +1,8 @@
 import genuid from './uid';
 import { State, ProgramInfo, SelTree } from './State';
 import { StreamID, FunctionID, generateStreamId, generateFunctionId, NodeKind, Node, TreeFunctionDefinitionNode, FunctionDefinitionNode, isFunctionDefinitionNode, StreamExpressionNode, NativeFunctionDefinitionNode, isStreamExpressionNode, UndefinedLiteralNode, DescriptionNode, BodyExpressionNode } from './Tree';
-// import { CompiledDefinition } from './CompiledDefinition';
-// import { compileGlobalUserDefinition, CompilationError } from './Compiler';
+import { CompiledDefinition } from './CompiledDefinition';
+import { compileGlobalTreeDefinition, CompilationError } from './Compiler';
 // import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
 // import { createLiveFunction } from './LiveFunction';
 import Environment from './Environment';
@@ -592,13 +592,31 @@ function fixupDanglingRefs(selTree: SelTree, nativeFunctions: ReadonlyArray<Nati
 }
 
 // NOTE: May throw a compiler exception
-function fixupAndCompileTree(selTree: SelTree, nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>): [SelTree, undefined] {
+function fixupAndCompileTree(selTree: SelTree, nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>): [SelTree, CompiledDefinition] {
   const fixedSelTree = fixupDanglingRefs(selTree, nativeFunctions);
 
-  // TODO: compile (may throw error)
+  // NOTE: We could avoid repeating this work, but this is sort of temporary anyways
+  const globalFunctionEnvironment: Environment<FunctionID, FunctionDefinitionNode> = new Environment();
+  for (const nf of nativeFunctions) {
+    globalFunctionEnvironment.set(nf.fid, nf);
+  }
+
+  let compiledDefinition: CompiledDefinition;
+  try {
+    compiledDefinition = compileGlobalTreeDefinition(fixedSelTree.mainDefinition, globalFunctionEnvironment);
+  } catch (e) {
+    if (e instanceof CompilationError) {
+      console.log('COMPILATION ERROR', e.message);
+      throw e;
+    } else {
+      throw e;
+    }
+  }
+
+  console.log('COMPILED DEF', compiledDefinition);
 
   // TODO: return new tree and compiled definition
-  return [fixedSelTree, undefined];
+  return [fixedSelTree, compiledDefinition];
 }
 
 function updateLiveExecution(state: State): State {
@@ -870,6 +888,7 @@ const INITIAL_MAIN: TreeFunctionDefinitionNode = {
         expr: {
           kind: NodeKind.Application,
           sids: [generateStreamId()],
+          reti: 0,
           func: {
             kind: NodeKind.FunctionReference,
             ref: 'mouseDown',
@@ -881,6 +900,7 @@ const INITIAL_MAIN: TreeFunctionDefinitionNode = {
       {
         kind: NodeKind.Application,
         sids: [generateStreamId()],
+        reti: 0,
         func: {
           kind: NodeKind.FunctionReference,
           ref: 'showString',
@@ -889,6 +909,7 @@ const INITIAL_MAIN: TreeFunctionDefinitionNode = {
           {
             kind: NodeKind.Application,
             sids: [generateStreamId()],
+            reti: 0,
             func: {
               kind: NodeKind.FunctionReference,
               ref: 'ifte',

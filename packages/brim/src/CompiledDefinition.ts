@@ -1,35 +1,23 @@
 import { StreamID, FunctionID } from './Tree';
 
-interface UndefinedLiteralSpec {
-  readonly kind: 'und';
+export interface ConstStreamSpec {
   readonly sid: StreamID;
+  readonly val: any;
 }
 
-interface NumberLiteralSpec {
-  readonly kind: 'num';
-  readonly sid: StreamID;
-  readonly val: number;
-}
-
-interface ArrayLiteralSpec {
+export interface ArrayBuildSpec {
   readonly kind: 'arr';
   readonly sid: StreamID;
-  readonly elemIds: ReadonlyArray<StreamID>;
+  readonly elems: ReadonlyArray<StreamID>;
 }
 
-interface ParamSpec {
-  readonly kind: 'param';
+export interface CopySpec {
+  readonly kind: 'copy';
   readonly sid: StreamID;
-  readonly idx: number;
+  readonly from: StreamID;
 }
 
-interface RefSpec {
-  readonly kind: 'ref';
-  readonly sid: StreamID;
-  readonly ref: StreamID;
-}
-
-interface AppSpec {
+export interface ApplicationSpec {
   readonly kind: 'app';
   readonly sids: ReadonlyArray<StreamID>;
   readonly funcId: FunctionID;
@@ -37,15 +25,18 @@ interface AppSpec {
   readonly fargIds: ReadonlyArray<FunctionID>;
 }
 
-type StreamSpec = UndefinedLiteralSpec | NumberLiteralSpec | ArrayLiteralSpec | AppSpec;
+export type DynStreamSpec = ArrayBuildSpec | CopySpec | ApplicationSpec;
 
-interface LocalFunctionDefinition {
+export interface LocalFunctionDefinition {
   readonly fid: FunctionID;
   readonly def: CompiledDefinition;
 }
 
 export interface CompiledDefinition {
-  streamSpecs: ReadonlyArray<StreamSpec>;
-  localDefs: ReadonlyArray<LocalFunctionDefinition>;
-  yieldIds: ReadonlyArray<StreamID>;
+  readonly paramStreamIds: ReadonlyArray<StreamID>;
+  readonly paramFuncIds: ReadonlyArray<FunctionID>;
+  readonly constStreams: ReadonlyArray<ConstStreamSpec>;
+  readonly dynStreams: ReadonlyArray<DynStreamSpec>;
+  readonly localDefs: ReadonlyArray<LocalFunctionDefinition>;
+  readonly yieldIds: ReadonlyArray<StreamID>;
 }
