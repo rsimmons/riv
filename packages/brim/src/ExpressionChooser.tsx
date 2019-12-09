@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './ExpressionChooser.css';
-import { generateStreamId, Node, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, SignatureStreamParameterNode, ApplicationNode, SignatureFunctionParameterNode, generateFunctionId, StreamID, ArrayLiteralNode, UndefinedLiteralNode } from './Tree';
+import { generateStreamId, Node, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, SignatureStreamParameterNode, ApplicationNode, SignatureFunctionParameterNode, generateFunctionId, StreamID, ArrayLiteralNode, UndefinedLiteralNode, streamExprReturnedId, streamExprReturnedDesc } from './Tree';
 import { fuzzy_match } from './vendor/fts_fuzzy_match';
 import { EnvironmentLookups, StreamDefinition } from './EditReducer';
 
@@ -206,14 +206,16 @@ const ExpressionChooser: React.FC<{initNode: Node, envLookups: EnvironmentLookup
         case 'undefined':
           newNode = {
             kind: NodeKind.UndefinedLiteral,
-            sid: generateStreamId(),
+            sid: streamExprReturnedId(initNode),
+            desc: streamExprReturnedDesc(initNode),
           }
           break;
 
         case 'number':
           newNode = {
             kind: NodeKind.NumberLiteral,
-            sid: generateStreamId(),
+            sid: streamExprReturnedId(initNode),
+            desc: streamExprReturnedDesc(initNode),
             val: choice.value,
           }
           break;
