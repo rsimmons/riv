@@ -1,5 +1,5 @@
 import { StreamID, FunctionID, Node, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, NodeKind, isFunctionDefinitionNode, isStreamExpressionNode, SignatureNode, streamExprReturnedId, functionExprId } from './Tree';
-import { CompiledDefinition, ConstStreamSpec, DynStreamSpec, LocalFunctionDefinition } from './CompiledDefinition';
+import { CompiledDefinition, ConstStreamSpec, LocalFunctionDefinition, AppStreamSpec } from './CompiledDefinition';
 import Environment from './Environment';
 import { visitChildren } from './Traversal';
 
@@ -43,7 +43,6 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
         case NodeKind.UndefinedLiteral:
         case NodeKind.NumberLiteral:
         case NodeKind.ArrayLiteral:
-        case NodeKind.StreamIndirection:
           if (streamEnvironment.has(node.sid)) {
             throw new Error('must be unique');
           }
@@ -56,12 +55,12 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
           break;
 
         case NodeKind.Application:
-          node.sids.forEach(sid => {
-            if (streamEnvironment.has(sid)) {
+          node.dsids.forEach(dsid => {
+            if (streamEnvironment.has(dsid.sid)) {
               throw new Error('must be unique');
             }
-            streamEnvironment.set(sid, node);
-            localStreamIds.add(sid);
+            streamEnvironment.set(dsid.sid, node);
+            localStreamIds.add(dsid.sid);
           });
           break;
 
@@ -88,7 +87,7 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
   visitChildren(definition.body, visitToFindLocals);
 
   const constStreams: Array<ConstStreamSpec> = [];
-  const dynStreams: Array<DynStreamSpec> = [];
+  const appStreams: Array<AppStreamSpec> = [];
   const localDefs: Array<LocalFunctionDefinition> = [];
   const yieldIds: Array<StreamID> = [];
   const externalReferencedStreamIds: Set<StreamID> = new Set();
@@ -125,10 +124,11 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
         }
         temporaryMarked.delete(node);
 
-        dynStreams.push({
-          kind: 'arr',
-          sid: node.sid,
-          elems: elemStreamIds,
+        appStreams.push({
+          sids: [node.sid],
+          funcId: 'Array_of',
+          sargIds: elemStreamIds,
+          fargIds: [],
         });
         break;
       }
@@ -151,18 +151,6 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
           }
           externalReferencedStreamIds.add(node.ref);
         }
-        break;
-
-      case NodeKind.StreamIndirection:
-        temporaryMarked.add(node);
-        traverseStreamExpr(node.expr);
-        temporaryMarked.delete(node);
-
-        dynStreams.push({
-          kind: 'copy',
-          sid: node.sid,
-          from: streamExprReturnedId(node.expr),
-        });
         break;
 
       case NodeKind.Application:
@@ -212,9 +200,8 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
 
         temporaryMarked.delete(node);
 
-        dynStreams.push({
-          kind: 'app',
-          sids: node.sids,
+        appStreams.push({
+          sids: node.dsids.map(dsid => dsid.sid),
           funcId: functionExprId(node.func),
           sargIds: streamArgIds,
           fargIds: [],
@@ -245,7 +232,7 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
     paramStreamIds: definition.spids,
     paramFuncIds: definition.fpids,
     constStreams,
-    dynStreams,
+    appStreams,
     localDefs,
     yieldIds,
   };

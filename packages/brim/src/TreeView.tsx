@@ -1,12 +1,12 @@
 import React, { createContext, useContext, useState } from 'react';
-import { StreamID, FunctionID, Node, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, isFunctionExpressionNode, TreeFunctionBodyNode, FunctionExpressionNode, isFunctionDefinitionNode } from './Tree';
+import { StreamID, FunctionID, Node, DescriptionNode, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, isFunctionExpressionNode, TreeFunctionBodyNode, FunctionExpressionNode, isFunctionDefinitionNode, UndefinedLiteralNode, NumberLiteralNode } from './Tree';
 import ExpressionChooser from './ExpressionChooser';
 import './TreeView.css';
 import { EnvironmentLookups } from './EditReducer';
 
 const NORMAL_BOX_COLOR = '#d8d8d8';
 const STREAM_REFERENCE_BOX_COLOR = '#ccd9e8';
-const STREAM_INDIRECTION_BOX_COLOR = '#efd2b5';
+const STREAM_DESC_BOX_COLOR = '#9cbce0';
 
 export interface TreeViewContextData {
   selectedNode: Node;
@@ -80,6 +80,35 @@ function useSelectable(node: Node | null): UseSelectableResult {
   };
 }
 
+const DescriptionNodeView: React.FC<{node: DescriptionNode}> = ({node}) => {
+  const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node);
+  return (
+    <div className={selectionClasses.concat(['TreeView-simple-node', 'TreeView-common-padding']).join(' ')} {...selectionHandlers} style={{background: STREAM_DESC_BOX_COLOR}}>{node.text}</div>
+  );
+}
+
+const SingleChildNodeView: React.FC<{node: Node, contents: React.ReactNode, boxColor: string, child: React.ReactNode}> = ({node, contents, boxColor, child}) => {
+  const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node);
+
+  return (
+    <div style={{display: 'flex'}}>
+      <div className={selectionClasses.concat(['TreeView-simple-node', 'TreeView-common-padding']).join(' ')} {...selectionHandlers} style={{background: boxColor}}>{contents}</div>
+      <div className="TreeView-appish-node-child-cxn-triangle"><div /></div>
+      {child}
+    </div>
+  );
+};
+
+const ChildlessStreamNodeView: React.FC<{node: UndefinedLiteralNode | NumberLiteralNode, contents: React.ReactNode, boxColor: string}> = ({node, contents, boxColor}) => {
+  const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node);
+  return (
+    <div style={{display: 'flex'}}>
+      {node.desc && <DescriptionNodeView node={node.desc} />}
+      <div className={selectionClasses.concat(['TreeView-simple-node', 'TreeView-common-padding']).join(' ')} {...selectionHandlers} style={{background: boxColor}}>{contents}</div>
+    </div>
+  );
+};
+
 interface ChildView {
   key: string | number | undefined;
   name: string | undefined;
@@ -93,26 +122,6 @@ interface AppishNodeProps {
   streamChildren: ReadonlyArray<ChildView>;
   functionChildren: ReadonlyArray<ChildView>;
 }
-
-const SimpleNodeView: React.FC<{node: Node, contents: React.ReactNode, boxColor: string}> = ({node, contents, boxColor}) => {
-  const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node);
-
-  return (
-    <div className={selectionClasses.concat(['TreeView-simple-node', 'TreeView-common-padding']).join(' ')} {...selectionHandlers} style={{background: boxColor}}>{contents}</div>
-  );
-};
-
-const SingleChildNodeView: React.FC<{node: Node, contents: React.ReactNode, boxColor: string, child: React.ReactNode}> = ({node, contents, boxColor, child}) => {
-  const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node);
-
-  return (
-    <div style={{display: 'flex'}}>
-      <div className={selectionClasses.concat(['TreeView-simple-node', 'TreeView-common-padding']).join(' ')} {...selectionHandlers} style={{background: boxColor}}>{contents}</div>
-      <div className="TreeView-appish-node-child-cxn-triangle"><div /></div>
-      {child}
-    </div>
-  );
-};
 
 const AppishNodeView: React.FC<AppishNodeProps> = ({node, name, boxColor, streamChildren, functionChildren}) => {
   const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node);
@@ -156,13 +165,15 @@ const StreamExpressionView: React.FC<{node: StreamExpressionNode}> = ({ node }) 
     throw new Error();
   }
 
+  const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node);
+
   const nodeView: JSX.Element = (() => {
     switch (node.kind) {
       case NodeKind.UndefinedLiteral:
-        return <SimpleNodeView node={node} contents={<span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>} boxColor={'red'} />
+        return <ChildlessStreamNodeView node={node} contents={<span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>} boxColor={'red'} />
 
       case NodeKind.NumberLiteral:
-        return <SimpleNodeView node={node} contents={node.val.toString()} boxColor="#cce8cc" />
+        return <ChildlessStreamNodeView node={node} contents={node.val.toString()} boxColor="#cce8cc" />
 
       case NodeKind.ArrayLiteral:
         return <AppishNodeView node={node} name="[ ]" boxColor={NORMAL_BOX_COLOR} streamChildren={node.elems.map((elem, idx) => ({key: idx, name: undefined, child: <StreamExpressionView node={elem} />}))} functionChildren={[]} />
@@ -233,12 +244,10 @@ const StreamExpressionView: React.FC<{node: StreamExpressionNode}> = ({ node }) 
         }
 
         const displayedDesc: string = streamDef.desc ? streamDef.desc.text : ('<stream ' + node.ref + '>');
-        return <SimpleNodeView node={node} contents={displayedDesc} boxColor={STREAM_REFERENCE_BOX_COLOR} />
-      }
 
-      case NodeKind.StreamIndirection: {
-        const displayedDesc: string = node.desc ? node.desc.text : ('<stream ' + node.sid + '>');
-        return <SingleChildNodeView node={node} contents={displayedDesc} boxColor={STREAM_INDIRECTION_BOX_COLOR} child={<StreamExpressionView node={node.expr} />} />;
+        return (
+          <div className={selectionClasses.concat(['TreeView-simple-node', 'TreeView-common-padding']).join(' ')} {...selectionHandlers} style={{background: STREAM_REFERENCE_BOX_COLOR}}>{displayedDesc}</div>
+        );
       }
 
       default: {

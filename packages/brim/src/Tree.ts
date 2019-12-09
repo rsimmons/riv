@@ -31,7 +31,6 @@ export enum NodeKind {
   NumberLiteral = 'num',
   ArrayLiteral = 'arr',
   StreamReference = 'sref',
-  StreamIndirection = 'sind',
   Application = 'app',
   FunctionReference = 'fref',
   SignatureStreamParameter = 'sparam',
@@ -58,17 +57,20 @@ export interface DescriptionNode {
 export interface UndefinedLiteralNode {
   readonly kind: NodeKind.UndefinedLiteral;
   readonly sid: StreamID;
+  readonly desc?: DescriptionNode;
 }
 
 export interface NumberLiteralNode {
   readonly kind: NodeKind.NumberLiteral;
   readonly sid: StreamID;
+  readonly desc?: DescriptionNode;
   readonly val: number;
 }
 
 export interface ArrayLiteralNode {
   readonly kind: NodeKind.ArrayLiteral;
   readonly sid: StreamID;
+  readonly desc?: DescriptionNode;
   readonly elems: ReadonlyArray<StreamExpressionNode>;
 }
 
@@ -77,16 +79,14 @@ export interface StreamReferenceNode {
   readonly ref: StreamID; // the stream id we are referencing
 }
 
-export interface StreamIndirectionNode {
-  readonly kind: NodeKind.StreamIndirection;
+export interface DescribedStreamID {
   readonly sid: StreamID;
   readonly desc?: DescriptionNode;
-  readonly expr: StreamExpressionNode;
 }
 
 export interface ApplicationNode {
   readonly kind: NodeKind.Application;
-  readonly sids: ReadonlyArray<StreamID>; // array since there can be multiple yields
+  readonly dsids: ReadonlyArray<DescribedStreamID>; // array since there can be multiple yields
   readonly reti: number; // index of which of sids is "returned" to parent
   readonly func: FunctionExpressionNode; // function being applied
   readonly sargs: ReadonlyArray<StreamExpressionNode>;
@@ -94,9 +94,9 @@ export interface ApplicationNode {
 }
 
 // Stream parameter definitions (on the "inside" of a function def) are _not_ expressions.
-export type StreamExpressionNode = UndefinedLiteralNode | NumberLiteralNode | ArrayLiteralNode | StreamReferenceNode | StreamIndirectionNode | ApplicationNode;
+export type StreamExpressionNode = UndefinedLiteralNode | NumberLiteralNode | ArrayLiteralNode | StreamReferenceNode | ApplicationNode;
 export function isStreamExpressionNode(node: Node): node is StreamExpressionNode {
-  return (node.kind === NodeKind.UndefinedLiteral) || (node.kind === NodeKind.NumberLiteral) || (node.kind === NodeKind.ArrayLiteral) || (node.kind === NodeKind.StreamReference) || (node.kind === NodeKind.StreamIndirection) || (node.kind === NodeKind.Application);
+  return (node.kind === NodeKind.UndefinedLiteral) || (node.kind === NodeKind.NumberLiteral) || (node.kind === NodeKind.ArrayLiteral) || (node.kind === NodeKind.StreamReference) || (node.kind === NodeKind.Application);
 }
 
 export function streamExprReturnedId(node: StreamExpressionNode): StreamID {
@@ -104,14 +104,34 @@ export function streamExprReturnedId(node: StreamExpressionNode): StreamID {
     case NodeKind.UndefinedLiteral:
     case NodeKind.NumberLiteral:
     case NodeKind.ArrayLiteral:
-    case NodeKind.StreamIndirection:
       return node.sid;
 
     case NodeKind.StreamReference:
       return node.ref;
 
     case NodeKind.Application:
-      return node.sids[node.reti];
+      return node.dsids[node.reti].sid;
+
+    default: {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const exhaustive: never = node; // this will cause a type error if we haven't handled all cases
+      throw new Error();
+    }
+  }
+}
+
+export function streamExprReturnedDesc(node: StreamExpressionNode): DescriptionNode | undefined {
+  switch (node.kind) {
+    case NodeKind.UndefinedLiteral:
+    case NodeKind.NumberLiteral:
+    case NodeKind.ArrayLiteral:
+      return node.desc;
+
+    case NodeKind.StreamReference:
+      return undefined;
+
+    case NodeKind.Application:
+      return node.dsids[node.reti].desc;
 
     default: {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
