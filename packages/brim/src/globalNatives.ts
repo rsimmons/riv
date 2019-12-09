@@ -50,7 +50,7 @@ const nativeFunctions: Array<[string, string, SignatureNode, Function]> = [
   ['cos', 'cosine', simpleSig(['_v'], true), Math.cos],
 
   // dom/browser
-  ['showString', 'show value', simpleSig(['_v'], true), showString],
+  ['showString', 'show value', simpleSig(['_v'], false), showString],
   ['animationTime', 'animation time', simpleSig([], true), animationTime],
   ['mouseDown', 'is mouse down', simpleSig([], true), mouseDown],
   ['mousePosition', 'mouse position', simpleSig([], true), mousePosition],
