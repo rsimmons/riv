@@ -150,7 +150,7 @@ const ExpressionChooser: React.FC<{initNode: Node, envLookups: EnvironmentLookup
 
     const namedStreams: Array<[string, StreamDefinition]> = [];
     streamEnv.forEach((sdef, ) => {
-      if (sdef.desc) {
+      if (sdef.desc && !(isStreamExpressionNode(initNode) && (sdef.sid === streamExprReturnedId(initNode)))) {
         namedStreams.push([sdef.desc.text, sdef]);
       }
     });
