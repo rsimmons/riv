@@ -65,6 +65,31 @@ const nativeFunctions: Array<[string, string, SignatureNode, Function]> = [
   ['vec2len', 'length of 2d vector', simpleSig(['_v'], true), vec2dlen],
   ['vec2sqgrid', 'square grid of 2d vectors', simpleSig(['count', 'size'], true), vec2sqgrid],
 
+  // multiple yields
+  ['trig', 'trig', {
+    kind: NodeKind.Signature,
+    streamParams: [
+      {
+        kind: NodeKind.SignatureStreamParameter,
+      },
+    ],
+    funcParams: [],
+    yields: [
+      {
+        kind: NodeKind.SignatureYield,
+        desc: {kind: NodeKind.Description, text: 'sin'},
+      },
+      {
+        kind: NodeKind.SignatureYield,
+        desc: {kind: NodeKind.Description, text: 'cos'},
+      },
+      {
+        kind: NodeKind.SignatureYield,
+        desc: {kind: NodeKind.Description, text: 'tan'},
+      },
+    ],
+  }, (v: number) => [Math.sin(v), Math.cos(v), Math.tan(v)]],
+
   // higher-order
   ['streamMap', 'map', {
     kind: NodeKind.Signature,
