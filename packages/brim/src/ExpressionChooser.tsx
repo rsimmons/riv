@@ -201,21 +201,35 @@ const ExpressionChooser: React.FC<{initNode: Node, envLookups: EnvironmentLookup
     const choice = state.choices[state.index];
 
     if (isStreamExpressionNode(initNode)) {
+      // note that this is different than streamExprReturnedId, because we handle stream references differently
+      let newSid: StreamID;
+      if ('sid' in initNode) {
+        newSid = initNode.sid;
+      } else if (initNode.kind === NodeKind.Application) {
+        newSid = initNode.dsids[initNode.reti].sid;
+      } else if (initNode.kind === NodeKind.StreamReference) {
+        newSid = generateStreamId();
+      } else {
+        throw new Error();
+      }
+
+      const newDesc = streamExprReturnedDesc(initNode);
+
       let newNode: Node;
       switch (choice.type) {
         case 'undefined':
           newNode = {
             kind: NodeKind.UndefinedLiteral,
-            sid: streamExprReturnedId(initNode),
-            desc: streamExprReturnedDesc(initNode),
+            sid: newSid,
+            desc: newDesc,
           }
           break;
 
         case 'number':
           newNode = {
             kind: NodeKind.NumberLiteral,
-            sid: streamExprReturnedId(initNode),
-            desc: streamExprReturnedDesc(initNode),
+            sid: newSid,
+            desc: newDesc,
             val: choice.value,
           }
           break;
