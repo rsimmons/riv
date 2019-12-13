@@ -1,12 +1,12 @@
-import React, { createContext, useContext, useState } from 'react';
-import { StreamID, FunctionID, Node, DescriptionNode, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, isFunctionExpressionNode, TreeFunctionBodyNode, FunctionExpressionNode, isFunctionDefinitionNode, UndefinedLiteralNode, NumberLiteralNode } from './Tree';
+import React, { createContext, useContext, useState, useRef, createRef, MutableRefObject, RefObject, useLayoutEffect, CSSProperties } from 'react';
+import { StreamID, FunctionID, Node, DescriptionNode, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, isFunctionExpressionNode, TreeFunctionBodyNode, FunctionExpressionNode, isFunctionDefinitionNode, UndefinedLiteralNode, NumberLiteralNode, YieldExpressionNode, ApplicationNode, FunctionReferenceNode, StreamReferenceNode } from './Tree';
 import ExpressionChooser from './ExpressionChooser';
 import './TreeView.css';
 import { EnvironmentLookups } from './EditReducer';
 
 const NORMAL_BOX_COLOR = '#d8d8d8';
-const STREAM_REFERENCE_BOX_COLOR = '#ccd9e8';
-const STREAM_DESC_BOX_COLOR = '#9cbce0';
+const STREAM_REFERENCE_BOX_COLOR = '#a1cdff';
+const STREAM_DESC_BOX_COLOR = '#d2e6ff';
 
 export interface TreeViewContextData {
   selectedNode: Node;
@@ -80,10 +80,47 @@ function useSelectable(node: Node | null): UseSelectableResult {
   };
 }
 
-const DescriptionNodeView: React.FC<{node: DescriptionNode}> = ({node}) => {
+const CXN_COLOR = '#999';
+const CXN_MIN_LENGTH = '0.3em';
+
+const SimpleConnection: React.FC<{connected: boolean}> = ({connected}) => {
+  if (connected) {
+    return (
+      <div style={{minWidth: CXN_MIN_LENGTH, display: 'flex', flexDirection: 'column'}}>
+        <div style={{flex: '1'}} />
+        <div style={{flex: '0 0 1px', background: CXN_COLOR}} />
+        <div style={{flex: '1'}} />
+      </div>
+    );
+  } else {
+    return null;
+  }
+}
+
+// Used by "simple" stream nodes that just need to report their attachment offset as their vertical midpoint
+// TODO: Really, children should be reporting their attachment offset AND their height? I think the way it is now,
+// there could be a bug where a child's attachment offset stays the same but its height changes, and this isn't accounted for.
+function useReportSimpleAttachmentOffset(reportAttachmentOffset?: (offset: number) => void): RefObject<HTMLDivElement> {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (reportAttachmentOffset) {
+      if (!ref.current) {
+        throw new Error();
+      }
+      const rect = ref.current.getBoundingClientRect();
+      reportAttachmentOffset(0.5*(rect.bottom - rect.top));
+    }
+  });
+
+  return ref;
+}
+
+const DescriptionNodeView: React.FC<{node: DescriptionNode, reportAttachmentOffset?: (offset: number) => void}> = ({node, reportAttachmentOffset}) => {
   const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node);
+  const ref = useReportSimpleAttachmentOffset(reportAttachmentOffset);
   return (
-    <div className={selectionClasses.concat(['TreeView-simple-node', 'TreeView-common-padding']).join(' ')} {...selectionHandlers} style={{background: STREAM_DESC_BOX_COLOR}}>{node.text}</div>
+    <div ref={ref} className={selectionClasses.concat(['TreeView-simple-node', 'TreeView-common-padding']).join(' ')} {...selectionHandlers} style={{background: STREAM_DESC_BOX_COLOR}}>{node.text}&nbsp;=</div>
   );
 }
 
@@ -99,67 +136,269 @@ const SingleChildNodeView: React.FC<{node: Node, contents: React.ReactNode, boxC
   );
 };
 
-const ChildlessStreamNodeView: React.FC<{node: UndefinedLiteralNode | NumberLiteralNode, contents: React.ReactNode, boxColor: string}> = ({node, contents, boxColor}) => {
+const ChildlessStreamNodeView: React.FC<{node: UndefinedLiteralNode | NumberLiteralNode, contents: React.ReactNode, boxColor: string, connected: boolean, reportAttachmentOffset?: (offset: number) => void}> = ({node, contents, boxColor, connected, reportAttachmentOffset}) => {
   const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node);
+  const ref = useReportSimpleAttachmentOffset(reportAttachmentOffset);
+
   return (
-    <div style={{display: 'flex'}}>
+    <div ref={ref} style={{display: 'flex'}}>
+      <SimpleConnection connected={connected} />
       {node.desc && <DescriptionNodeView node={node.desc} />}
       <div className={selectionClasses.concat(['TreeView-simple-node', 'TreeView-common-padding']).join(' ')} {...selectionHandlers} style={{background: boxColor}}>{contents}</div>
     </div>
   );
 };
 
-interface ChildView {
+const StreamReferenceView: React.FC<{node: StreamReferenceNode, connected: boolean, reportAttachmentOffset?: (offset: number) => void}> = ({node, connected, reportAttachmentOffset}) => {
+  const ctxData = useContext(TreeViewContext);
+  if (!ctxData) {
+    throw new Error();
+  }
+  const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node);
+  const ref = useReportSimpleAttachmentOffset(reportAttachmentOffset);
+
+  const nearestDef = ctxData.envLookups.nodeToNearestTreeDef.get(node);
+  if (!nearestDef) {
+    throw new Error();
+  }
+  const nodeStreamEnv = ctxData.envLookups.treeDefToStreamEnv.get(nearestDef);
+  if (!nodeStreamEnv) {
+    throw new Error();
+  }
+  const streamDef = nodeStreamEnv.get(node.ref);
+  if (!streamDef) {
+    throw new Error();
+  }
+
+  const displayedDesc: string = streamDef.desc ? streamDef.desc.text : ('<stream ' + node.ref + '>');
+
+  return (
+    <div ref={ref} style={{display: 'flex'}}>
+      <SimpleConnection connected={connected} />
+      <div className={selectionClasses.concat(['TreeView-simple-node', 'TreeView-common-padding']).join(' ')} {...selectionHandlers} style={{background: STREAM_REFERENCE_BOX_COLOR}}>{displayedDesc}</div>
+    </div>
+  );
+};
+
+interface AppishNodeChild<T> {
   key: string | number | undefined;
   name: string | undefined;
-  child: React.ReactNode;
+  node: T;
 }
 
 interface AppishNodeProps {
   node: Node | null;
   name: React.ReactNode;
   boxColor: string;
-  streamChildren: ReadonlyArray<ChildView>;
-  functionChildren: ReadonlyArray<ChildView>;
+  streamArgs: ReadonlyArray<AppishNodeChild<StreamExpressionNode>>;
+  functionArgs: ReadonlyArray<AppishNodeChild<FunctionDefinitionNode>>;
+  yields: ReadonlyArray<AppishNodeChild<DescriptionNode | undefined>>;
+  retIdx: number; // which yield is connected to parent
+  connected: boolean;
+  reportAttachmentOffset?: (offset: number) => void;
 }
 
-const AppishNodeView: React.FC<AppishNodeProps> = ({node, name, boxColor, streamChildren, functionChildren}) => {
+const AppishNodeView: React.FC<AppishNodeProps> = ({node, name, boxColor, streamArgs, functionArgs, yields, retIdx, connected, reportAttachmentOffset}) => {
+  let streamLabels: ReadonlyArray<string | undefined>;
+  let streamChildAtBar: boolean;
+  if ((streamArgs.length === 1) && (streamArgs[0].name === undefined)) {
+    streamChildAtBar = true;
+    streamLabels = [];
+  } else {
+    streamChildAtBar = false;
+    streamLabels = streamArgs.map(({name}) => name);
+  }
+
+  let yieldLabels: ReadonlyArray<string | undefined>;
+  let yieldAtBar: boolean;
+  if ((yields.length === 1) && (yields[0].name === undefined)) {
+    yieldAtBar = true;
+    yieldLabels = [];
+  } else {
+    yieldAtBar = false;
+    yieldLabels = yields.map(({name}) => name);
+  }
+
+  const nameBarRef = useRef<HTMLDivElement>(null);
+  const yieldDescsRef = useRef<HTMLDivElement>(null);
+  const yieldLabelsRef = useRef<HTMLDivElement>(null);
+  const streamLabelsRef = useRef<HTMLDivElement>(null);
+  const streamChildrenRef = useRef<HTMLDivElement>(null);
+
+  const [reportedStreamChildAttachmentOffsets, setReportedStreamChildAttachmentOffsets] = useState<Array<number>>([]);
+
+  useLayoutEffect(() => {
+    const getHeight = (n: any) => {
+      if (!(n instanceof HTMLElement)) {
+        throw new Error();
+      }
+      const rect = n.getBoundingClientRect();
+      return rect.bottom - rect.top;
+    };
+
+    const setTopMargin = (cn: ChildNode, px: number) => {
+      if (!(cn instanceof HTMLElement)) {
+        throw new Error();
+      }
+      cn.style.marginTop = (px + 'px');
+    };
+
+    const childrenToArr = (elem: HTMLDivElement) => [...elem.childNodes].map(cn => {
+      if (!(cn instanceof HTMLElement)) {
+        throw new Error();
+      }
+      return cn;
+    });
+
+    if (!nameBarRef.current || !yieldDescsRef.current || !streamChildrenRef.current) {
+      throw new Error();
+    }
+    const yieldDescElems = childrenToArr(yieldDescsRef.current);
+    const streamChildElems = childrenToArr(streamChildrenRef.current);
+
+    const nameBarHeight = getHeight(nameBarRef.current);
+    const nameBarAttachmentOffset = 0.5*nameBarHeight;
+
+    const yieldDescHeights = yieldDescElems.map(elem => getHeight(elem));
+    const streamChildrenHeights = streamChildElems.map(elem => getHeight(elem));
+
+    const streamChildAttachmentOffsets = streamChildrenHeights.map((_, idx) => reportedStreamChildAttachmentOffsets[idx] || 0);
+
+    const yieldAtBarMinAttachmentOffset = yieldAtBar ? 0.5*yieldDescHeights[0] : 0;
+    const streamChildAtBarMinAttachmentOffset = streamChildAtBar ? streamChildAttachmentOffsets[0] : 0;
+    const lrBarMinAttachmentOffset = Math.max(yieldAtBarMinAttachmentOffset, streamChildAtBarMinAttachmentOffset);
+    const nameBarSpacing = Math.max(lrBarMinAttachmentOffset - nameBarAttachmentOffset, 0);
+
+    setTopMargin(nameBarRef.current, nameBarSpacing);
+
+    const SPACING = 5;
+
+    if (yieldAtBar) {
+      setTopMargin(yieldDescElems[0], nameBarSpacing + nameBarAttachmentOffset - 0.5*yieldDescHeights[0]);
+      if (reportAttachmentOffset) {
+        reportAttachmentOffset(nameBarSpacing + nameBarAttachmentOffset);
+      }
+    } else if (yieldLabels.length > 0) {
+      if (!yieldLabelsRef.current) {
+        throw new Error();
+      }
+      const yieldLabelElems = childrenToArr(yieldLabelsRef.current);
+
+      let leftY = 0;
+      let rightY = nameBarSpacing + nameBarHeight;
+
+      yieldDescHeights.forEach((yieldDescHeight, idx) => {
+        const yieldLabelHeight = getHeight(yieldLabelElems[idx]);
+
+        const spacing = (idx > 0) ? SPACING : 0;
+        const diff = (rightY + 0.5*yieldLabelHeight) - (leftY + 0.5*yieldDescHeight);
+        if (diff > 0) {
+          setTopMargin(yieldDescElems[idx], diff+spacing);
+          setTopMargin(yieldLabelElems[idx], spacing);
+          leftY += yieldDescHeight + diff + spacing;
+          rightY += yieldLabelHeight + spacing;
+        } else {
+          setTopMargin(yieldDescElems[idx], spacing);
+          setTopMargin(yieldLabelElems[idx], -diff + spacing);
+          leftY += yieldDescHeight + spacing;
+          rightY += yieldLabelHeight - diff + spacing;
+        }
+
+        if (idx === retIdx) {
+          if (reportAttachmentOffset) {
+            reportAttachmentOffset(leftY - 0.5*yieldDescHeight);
+          }
+        }
+      });
+    }
+
+    if (streamChildAtBar) {
+      setTopMargin(streamChildElems[0], nameBarSpacing + nameBarAttachmentOffset - streamChildAttachmentOffsets[0]);
+    } else if (streamArgs.length > 0) {
+      if (!streamLabelsRef.current) {
+        throw new Error();
+      }
+      const streamLabelElems = childrenToArr(streamLabelsRef.current);
+
+      let leftY = nameBarSpacing + nameBarHeight;
+      let rightY = 0;
+
+      streamChildrenHeights.forEach((streamChildHeight, idx) => {
+        const streamLabelHeight = getHeight(streamLabelElems[idx]);
+
+        const spacing = (idx > 0) ? SPACING : 0;
+        const diff = (rightY + streamChildAttachmentOffsets[idx]) - (leftY + 0.5*streamLabelHeight);
+        if (diff > 0) {
+          setTopMargin(streamLabelElems[idx], diff+spacing);
+          setTopMargin(streamChildElems[idx], spacing);
+          leftY += streamLabelHeight + diff + spacing;
+          rightY += streamChildHeight + spacing;
+        } else {
+          setTopMargin(streamLabelElems[idx], spacing);
+          setTopMargin(streamChildElems[idx], -diff + spacing);
+          leftY += streamLabelHeight + spacing;
+          rightY += streamChildHeight - diff + spacing;
+        }
+      });
+    }
+  });
+
   const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node);
 
-  const rowsForArray = (a: ReadonlyArray<any>): number => (a.length === 0) ? 0 : (2*a.length - 1);
+  const handleReportAttachmentOffset = (offset: number, idx: number): void => {
+    const rand = Math.random();
+    setReportedStreamChildAttachmentOffsets(st => {
+      if (st[idx] === offset) {
+        return st;
+      }
+      const newSt = [...st];
+      newSt[idx] = offset;
+      return newSt;
+    });
+  };
 
-  const totalRows = 1 + rowsForArray(streamChildren) + rowsForArray(functionChildren);
   return (
     <div className="TreeView-appish-node">
-      <div style={{gridRowStart: 1, gridRowEnd: totalRows+1, gridColumnStart: 1, gridColumnEnd: 2, background: boxColor }} {...selectionHandlers} />
-      <div className="TreeView-name-bar TreeView-common-padding" style={{gridRow: 1, gridColumn: 1}}>{name}</div>
-      <>{streamChildren.map(({key, name, child}, idx) => (
-        <React.Fragment key={key}>
-          {(idx > 0) ? (
-            <div className="TreeView-appish-node-spacer-row" style={{gridRow: 1 + 2*idx, gridColumnStart: 1, gridColumnEnd: 5}} />
-          ) : null}
-          <div className="TreeView-appish-node-child-name TreeView-common-padding" style={{gridRow: 2*idx+2, gridColumn: 1}}>{name}</div>
-          <div className="TreeView-appish-node-child-cxn-triangle" style={{gridRow: 1 + 2*idx + 1, gridColumn: 2}}><div /></div>
-          <div className="TreeView-appish-node-child-subtree" style={{gridRow: 1 + 2*idx + 1, gridColumn: 3}}>{child}</div>
-        </React.Fragment>
-      ))}</>
-      <>{functionChildren.map(({key, name, child}, idx) => (
-        <React.Fragment key={key}>
-          {(idx > 0) ? (
-            <div className="TreeView-appish-node-spacer-row" style={{gridRow: 1 + rowsForArray(streamChildren) + 2*idx, gridColumnStart: 1, gridColumnEnd: 5}} />
-          ) : null}
-          <div className="TreeView-common-padding" style={{gridRow: 1 + rowsForArray(streamChildren) + 2*idx+1, gridColumn: 1}}>
-            <div className="TreeView-appish-node-child-name">{name}</div>
-            <div className="TreeView-appish-node-function-argument-inner">{child}</div>
+      <div className="TreeView-appish-left-margin" />
+      <div className="TreeView-appish-yield-descs" ref={yieldDescsRef}>{yields.map((y, idx) => (
+        <div style={{display: 'flex'}}>
+          <div style={{flex: '1 0 auto', minHeight: '1px', display: 'flex', flexDirection: 'column', minWidth: connected ? CXN_MIN_LENGTH : 0}}> {/* takes up extra space */}
+            {(idx === retIdx) &&
+              <>
+                <div style={{flex: '1'}} />
+                <div style={{flex: '0 0 1px', background: CXN_COLOR}} />
+                <div style={{flex: '1'}} />
+              </>
+            }
           </div>
-        </React.Fragment>
-      ))}</>
-      <div className={selectionClasses.concat(['TreeView-appish-node-selection-overlay']).join(' ')} style={{gridRowStart: 1, gridRowEnd: totalRows+1, gridColumnStart: 1, gridColumnEnd: 2}} />
+          {y.node && <DescriptionNodeView node={y.node} />}
+        </div>
+      ))}</div>
+      <div>
+        <div className={selectionClasses.join(' ')} {...selectionHandlers}>
+          <div className="TreeView-name-bar TreeView-common-padding" ref={nameBarRef}>{name}</div>
+          {((streamLabels.length > 0) || (yieldLabels.length > 0)) &&
+            <div className="TreeView-appish-body">
+              <div ref={yieldLabelsRef}>{yieldLabels.map(ylabel => (
+                <div className="TreeView-common-padding">{ylabel}</div>
+              ))}</div>
+              <div style={{textAlign: 'right', flex: '1'}} ref={streamLabelsRef}>
+                {streamLabels.map(slabel => (
+                  <div className="TreeView-common-padding">{slabel || <span>&nbsp;</span>}</div>
+                ))}
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+      <div className="TreeView-appish-node-stream-children" ref={streamChildrenRef}>{streamArgs.map(({node}, idx) => (
+        <StreamExpressionView node={node} connected={true} reportAttachmentOffset={offset => { handleReportAttachmentOffset(offset, idx); }} />
+      ))}</div>
     </div>
   );
 };
 
-const StreamExpressionView: React.FC<{node: StreamExpressionNode}> = ({ node }) => {
+const StreamExpressionView: React.FC<{node: StreamExpressionNode, connected: boolean, reportAttachmentOffset?: (offset: number) => void}> = ({ node, connected, reportAttachmentOffset }) => {
   const ctxData = useContext(TreeViewContext);
   if (!ctxData) {
     throw new Error();
@@ -170,13 +409,13 @@ const StreamExpressionView: React.FC<{node: StreamExpressionNode}> = ({ node }) 
   const nodeView: JSX.Element = (() => {
     switch (node.kind) {
       case NodeKind.UndefinedLiteral:
-        return <ChildlessStreamNodeView node={node} contents={<span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>} boxColor={'red'} />
+        return <ChildlessStreamNodeView node={node} contents={<span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>} boxColor={'red'} connected={connected} reportAttachmentOffset={reportAttachmentOffset} />
 
       case NodeKind.NumberLiteral:
-        return <ChildlessStreamNodeView node={node} contents={node.val.toString()} boxColor="#cce8cc" />
+        return <ChildlessStreamNodeView node={node} contents={node.val.toString()} boxColor="#cce8cc" connected={connected} reportAttachmentOffset={reportAttachmentOffset} />
 
       case NodeKind.ArrayLiteral:
-        return <AppishNodeView node={node} name="[ ]" boxColor={NORMAL_BOX_COLOR} streamChildren={node.elems.map((elem, idx) => ({key: idx, name: undefined, child: <StreamExpressionView node={elem} />}))} functionChildren={[]} />
+        return <AppishNodeView node={node} name="[ ]" boxColor={NORMAL_BOX_COLOR} streamArgs={node.elems.map((elem, idx) => ({key: idx, name: undefined, node: elem}))} functionArgs={[]} yields={[]} retIdx={0} connected={connected} reportAttachmentOffset={reportAttachmentOffset} />
 
       case NodeKind.Application: {
         if (node.func.kind !== NodeKind.FunctionReference) {
@@ -204,16 +443,16 @@ const StreamExpressionView: React.FC<{node: StreamExpressionNode}> = ({ node }) 
           throw new Error('function params and args length mismatch');
         }
 
-        const streamChildrenViews: Array<ChildView> = functionNode.sig.streamParams.map((param, idx) => {
+        const streamChildrenViews: Array<AppishNodeChild<StreamExpressionNode>> = functionNode.sig.streamParams.map((param, idx) => {
           const displayName = (param.desc && !param.desc.text.startsWith('_')) ? param.desc.text : undefined;
           return {
             key: idx,
             name: displayName,
-            child: <StreamExpressionView node={node.sargs[idx]} />
+            node: node.sargs[idx],
           };
         });
 
-        const functionChildrenViews: Array<ChildView> = functionNode.sig.funcParams.map((param, idx) => {
+        const functionChildrenViews: Array<AppishNodeChild<FunctionDefinitionNode>> = functionNode.sig.funcParams.map((param, idx) => {
           const farg = node.fargs[idx];
           if (farg.kind !== NodeKind.TreeFunctionDefinition) {
             throw new Error('not yet supported');
@@ -222,33 +461,24 @@ const StreamExpressionView: React.FC<{node: StreamExpressionNode}> = ({ node }) 
           return {
             key: idx,
             name: displayName,
-            child: <TreeFunctionDefinitionView node={farg} />
+            node: farg,
           };
         });
 
-        return <AppishNodeView node={node} name={displayedDesc} boxColor={NORMAL_BOX_COLOR} streamChildren={streamChildrenViews} functionChildren={functionChildrenViews} />
+        const yields: Array<AppishNodeChild<DescriptionNode | undefined>> = functionNode.sig.yields.map((sigYieldNode, idx) => {
+          const displayName = (sigYieldNode.desc && sigYieldNode.desc.text) || undefined;
+          return {
+            key: idx,
+            name: displayName,
+            node: node.dsids[idx].desc,
+          };
+        });
+
+        return <AppishNodeView node={node} name={displayedDesc} boxColor={NORMAL_BOX_COLOR} streamArgs={streamChildrenViews} functionArgs={functionChildrenViews} yields={yields} retIdx={node.reti} connected={connected} reportAttachmentOffset={reportAttachmentOffset} />
       }
 
-      case NodeKind.StreamReference: {
-        const nearestDef = ctxData.envLookups.nodeToNearestTreeDef.get(node);
-        if (!nearestDef) {
-          throw new Error();
-        }
-        const nodeStreamEnv = ctxData.envLookups.treeDefToStreamEnv.get(nearestDef);
-        if (!nodeStreamEnv) {
-          throw new Error();
-        }
-        const streamDef = nodeStreamEnv.get(node.ref);
-        if (!streamDef) {
-          throw new Error();
-        }
-
-        const displayedDesc: string = streamDef.desc ? streamDef.desc.text : ('<stream ' + node.ref + '>');
-
-        return (
-          <div className={selectionClasses.concat(['TreeView-simple-node', 'TreeView-common-padding']).join(' ')} {...selectionHandlers} style={{background: STREAM_REFERENCE_BOX_COLOR}}>{displayedDesc}</div>
-        );
-      }
+      case NodeKind.StreamReference:
+        return <StreamReferenceView node={node} connected={connected} reportAttachmentOffset={reportAttachmentOffset} />
 
       default: {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -273,11 +503,11 @@ const StreamExpressionView: React.FC<{node: StreamExpressionNode}> = ({ node }) 
 
 const BodyExpressionView: React.FC<{node: BodyExpressionNode}> = ({node}) => {
   if (isStreamExpressionNode(node)) {
-    return <StreamExpressionView node={node} />
+    return <StreamExpressionView node={node} connected={false} />
   } else if (isFunctionExpressionNode(node)) {
     throw new Error('unimplemented');
   } else if (node.kind === NodeKind.YieldExpression) {
-    return <div style={{marginLeft: '-0.5em'}}><SingleChildNodeView node={node} contents={'yield ' + node.idx} boxColor={'#d5bce4'} child={<StreamExpressionView node={node.expr} />} /></div>
+    return <div style={{marginLeft: '-0.5em'}}><SingleChildNodeView node={node} contents={'yield ' + node.idx} boxColor={'#d5bce4'} child={<StreamExpressionView node={node.expr} connected={true} />} /></div>
   } else {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const exhaustive: never = node; // this will cause a type error if we haven't handled all cases

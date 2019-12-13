@@ -12,14 +12,25 @@
 
 .TreeView-appish-node {
   width: max-content;
-  display: grid;
-  grid-auto-columns: max-content;
+  display: flex;
+  flex-direction: row;
+}
+
+.TreeView-appish-body {
+  background: #ccc;
+  display: flex;
+  flex-direction: row;
 }
 
 .TreeView-name-bar {
   background: #bbb;
   pointer-events: none;
   font-weight: bold;
+}
+
+.TreeView-appish-yield-descs {
+  display: flex;
+  flex-direction: column;
 }
 
 .TreeView-appish-node-function-argument-inner {

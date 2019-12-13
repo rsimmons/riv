@@ -438,9 +438,23 @@ export function computeSelectionMovementLookups(root: Node): SelectionMovementLo
         setForArr(node.elems.map(elem => streamExprRootmost(elem)), node);
         break;
 
-      case NodeKind.Application:
+      case NodeKind.Application: {
         setForArr(([] as ReadonlyArray<Node>).concat(node.sargs.map(sarg => streamExprRootmost(sarg)), node.fargs), node);
+        node.dsids.forEach((dsid, idx) => {
+          if (dsid.desc) {
+            leafward.set(dsid.desc, node);
+            if (idx === node.reti) {
+              rootward.set(node, dsid.desc);
+            }
+          }
+        });
+        const retDesc = (node.dsids.length > 0) && node.dsids[node.reti].desc;
+        if (retDesc) {
+          leafward.set(retDesc, node);
+          rootward.set(node, retDesc);
+        }
         break;
+      }
 
       case NodeKind.TreeFunctionDefinition:
         setForArr(node.body.exprs, node);
@@ -927,14 +941,52 @@ const INITIAL_MAIN: TreeFunctionDefinitionNode = {
                 ref: mdId,
               },
               {
-                kind: NodeKind.NumberLiteral,
-                sid: generateStreamId(),
-                desc: {kind: NodeKind.Description, text: 'foo'},
-                val: 10,
+                kind: NodeKind.Application,
+                dsids: [
+                  {sid: generateStreamId(), desc: {kind: NodeKind.Description, text: 'luuux'}},
+                  {sid: generateStreamId()},
+                  {sid: generateStreamId(), desc: {kind: NodeKind.Description, text: 'qux'}}
+                ],
+                reti: 1,
+                func: {
+                  kind: NodeKind.FunctionReference,
+                  ref: 'trig',
+                },
+                sargs: [
+                  {
+                    kind: NodeKind.NumberLiteral,
+                    sid: generateStreamId(),
+                    val: 10,
+                  },
+                ],
+                fargs: [],
               },
+              /*
+              {
+                kind: NodeKind.Application,
+                dsids: [{sid: generateStreamId(), desc: {kind: NodeKind.Description, text: 'luuux'}}],
+                reti: 0,
+                func: {
+                  kind: NodeKind.FunctionReference,
+                  ref: 'mult',
+                },
+                sargs: [
+                  {
+                    kind: NodeKind.UndefinedLiteral,
+                    sid: generateStreamId(),
+                  },
+                  {
+                    kind: NodeKind.UndefinedLiteral,
+                    sid: generateStreamId(),
+                  },
+                ],
+                fargs: [],
+              },
+              */
               {
                 kind: NodeKind.NumberLiteral,
                 sid: generateStreamId(),
+                desc: {kind: NodeKind.Description, text: 'foo'},
                 val: 20,
               },
             ],

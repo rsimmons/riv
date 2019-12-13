@@ -71,6 +71,7 @@ const nativeFunctions: Array<[string, string, SignatureNode, Function]> = [
     streamParams: [
       {
         kind: NodeKind.SignatureStreamParameter,
+        desc: {kind: NodeKind.Description, text: 'radians'},
       },
     ],
     funcParams: [],
