@@ -28,7 +28,7 @@ function vec2sqgrid(count: number, size: number) {
 function simpleSig(pnames: Array<string>, yields: boolean): SignatureNode {
   return {
     kind: NodeKind.Signature,
-    streamParams: pnames.map(pn => ({kind: NodeKind.SignatureStreamParameter, desc: { kind: NodeKind.Description, text: pn }})),
+    streamParams: pnames.map(pn => ({kind: NodeKind.SignatureStreamParameter, name: { kind: NodeKind.Name, text: pn }})),
     funcParams: [],
     yields: yields ? [{kind: NodeKind.SignatureYield}] : [],
   }
@@ -71,22 +71,22 @@ const nativeFunctions: Array<[string, string, SignatureNode, Function]> = [
     streamParams: [
       {
         kind: NodeKind.SignatureStreamParameter,
-        desc: {kind: NodeKind.Description, text: 'radians'},
+        name: {kind: NodeKind.Name, text: 'radians'},
       },
     ],
     funcParams: [],
     yields: [
       {
         kind: NodeKind.SignatureYield,
-        desc: {kind: NodeKind.Description, text: 'sin'},
+        name: {kind: NodeKind.Name, text: 'sin'},
       },
       {
         kind: NodeKind.SignatureYield,
-        desc: {kind: NodeKind.Description, text: 'cos'},
+        name: {kind: NodeKind.Name, text: 'cos'},
       },
       {
         kind: NodeKind.SignatureYield,
-        desc: {kind: NodeKind.Description, text: 'tan'},
+        name: {kind: NodeKind.Name, text: 'tan'},
       },
     ],
   }, (v: number) => [Math.sin(v), Math.cos(v), Math.tan(v)]],
@@ -97,19 +97,19 @@ const nativeFunctions: Array<[string, string, SignatureNode, Function]> = [
     streamParams: [
       {
         kind: NodeKind.SignatureStreamParameter,
-        desc: {kind: NodeKind.Description, text: 'array'},
+        name: {kind: NodeKind.Name, text: 'array'},
       },
     ],
     funcParams: [
       {
         kind: NodeKind.SignatureFunctionParameter,
-        desc: {kind: NodeKind.Description, text: 'xform one value'},
+        name: {kind: NodeKind.Name, text: 'xform one value'},
         sig: {
           kind: NodeKind.Signature,
           streamParams: [
             {
               kind: NodeKind.SignatureStreamParameter,
-              desc: {kind: NodeKind.Description, text: 'value'},
+              name: {kind: NodeKind.Name, text: 'value'},
             }
           ],
           funcParams: [],
@@ -134,21 +134,21 @@ const nativeFunctions: Array<[string, string, SignatureNode, Function]> = [
     funcParams: [
       {
         kind: NodeKind.SignatureFunctionParameter,
-        desc: {kind: NodeKind.Description, text: 'compute one sample'},
+        name: {kind: NodeKind.Name, text: 'compute one sample'},
         sig: {
           kind: NodeKind.Signature,
           streamParams: [
             {
               kind: NodeKind.SignatureStreamParameter,
-              desc: {kind: NodeKind.Description, text: 'audio time'},
+              name: {kind: NodeKind.Name, text: 'audio time'},
             },
             {
               kind: NodeKind.SignatureStreamParameter,
-              desc: {kind: NodeKind.Description, text: 'next frame'},
+              name: {kind: NodeKind.Name, text: 'next frame'},
             },
             {
               kind: NodeKind.SignatureStreamParameter,
-              desc: {kind: NodeKind.Description, text: 'sample rate'},
+              name: {kind: NodeKind.Name, text: 'sample rate'},
             },
           ],
           funcParams: [],

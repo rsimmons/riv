@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './ExpressionChooser.css';
-import { generateStreamId, Node, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, SignatureStreamParameterNode, ApplicationNode, SignatureFunctionParameterNode, generateFunctionId, StreamID, ArrayLiteralNode, UndefinedLiteralNode, streamExprReturnedId, streamExprReturnedDesc } from './Tree';
+import { generateStreamId, Node, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, SignatureStreamParameterNode, ApplicationNode, SignatureFunctionParameterNode, generateFunctionId, StreamID, ArrayLiteralNode, UndefinedLiteralNode } from './Tree';
 import { fuzzy_match } from './vendor/fts_fuzzy_match';
 import { EnvironmentLookups, StreamDefinition } from './EditReducer';
 
@@ -11,6 +11,11 @@ interface UndefinedChoice {
 interface NumberChoice {
   readonly type: 'number';
   readonly value: number;
+}
+
+interface StreamIndChoice {
+  readonly type: 'streamind';
+  readonly name?: string;
 }
 
 interface StreamRefChoice {
@@ -24,7 +29,7 @@ interface AppChoice {
   readonly funcDefNode: FunctionDefinitionNode;
 }
 
-type Choice = UndefinedChoice | StreamRefChoice | NumberChoice | AppChoice;
+type Choice = UndefinedChoice | StreamIndChoice | StreamRefChoice | NumberChoice | AppChoice;
 
 interface SearchResult<T> {
   score: number;
@@ -71,11 +76,14 @@ function Choice({ choice }: ChoiceProps) {
     case 'number':
       return <span>{choice.value}</span>
 
+    case 'streamind':
+      return <span><em>I</em> {choice.name}</span>
+
     case 'streamref':
       return <span><em>S</em> {choice.desc} <small>(id {choice.sid})</small></span>
 
     case 'app':
-      return <span><em>F</em> {choice.funcDefNode.desc && choice.funcDefNode.desc.text} {/*choice.node.signature.parameters.map(param => (param.name.startsWith('_') ? '\u25A1' : param.name)).join(', ')*/}</span>
+      return <span><em>F</em> {choice.funcDefNode.name && choice.funcDefNode.name.text} {/*choice.node.signature.parameters.map(param => (param.name.startsWith('_') ? '\u25A1' : param.name)).join(', ')*/}</span>
 
     default:
       throw new Error();
@@ -108,6 +116,9 @@ const ExpressionChooser: React.FC<{initNode: Node, envLookups: EnvironmentLookup
 
       case NodeKind.NumberLiteral:
         return initNode.val.toString();
+
+      case NodeKind.StreamIndirection:
+        return initNode.name || '';
 
       case NodeKind.StreamReference:
       case NodeKind.Application:
@@ -150,8 +161,8 @@ const ExpressionChooser: React.FC<{initNode: Node, envLookups: EnvironmentLookup
 
     const namedStreams: Array<[string, StreamDefinition]> = [];
     streamEnv.forEach((sdef, ) => {
-      if (sdef.desc && !(isStreamExpressionNode(initNode) && (sdef.sid === streamExprReturnedId(initNode)))) {
-        namedStreams.push([sdef.desc.text, sdef]);
+      if (sdef.name) {
+        namedStreams.push([sdef.name, sdef]);
       }
     });
 
@@ -166,8 +177,8 @@ const ExpressionChooser: React.FC<{initNode: Node, envLookups: EnvironmentLookup
 
     const namedFunctions: Array<[string, FunctionDefinitionNode]> = [];
     functionEnv.forEach((defNode, ) => {
-      if (defNode.desc) {
-        namedFunctions.push([defNode.desc.text, defNode]);
+      if (defNode.name) {
+        namedFunctions.push([defNode.name.text, defNode]);
       }
     });
     const functionSearchResults = fuzzySearch(text, namedFunctions);
@@ -178,14 +189,12 @@ const ExpressionChooser: React.FC<{initNode: Node, envLookups: EnvironmentLookup
       });
     }
 
-    /*
     if (text.trim() !== '') {
       choices.push({
         type: 'streamind',
-        text: text.trim(),
+        name: text.trim(),
       });
     }
-    */
 
     if (choices.length === 0) {
       choices.push({
@@ -201,37 +210,33 @@ const ExpressionChooser: React.FC<{initNode: Node, envLookups: EnvironmentLookup
     const choice = state.choices[state.index];
 
     if (isStreamExpressionNode(initNode)) {
-      // note that this is different than streamExprReturnedId, because we handle stream references differently
-      let newSid: StreamID;
-      if ('sid' in initNode) {
-        newSid = initNode.sid;
-      } else if (initNode.kind === NodeKind.Application) {
-        newSid = initNode.dsids[initNode.reti].sid;
-      } else if (initNode.kind === NodeKind.StreamReference) {
-        newSid = generateStreamId();
-      } else {
-        throw new Error();
-      }
-
-      const newDesc = streamExprReturnedDesc(initNode);
-
       let newNode: Node;
       switch (choice.type) {
         case 'undefined':
           newNode = {
             kind: NodeKind.UndefinedLiteral,
-            sid: newSid,
-            desc: newDesc,
+            sid: generateStreamId(),
           }
           break;
 
         case 'number':
           newNode = {
             kind: NodeKind.NumberLiteral,
-            sid: newSid,
-            desc: newDesc,
+            sid: generateStreamId(),
             val: choice.value,
           }
+          break;
+
+        case 'streamind':
+          newNode = {
+            kind: NodeKind.StreamIndirection,
+            sid: generateStreamId(),
+            name: choice.name,
+            expr: {
+              kind: NodeKind.UndefinedLiteral,
+              sid: generateStreamId(),
+            },
+          };
           break;
 
         case 'streamref':
@@ -244,7 +249,7 @@ const ExpressionChooser: React.FC<{initNode: Node, envLookups: EnvironmentLookup
         case 'app':
           const n: ApplicationNode = {
             kind: NodeKind.Application,
-            dsids: choice.funcDefNode.sig.yields.map(() => ({sid: generateStreamId()})),
+            sids: choice.funcDefNode.sig.yields.map(() => generateStreamId()),
             reti: 0,
             func: {
               kind: NodeKind.FunctionReference,

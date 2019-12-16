@@ -18,19 +18,15 @@
 
 .TreeView-appish-body {
   background: #ccc;
+}
+
+.TreeView-appish-body-stream-area {
   display: flex;
   flex-direction: row;
 }
 
-.TreeView-name-bar {
-  background: #bbb;
+.TreeView-appish-top-bar {
   pointer-events: none;
-  font-weight: bold;
-}
-
-.TreeView-appish-yield-descs {
-  display: flex;
-  flex-direction: column;
 }
 
 .TreeView-appish-node-function-argument-inner {
@@ -70,6 +66,19 @@
 
 .TreeView-appish-node-selection-overlay {
   pointer-events: none;
+}
+
+.TreeView-application-top-bar {
+  background: #bbb;
+  font-weight: bold;
+}
+
+.TreeView-stream-indirection-bar {
+  background: #d2e6ff;
+}
+
+.TreeView-yield-bar {
+  background: #d5bce4;
 }
 
 .TreeView-udf-node-expressions {

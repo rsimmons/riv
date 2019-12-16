@@ -1,5 +1,5 @@
 // import { Path, pathIsPrefix } from './State';
-import { NodeKind, Node, SignatureNode, DescriptionNode, StreamExpressionNode, isStreamExpressionNode, BodyExpressionNode, isBodyExpressionNode, TreeFunctionBodyNode, FunctionExpressionNode, isFunctionExpressionNode, ApplicationNode, DescribedStreamID } from './Tree';
+import { NodeKind, Node, SignatureNode, NameNode, StreamExpressionNode, isStreamExpressionNode, BodyExpressionNode, isBodyExpressionNode, TreeFunctionBodyNode, FunctionExpressionNode, isFunctionExpressionNode } from './Tree';
 
 export function firstChild(node: Node): Node | undefined {
   const res = iterChildren(node).next();
@@ -11,43 +11,33 @@ export function lastChild(node: Node): Node | undefined {
   return children.pop();
 }
 
-function appDescs(node: ApplicationNode) {
-  const result = [];
-  for (const dsid of node.dsids) {
-    if (dsid.desc) {
-      result.push(dsid.desc);
-    }
-  }
-  return result;
-}
-
 export function* iterChildren(node: Node) {
   switch (node.kind) {
+    case NodeKind.Name:
+    case NodeKind.UndefinedLiteral:
+    case NodeKind.NumberLiteral:
     case NodeKind.StreamReference:
     case NodeKind.FunctionReference:
-    case NodeKind.Description:
       // no children
       break;
 
-    case NodeKind.UndefinedLiteral:
-    case NodeKind.NumberLiteral:
+    case NodeKind.StreamIndirection:
+      yield node.expr;
+      break;
+
     case NodeKind.SignatureStreamParameter:
     case NodeKind.SignatureFunctionParameter:
     case NodeKind.SignatureYield:
-      if (node.desc) {
-        yield node.desc;
+      if (node.name) {
+        yield node.name;
       }
       break;
 
     case NodeKind.ArrayLiteral:
-      if (node.desc) {
-        yield node.desc;
-      }
       yield* node.elems;
       break;
 
     case NodeKind.Application:
-      yield* appDescs(node);
       yield node.func;
       yield* node.sargs;
       yield* node.fargs;
@@ -68,16 +58,16 @@ export function* iterChildren(node: Node) {
       break;
 
     case NodeKind.TreeFunctionDefinition:
-      if (node.desc) {
-        yield node.desc;
+      if (node.name) {
+        yield node.name;
       }
       yield node.sig;
       yield node.body;
       break;
 
     case NodeKind.NativeFunctionDefinition:
-      if (node.desc) {
-        yield node.desc;
+      if (node.name) {
+        yield node.name;
       }
       yield node.sig;
       break;
@@ -103,24 +93,27 @@ function visitArray<T>(nodeArr: ReadonlyArray<Node>, visit: (node: Node) => T | 
  */
 export function visitChildren<T>(node: Node, visit: (node: Node) => T | undefined): T | undefined {
   switch (node.kind) {
-    case NodeKind.Description:
+    case NodeKind.Name:
+    case NodeKind.UndefinedLiteral:
+    case NodeKind.NumberLiteral:
     case NodeKind.StreamReference:
     case NodeKind.FunctionReference:
       // no children
       return;
 
-    case NodeKind.UndefinedLiteral:
-    case NodeKind.NumberLiteral:
+    case NodeKind.StreamIndirection:
+      return visit(node.expr);
+
     case NodeKind.SignatureStreamParameter:
     case NodeKind.SignatureFunctionParameter:
     case NodeKind.SignatureYield:
-      return (node.desc && visit(node.desc));
+      return (node.name && visit(node.name));
 
     case NodeKind.ArrayLiteral:
-      return (node.desc && visit(node.desc)) || visitArray(node.elems, visit);
+      return visitArray(node.elems, visit);
 
     case NodeKind.Application:
-      return visitArray(appDescs(node), visit) || visit(node.func) || visitArray(node.sargs, visit) || visitArray(node.fargs, visit);
+      return visit(node.func) || visitArray(node.sargs, visit) || visitArray(node.fargs, visit);
 
     case NodeKind.Signature:
       return visitArray(node.streamParams, visit) || visitArray(node.funcParams, visit) || visitArray(node.yields, visit);
@@ -132,10 +125,10 @@ export function visitChildren<T>(node: Node, visit: (node: Node) => T | undefine
       return visitArray(node.exprs, visit);
 
     case NodeKind.TreeFunctionDefinition:
-      return (node.desc && visit(node.desc)) || visit(node.sig) || visit(node.body);
+      return (node.name && visit(node.name)) || visit(node.sig) || visit(node.body);
 
     case NodeKind.NativeFunctionDefinition:
-      return (node.desc && visit(node.desc)) || visit(node.sig);
+      return (node.name && visit(node.name)) || visit(node.sig);
 
     default: {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -147,29 +140,12 @@ export function visitChildren<T>(node: Node, visit: (node: Node) => T | undefine
 // This will always return a node of the same kind, but I can't seem to express this with generics,
 // which makes the code way more complicated than it should be, but we ensure type safety.
 export function transformChildren(node: Node, transform: (node: Node) => Node): Node {
-  const xDesc = (n: DescriptionNode): DescriptionNode => {
+  const xName = (n: NameNode): NameNode => {
     const tn = transform(n);
-    if (tn.kind !== NodeKind.Description) {
+    if (tn.kind !== NodeKind.Name) {
       throw new Error();
     }
     return tn;
-  };
-
-  const xDescSids = (dsids: ReadonlyArray<DescribedStreamID>): ReadonlyArray<DescribedStreamID> => {
-    let changed = false;
-    const newDsids = dsids.map(dsid => {
-      const newDesc = dsid.desc && xDesc(dsid.desc);
-      if (newDesc !== dsid.desc) {
-        changed = true;
-        return {
-          sid: dsid.sid,
-          desc: newDesc,
-        };
-      } else {
-        return dsid;
-      }
-    });
-    return changed ? newDsids : dsids;
   };
 
   const xStreamExpr = (n: StreamExpressionNode): StreamExpressionNode => {
@@ -250,53 +226,61 @@ export function transformChildren(node: Node, transform: (node: Node) => Node): 
   };
 
   switch (node.kind) {
-    case NodeKind.Description:
+    case NodeKind.Name:
+    case NodeKind.UndefinedLiteral:
+    case NodeKind.NumberLiteral:
     case NodeKind.StreamReference:
     case NodeKind.FunctionReference:
       // no children to transform
       return node;
 
-    case NodeKind.UndefinedLiteral:
-    case NodeKind.NumberLiteral:
-    case NodeKind.SignatureStreamParameter:
-    case NodeKind.SignatureFunctionParameter:
-    case NodeKind.SignatureYield: {
-      const newDesc = node.desc && xDesc(node.desc);
-      if (newDesc === node.desc) {
+    case NodeKind.StreamIndirection: {
+      const newExpr = xStreamExpr(node.expr);
+      if (newExpr === node.expr) {
         return node;
       } else {
         return {
           ...node,
-          desc: newDesc,
+          expr: newExpr,
+        };
+      }
+    }
+
+    case NodeKind.SignatureStreamParameter:
+    case NodeKind.SignatureFunctionParameter:
+    case NodeKind.SignatureYield: {
+      const newName = node.name && xName(node.name);
+      if (newName === node.name) {
+        return node;
+      } else {
+        return {
+          ...node,
+          name: newName,
         };
       }
     }
 
     case NodeKind.ArrayLiteral: {
-      const newDesc = node.desc && xDesc(node.desc);
       const newElems = xStreamExprArr(node.elems);
-      if ((newDesc === node.desc) && (newElems === node.elems)) {
+      if (newElems === node.elems) {
         return node;
       } else {
         return {
           ...node,
-          desc: newDesc,
           elems: newElems,
         };
       }
     }
 
     case NodeKind.Application: {
-      const newDescSids = xDescSids(node.dsids);
       const newFunc = xFuncExpr(node.func);
       const newSargs = xStreamExprArr(node.sargs);
       const newFargs = xFuncExprArr(node.fargs);
-      if ((newDescSids === node.dsids) && (newFunc === node.func) && (newSargs === node.sargs) && (newFargs === node.fargs)) {
+      if ((newFunc === node.func) && (newSargs === node.sargs) && (newFargs === node.fargs)) {
         return node;
       } else {
         return {
           ...node,
-          dsids: newDescSids,
           func: newFunc,
           sargs: newSargs,
           fargs: newFargs,
@@ -333,15 +317,15 @@ export function transformChildren(node: Node, transform: (node: Node) => Node): 
     }
 
     case NodeKind.TreeFunctionDefinition: {
-      const newDesc = node.desc && xDesc(node.desc);
+      const newName = node.name && xName(node.name);
       const newSig = xSignature(node.sig);
       const newBody = xTreeBody(node.body);
-      if ((newDesc === node.desc) && (newSig === node.sig) && (newBody === node.body)) {
+      if ((newName === node.name) && (newSig === node.sig) && (newBody === node.body)) {
         return node;
       } else {
         return {
           ...node,
-          desc: newDesc,
+          name: newName,
           sig: newSig,
           body: newBody,
         };
@@ -349,14 +333,14 @@ export function transformChildren(node: Node, transform: (node: Node) => Node): 
     }
 
     case NodeKind.NativeFunctionDefinition: {
-      const newDesc = node.desc && xDesc(node.desc);
+      const newName = node.name && xName(node.name);
       const newSig = xSignature(node.sig);
-      if ((newDesc === node.desc) && (newSig === node.sig)) {
+      if ((newName === node.name) && (newSig === node.sig)) {
         return node;
       } else {
         return {
           ...node,
-          desc: newDesc,
+          name: newName,
           sig: newSig,
         };
       }
@@ -371,34 +355,18 @@ export function transformChildren(node: Node, transform: (node: Node) => Node): 
 }
 
 export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
-  const replaceDesc = (n: DescriptionNode | undefined): DescriptionNode | undefined => {
+  const replaceName = (n: NameNode | undefined): NameNode | undefined => {
     if (!n) {
       return n;
     }
     if (n === oldChild) {
-      if (newChild.kind !== NodeKind.Description) {
+      if (newChild.kind !== NodeKind.Name) {
         throw new Error();
       }
       return newChild;
     } else {
       return n;
     }
-  };
-
-  const replaceDescSids = (arr: ReadonlyArray<DescribedStreamID>): ReadonlyArray<DescribedStreamID> => {
-    return arr.map(dsid => {
-      if (dsid.desc === oldChild) {
-        if (newChild.kind !== NodeKind.Description) {
-          throw new Error();
-        }
-        return {
-          sid: dsid.sid,
-          desc: newChild,
-        };
-      } else {
-        return dsid;
-      }
-    });
   };
 
   const replaceSignature = (n: SignatureNode): SignatureNode => {
@@ -485,32 +453,36 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
   };
 
   switch (node.kind) {
-    case NodeKind.StreamReference:
-    case NodeKind.FunctionReference:
-    case NodeKind.Description:
-      throw new Error('no children to replace');
-
+    case NodeKind.Name:
     case NodeKind.UndefinedLiteral:
     case NodeKind.NumberLiteral:
+    case NodeKind.StreamReference:
+    case NodeKind.FunctionReference:
+      throw new Error('no children to replace');
+
+    case NodeKind.StreamIndirection:
+      return {
+        ...node,
+        expr: replaceStreamExpr(node.expr),
+      };
+
     case NodeKind.SignatureStreamParameter:
     case NodeKind.SignatureFunctionParameter:
     case NodeKind.SignatureYield:
       return {
         ...node,
-        desc: replaceDesc(node.desc),
+        name: replaceName(node.name),
       };
 
     case NodeKind.ArrayLiteral:
       return {
         ...node,
-        desc: replaceDesc(node.desc),
         elems: replaceStreamExprArr(node.elems),
       };
 
     case NodeKind.Application:
       return {
         ...node,
-        dsids: replaceDescSids(node.dsids),
         func: replaceFunctionExpression(node.func),
         sargs: replaceStreamExprArr(node.sargs),
         fargs: replaceFuncExprArr(node.fargs),
@@ -537,7 +509,7 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
     case NodeKind.TreeFunctionDefinition:
       return {
         ...node,
-        desc: replaceDesc(node.desc),
+        name: replaceName(node.name),
         sig: replaceSignature(node.sig),
         body: replaceTreeBody(node.body),
       };
@@ -545,7 +517,7 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
     case NodeKind.NativeFunctionDefinition:
       return {
         ...node,
-        desc: replaceDesc(node.desc),
+        name: replaceName(node.name),
         sig: replaceSignature(node.sig),
       };
 
@@ -561,10 +533,11 @@ export function deleteArrayElementChild(node: Node, child: Node): Node {
   const filterOut = <T extends Node>(arr: ReadonlyArray<T>) => arr.filter(elem => elem !== child);
 
   switch (node.kind) {
-    case NodeKind.Description:
+    case NodeKind.Name:
     case NodeKind.YieldExpression:
     case NodeKind.UndefinedLiteral:
     case NodeKind.NumberLiteral:
+    case NodeKind.StreamIndirection:
     case NodeKind.StreamReference:
     case NodeKind.SignatureStreamParameter:
     case NodeKind.SignatureFunctionParameter:

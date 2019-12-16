@@ -43,6 +43,7 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
         case NodeKind.UndefinedLiteral:
         case NodeKind.NumberLiteral:
         case NodeKind.ArrayLiteral:
+        case NodeKind.StreamIndirection:
           if (streamEnvironment.has(node.sid)) {
             throw new Error('must be unique');
           }
@@ -55,12 +56,12 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
           break;
 
         case NodeKind.Application:
-          node.dsids.forEach(dsid => {
-            if (streamEnvironment.has(dsid.sid)) {
+          node.sids.forEach(sid => {
+            if (streamEnvironment.has(sid)) {
               throw new Error('must be unique');
             }
-            streamEnvironment.set(dsid.sid, node);
-            localStreamIds.add(dsid.sid);
+            streamEnvironment.set(sid, node);
+            localStreamIds.add(sid);
           });
           break;
 
@@ -133,6 +134,19 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
         break;
       }
 
+      case NodeKind.StreamIndirection:
+        temporaryMarked.add(node);
+        traverseStreamExpr(node.expr);
+        temporaryMarked.delete(node);
+
+        appStreams.push({
+          sids: [node.sid],
+          funcId: 'id',
+          sargIds: [streamExprReturnedId(node.expr)],
+          fargIds: [],
+        });
+        break;
+
       case NodeKind.StreamReference:
         if (localStreamIds.has(node.ref)) {
           const targetExpressionNode = streamEnvironment.get(node.ref);
@@ -203,15 +217,18 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
         temporaryMarked.delete(node);
 
         appStreams.push({
-          sids: node.dsids.map(dsid => dsid.sid),
+          sids: node.sids,
           funcId: functionExprId(node.func),
           sargIds: streamArgIds,
           fargIds: [],
         });
         break;
 
-      default:
+      default: {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const exhaustive: never = node; // this will cause a type error if we haven't handled all cases
         throw new Error();
+      }
     }
 
     permanentMarked.add(node);

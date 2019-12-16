@@ -1,6 +1,6 @@
 import genuid from './uid';
 import { State, ProgramInfo, SelTree } from './State';
-import { StreamID, FunctionID, generateStreamId, generateFunctionId, NodeKind, Node, TreeFunctionDefinitionNode, FunctionDefinitionNode, isFunctionDefinitionNode, StreamExpressionNode, NativeFunctionDefinitionNode, isStreamExpressionNode, UndefinedLiteralNode, DescriptionNode, BodyExpressionNode, streamExprReturnedDesc } from './Tree';
+import { StreamID, FunctionID, generateStreamId, generateFunctionId, NodeKind, Node, TreeFunctionDefinitionNode, FunctionDefinitionNode, isFunctionDefinitionNode, StreamExpressionNode, NativeFunctionDefinitionNode, isStreamExpressionNode, UndefinedLiteralNode, NameNode, BodyExpressionNode } from './Tree';
 import { CompiledDefinition } from './CompiledDefinition';
 import { compileGlobalTreeDefinition, CompilationError } from './Compiler';
 // import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
@@ -156,13 +156,13 @@ interface ExprStreamDefinition {
   kind: 'expr';
   sid: StreamID;
   expr: StreamExpressionNode;
-  desc: DescriptionNode | undefined;
+  name?: string;
 }
 
 interface ParamStreamDefinition {
   kind: 'param';
   sid: StreamID;
-  desc: DescriptionNode | undefined;
+  name?: string;
 }
 
 export type StreamDefinition = ExprStreamDefinition | ParamStreamDefinition;
@@ -193,7 +193,7 @@ export function computeEnvironmentLookups(mainDefinition: TreeFunctionDefinition
       streamEnv.set(sid, {
         kind: 'param',
         sid,
-        desc: sparam.desc,
+        name: sparam.name && sparam.name.text,
       });
     });
 
@@ -206,18 +206,17 @@ export function computeEnvironmentLookups(mainDefinition: TreeFunctionDefinition
 
       if (isStreamExpressionNode(node)) {
         if (node.kind === NodeKind.Application) {
-          node.dsids.forEach(dsid => {
-            if (streamEnv.has(dsid.sid)) {
+          node.sids.forEach(sid => {
+            if (streamEnv.has(sid)) {
               throw new Error();
             }
-            streamEnv.set(dsid.sid, {
+            streamEnv.set(sid, {
               kind: 'expr',
-              sid: dsid.sid,
+              sid,
               expr: node,
-              desc: dsid.desc,
             });
           });
-        } else if ((node.kind === NodeKind.UndefinedLiteral) || (node.kind === NodeKind.NumberLiteral) || (node.kind === NodeKind.ArrayLiteral)) {
+        } else if ((node.kind === NodeKind.UndefinedLiteral) || (node.kind === NodeKind.NumberLiteral) || (node.kind === NodeKind.ArrayLiteral) || (node.kind === NodeKind.StreamIndirection)) {
           if (streamEnv.has(node.sid)) {
             throw new Error();
           }
@@ -225,7 +224,7 @@ export function computeEnvironmentLookups(mainDefinition: TreeFunctionDefinition
             kind: 'expr',
             sid: node.sid,
             expr: node,
-            desc: node.desc,
+            name: ('name' in node) ? node.name : undefined,
           });
         }
       }
@@ -343,7 +342,7 @@ function deleteNodeSubtree(node: Node, parentLookup: Map<Node, Node>, selMoveLoo
   }
 
   if (isStreamExpressionNode(node)) {
-    if (parent.kind === NodeKind.Application) {
+    if ((parent.kind === NodeKind.Application) || (parent.kind === NodeKind.StreamIndirection)) {
       const newNode: UndefinedLiteralNode = {
         kind: NodeKind.UndefinedLiteral,
         sid: generateStreamId(),
@@ -400,10 +399,6 @@ export function computeSelectionMovementLookups(root: Node): SelectionMovementLo
   const rootward: Map<Node, Node> = new Map();
   const leafward: Map<Node, Node> = new Map();
 
-  const streamExprRootmost = (node: StreamExpressionNode): Node => {
-    return streamExprReturnedDesc(node) || node;
-  };
-
   const setForArr = (arr: ReadonlyArray<Node>, parent: Node): void => {
     if (arr.length) {
       leafward.set(parent, arr[0]);
@@ -422,37 +417,17 @@ export function computeSelectionMovementLookups(root: Node): SelectionMovementLo
 
   const visit = (node: Node): void => {
     switch (node.kind) {
-      case NodeKind.UndefinedLiteral:
-      case NodeKind.NumberLiteral:
-        if (node.desc) {
-          leafward.set(node.desc, node);
-          rootward.set(node, node.desc);
-        }
+      case NodeKind.ArrayLiteral:
+        setForArr(node.elems, node);
         break;
 
-      case NodeKind.ArrayLiteral:
-        if (node.desc) {
-          leafward.set(node.desc, node);
-          rootward.set(node, node.desc);
-        }
-        setForArr(node.elems.map(elem => streamExprRootmost(elem)), node);
+      case NodeKind.StreamIndirection:
+        leafward.set(node, node.expr);
+        rootward.set(node.expr, node);
         break;
 
       case NodeKind.Application: {
-        setForArr(([] as ReadonlyArray<Node>).concat(node.sargs.map(sarg => streamExprRootmost(sarg)), node.fargs), node);
-        node.dsids.forEach((dsid, idx) => {
-          if (dsid.desc) {
-            leafward.set(dsid.desc, node);
-            if (idx === node.reti) {
-              rootward.set(node, dsid.desc);
-            }
-          }
-        });
-        const retDesc = (node.dsids.length > 0) && node.dsids[node.reti].desc;
-        if (retDesc) {
-          leafward.set(retDesc, node);
-          rootward.set(node, retDesc);
-        }
+        setForArr(([] as ReadonlyArray<Node>).concat(node.sargs, node.fargs), node);
         break;
       }
 
@@ -461,7 +436,7 @@ export function computeSelectionMovementLookups(root: Node): SelectionMovementLo
         break;
 
       case NodeKind.YieldExpression:
-        leafward.set(node, streamExprRootmost(node.expr));
+        leafward.set(node, node.expr);
         rootward.set(node.expr, node);
         break;
     }
@@ -861,6 +836,7 @@ export function reducer(state: State, action: Action): State {
 }
 
 const nativeFunctionEnvironment: Environment<FunctionID, Function> = new Environment();
+nativeFunctionEnvironment.set('id', (x: any) => x);
 nativeFunctionEnvironment.set('Array_of', Array.of);
 globalNativeFunctions.forEach(([id, , , jsFunc]) => {
   nativeFunctionEnvironment.set(id, jsFunc);
@@ -870,7 +846,7 @@ function initialStateFromDefinition(mainDefinition: TreeFunctionDefinitionNode):
   const nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode> = globalNativeFunctions.map(([fid, desc, signature, ]) => ({
     kind: NodeKind.NativeFunctionDefinition,
     fid,
-    desc: { kind: NodeKind.Description, text: desc },
+    name: { kind: NodeKind.Name, text: desc },
     sig: signature,
   }));
 
@@ -895,7 +871,7 @@ const mdId = generateStreamId();
 const INITIAL_MAIN: TreeFunctionDefinitionNode = {
   kind: NodeKind.TreeFunctionDefinition,
   fid: generateFunctionId(),
-  desc: {kind: NodeKind.Description, text: 'main'},
+  name: {kind: NodeKind.Name, text: 'main'},
   sig: {
     kind: NodeKind.Signature,
     streamParams: [],
@@ -908,19 +884,24 @@ const INITIAL_MAIN: TreeFunctionDefinitionNode = {
     kind: NodeKind.TreeFunctionBody,
     exprs: [
       {
-        kind: NodeKind.Application,
-        dsids: [{sid: mdId, desc: {kind: NodeKind.Description, text: 'md'}}],
-        reti: 0,
-        func: {
-          kind: NodeKind.FunctionReference,
-          ref: 'mouseDown',
+        kind: NodeKind.StreamIndirection,
+        sid: mdId,
+        name: 'md',
+        expr: {
+          kind: NodeKind.Application,
+          sids: [generateStreamId()],
+          reti: 0,
+          func: {
+            kind: NodeKind.FunctionReference,
+            ref: 'mouseDown',
+          },
+          sargs: [],
+          fargs: [],
         },
-        sargs: [],
-        fargs: [],
       },
       {
         kind: NodeKind.Application,
-        dsids: [],
+        sids: [],
         reti: 0,
         func: {
           kind: NodeKind.FunctionReference,
@@ -929,7 +910,7 @@ const INITIAL_MAIN: TreeFunctionDefinitionNode = {
         sargs: [
           {
             kind: NodeKind.Application,
-            dsids: [{sid: generateStreamId()}],
+            sids: [generateStreamId()],
             reti: 0,
             func: {
               kind: NodeKind.FunctionReference,
@@ -942,11 +923,7 @@ const INITIAL_MAIN: TreeFunctionDefinitionNode = {
               },
               {
                 kind: NodeKind.Application,
-                dsids: [
-                  {sid: generateStreamId(), desc: {kind: NodeKind.Description, text: 'luuux'}},
-                  {sid: generateStreamId()},
-                  {sid: generateStreamId(), desc: {kind: NodeKind.Description, text: 'qux'}}
-                ],
+                sids: [generateStreamId(), generateStreamId(), generateStreamId()],
                 reti: 1,
                 func: {
                   kind: NodeKind.FunctionReference,
@@ -986,7 +963,6 @@ const INITIAL_MAIN: TreeFunctionDefinitionNode = {
               {
                 kind: NodeKind.NumberLiteral,
                 sid: generateStreamId(),
-                desc: {kind: NodeKind.Description, text: 'foo'},
                 val: 20,
               },
             ],

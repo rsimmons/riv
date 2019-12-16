@@ -26,10 +26,11 @@ export function validFunctionId(s: string): s is FunctionID {
  * NODE KINDS
  */
 export enum NodeKind {
-  Description = 'desc',
+  Name = 'name',
   UndefinedLiteral = 'und',
   NumberLiteral = 'num',
   ArrayLiteral = 'arr',
+  StreamIndirection = 'sind',
   StreamReference = 'sref',
   Application = 'app',
   FunctionReference = 'fref',
@@ -46,8 +47,8 @@ export enum NodeKind {
 /**
  * COMMON NODES
  */
-export interface DescriptionNode {
-  readonly kind: NodeKind.Description;
+export interface NameNode {
+  readonly kind: NodeKind.Name;
   readonly text: string;
 }
 
@@ -57,21 +58,25 @@ export interface DescriptionNode {
 export interface UndefinedLiteralNode {
   readonly kind: NodeKind.UndefinedLiteral;
   readonly sid: StreamID;
-  readonly desc?: DescriptionNode;
 }
 
 export interface NumberLiteralNode {
   readonly kind: NodeKind.NumberLiteral;
   readonly sid: StreamID;
-  readonly desc?: DescriptionNode;
   readonly val: number;
 }
 
 export interface ArrayLiteralNode {
   readonly kind: NodeKind.ArrayLiteral;
   readonly sid: StreamID;
-  readonly desc?: DescriptionNode;
   readonly elems: ReadonlyArray<StreamExpressionNode>;
+}
+
+export interface StreamIndirectionNode {
+  readonly kind: NodeKind.StreamIndirection;
+  readonly sid: StreamID;
+  readonly name?: string;
+  readonly expr: StreamExpressionNode;
 }
 
 export interface StreamReferenceNode {
@@ -79,14 +84,9 @@ export interface StreamReferenceNode {
   readonly ref: StreamID; // the stream id we are referencing
 }
 
-export interface DescribedStreamID {
-  readonly sid: StreamID;
-  readonly desc?: DescriptionNode;
-}
-
 export interface ApplicationNode {
   readonly kind: NodeKind.Application;
-  readonly dsids: ReadonlyArray<DescribedStreamID>; // array since there can be multiple yields
+  readonly sids: ReadonlyArray<StreamID>; // array since there can be multiple yields
   readonly reti: number; // index of which of sids is "returned" to parent
   readonly func: FunctionExpressionNode; // function being applied
   readonly sargs: ReadonlyArray<StreamExpressionNode>;
@@ -94,9 +94,9 @@ export interface ApplicationNode {
 }
 
 // Stream parameter definitions (on the "inside" of a function def) are _not_ expressions.
-export type StreamExpressionNode = UndefinedLiteralNode | NumberLiteralNode | ArrayLiteralNode | StreamReferenceNode | ApplicationNode;
+export type StreamExpressionNode = UndefinedLiteralNode | NumberLiteralNode | ArrayLiteralNode | StreamIndirectionNode | StreamReferenceNode | ApplicationNode;
 export function isStreamExpressionNode(node: Node): node is StreamExpressionNode {
-  return (node.kind === NodeKind.UndefinedLiteral) || (node.kind === NodeKind.NumberLiteral) || (node.kind === NodeKind.ArrayLiteral) || (node.kind === NodeKind.StreamReference) || (node.kind === NodeKind.Application);
+  return (node.kind === NodeKind.UndefinedLiteral) || (node.kind === NodeKind.NumberLiteral) || (node.kind === NodeKind.ArrayLiteral) || (node.kind === NodeKind.StreamIndirection) || (node.kind === NodeKind.StreamReference) || (node.kind === NodeKind.Application);
 }
 
 export function streamExprReturnedId(node: StreamExpressionNode): StreamID {
@@ -104,34 +104,14 @@ export function streamExprReturnedId(node: StreamExpressionNode): StreamID {
     case NodeKind.UndefinedLiteral:
     case NodeKind.NumberLiteral:
     case NodeKind.ArrayLiteral:
+    case NodeKind.StreamIndirection:
       return node.sid;
 
     case NodeKind.StreamReference:
       return node.ref;
 
     case NodeKind.Application:
-      return node.dsids[node.reti].sid;
-
-    default: {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const exhaustive: never = node; // this will cause a type error if we haven't handled all cases
-      throw new Error();
-    }
-  }
-}
-
-export function streamExprReturnedDesc(node: StreamExpressionNode): DescriptionNode | undefined {
-  switch (node.kind) {
-    case NodeKind.UndefinedLiteral:
-    case NodeKind.NumberLiteral:
-    case NodeKind.ArrayLiteral:
-      return node.desc;
-
-    case NodeKind.StreamReference:
-      return undefined;
-
-    case NodeKind.Application:
-      return node.dsids[node.reti].desc;
+      return node.sids[node.reti];
 
     default: {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -147,18 +127,18 @@ export function streamExprReturnedDesc(node: StreamExpressionNode): DescriptionN
 
 export interface SignatureStreamParameterNode {
   readonly kind: NodeKind.SignatureStreamParameter;
-  readonly desc?: DescriptionNode;
+  readonly name?: NameNode;
 }
 
 export interface SignatureFunctionParameterNode {
   readonly kind: NodeKind.SignatureFunctionParameter;
-  readonly desc?: DescriptionNode;
+  readonly name?: NameNode;
   readonly sig: SignatureNode;
 }
 
 export interface SignatureYieldNode {
   readonly kind: NodeKind.SignatureYield;
-  readonly desc?: DescriptionNode;
+  readonly name?: NameNode;
 }
 
 export interface SignatureNode {
@@ -187,7 +167,7 @@ export interface TreeFunctionBodyNode {
 export interface TreeFunctionDefinitionNode {
   readonly kind: NodeKind.TreeFunctionDefinition;
   readonly fid: FunctionID;
-  readonly desc?: DescriptionNode;
+  readonly name?: NameNode;
   readonly sig: SignatureNode;
 
   readonly spids: ReadonlyArray<StreamID>;
@@ -198,7 +178,7 @@ export interface TreeFunctionDefinitionNode {
 export interface NativeFunctionDefinitionNode {
   readonly kind: NodeKind.NativeFunctionDefinition;
   readonly fid: FunctionID;
-  readonly desc?: DescriptionNode;
+  readonly name?: NameNode;
   readonly sig: SignatureNode;
 
   // TODO: JS code as string?
@@ -236,4 +216,4 @@ export function functionExprId(node: FunctionExpressionNode): FunctionID {
   }
 }
 
-export type Node = DescriptionNode | SignatureNode | TreeFunctionBodyNode | BodyExpressionNode | SignatureStreamParameterNode | SignatureFunctionParameterNode | SignatureYieldNode;
+export type Node = NameNode | SignatureNode | TreeFunctionBodyNode | BodyExpressionNode | SignatureStreamParameterNode | SignatureFunctionParameterNode | SignatureYieldNode;
