@@ -297,12 +297,12 @@ const AppishNodeView: React.FC<AppishNodeProps> = ({node, name, topBarExtraClass
           {((streamLabels.length > 0) || (yieldLabels.length > 0) || (functionArgs.length > 0)) &&
             <div className="TreeView-appish-body">
               <div className="TreeView-appish-body-stream-area">
-                <div ref={yieldLabelsRef}>{yieldLabels.map(ylabel => (
-                  <div className="TreeView-common-padding">{ylabel}</div>
+                <div ref={yieldLabelsRef}>{yieldLabels.map((ylabel, idx) => (
+                  <div key={idx} className="TreeView-common-padding">{ylabel}</div>
                 ))}</div>
                 <div style={{textAlign: 'right', flex: '1'}} ref={streamLabelsRef}>
-                  {streamLabels.map(slabel => (
-                    <div className="TreeView-common-padding">{slabel || <span>&nbsp;</span>}</div>
+                  {streamLabels.map((slabel, idx) => (
+                    <div key={idx} className="TreeView-common-padding">{slabel || <span>&nbsp;</span>}</div>
                   ))}
                 </div>
               </div>
@@ -321,7 +321,7 @@ const AppishNodeView: React.FC<AppishNodeProps> = ({node, name, topBarExtraClass
         <div key={idx} style={{width: CXN_LENGTH, height: '1px', background: CXN_COLOR, position: 'absolute'}} />
       ))}</div>
       <div className="TreeView-appish-node-stream-children" ref={streamChildrenRef}>{streamArgs.map(({node}, idx) => (
-        <StreamExpressionView node={node} reportAttachmentOffset={offset => { handleReportAttachmentOffset(offset, idx); }} />
+        <StreamExpressionView key={idx} node={node} reportAttachmentOffset={offset => { handleReportAttachmentOffset(offset, idx); }} />
       ))}</div>
     </div>
   );
