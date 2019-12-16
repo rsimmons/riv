@@ -1,6 +1,6 @@
 import React, { useReducer, useRef, useEffect, useState, useMemo } from 'react';
 import { HotKeys, ObserveKeys } from "react-hotkeys";
-import { initialState, reducer, computeEnvironmentLookups } from './EditReducer';
+import { initialState, reducer, computeEnvironmentLookups, computeParentLookup } from './EditReducer';
 import StoragePanel from './StoragePanel';
 import './Editor.css';
 import { TreeFunctionDefinitionView, TreeViewContextProvider, TreeViewContextData } from './TreeView';
@@ -68,10 +68,10 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
   // NOTE: This is hacky, but don't know better way to handle.
   const previouslyEditingSelected = useRef<boolean>(false);
   useEffect(() => {
-    if (previouslyEditingSelected.current && !state.editingSelTree && editorElem.current) {
+    if (previouslyEditingSelected.current && !state.editing && editorElem.current) {
       editorElem.current.focus();
     }
-    previouslyEditingSelected.current = !!state.editingSelTree;
+    previouslyEditingSelected.current = !!state.editing;
   });
 
   // TODO: memoize generation of this
@@ -102,10 +102,11 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
   //   dispatch({type: 'LOAD_PROGRAM', program});
   // };
 
-  const displayedSelTree = state.editingSelTree || state.stableSelTree;
-  const editing = !!state.editingSelTree;
+  const displayedSelTree = state.editing ? state.editing.curSelTree : state.stableSelTree;
+  const editing = !!state.editing;
 
   const envLookups = useMemo(() => computeEnvironmentLookups(displayedSelTree.mainDefinition, state.nativeFunctions), [displayedSelTree.mainDefinition, state.nativeFunctions]);
+  const parentLookup = useMemo(() => computeParentLookup(displayedSelTree.mainDefinition), [displayedSelTree.mainDefinition]);
 
   const treeViewCtxData: TreeViewContextData = {
     selectedNode: displayedSelTree.selectedNode,
@@ -113,6 +114,7 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
     // clipboardTopNode: (state.clipboardStack.length > 0) ? state.derivedLookups.streamIdToNode!.get(state.clipboardStack[state.clipboardStack.length-1].streamId) : null,
     // clipboardRestNodes: state.clipboardStack.slice(0, -1).map(frame => state.derivedLookups.streamIdToNode!.get(frame.streamId)),
     envLookups,
+    parentLookup,
     dispatch,
     onSelectNode: (node: Node) => {
       dispatch({

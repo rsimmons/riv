@@ -121,7 +121,11 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
         temporaryMarked.add(node);
         for (const elem of node.elems) {
           traverseStreamExpr(elem);
-          elemStreamIds.push(streamExprReturnedId(elem));
+          const elemRetSid = streamExprReturnedId(elem);
+          if (!elemRetSid) {
+            throw new Error();
+          }
+          elemStreamIds.push(elemRetSid);
         }
         temporaryMarked.delete(node);
 
@@ -139,10 +143,15 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
         traverseStreamExpr(node.expr);
         temporaryMarked.delete(node);
 
+        const exprRetSid = streamExprReturnedId(node.expr);
+        if (!exprRetSid) {
+          throw new Error();
+        }
+
         appStreams.push({
           sids: [node.sid],
           funcId: 'id',
-          sargIds: [streamExprReturnedId(node.expr)],
+          sargIds: [exprRetSid],
           fargIds: [],
         });
         break;
@@ -181,7 +190,11 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
 
         for (const sarg of node.sargs) {
           traverseStreamExpr(sarg);
-          streamArgIds.push(streamExprReturnedId(sarg));
+          const sargRetSid = streamExprReturnedId(sarg);
+          if (!sargRetSid) {
+            throw new Error();
+          }
+          streamArgIds.push(sargRetSid);
         }
 
         for (const farg of node.fargs) {
@@ -236,7 +249,11 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
 
   for (const node of definition.body.exprs) {
     if (node.kind === NodeKind.YieldExpression) {
-      yieldIds[node.idx] = streamExprReturnedId(node.expr);
+      const exprRetSid = streamExprReturnedId(node.expr);
+      if (!exprRetSid) {
+        throw new Error();
+      }
+      yieldIds[node.idx] = exprRetSid;
     } else if (isStreamExpressionNode(node)) {
       traverseStreamExpr(node);
     } else {

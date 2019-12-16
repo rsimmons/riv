@@ -26,7 +26,9 @@ interface StreamRefChoice {
 
 interface AppChoice {
   readonly type: 'app';
+  readonly text: string;
   readonly funcDefNode: FunctionDefinitionNode;
+  readonly retIdx: number | undefined;
 }
 
 type Choice = UndefinedChoice | StreamIndChoice | StreamRefChoice | NumberChoice | AppChoice;
@@ -83,7 +85,7 @@ function Choice({ choice }: ChoiceProps) {
       return <span><em>S</em> {choice.desc} <small>(id {choice.sid})</small></span>
 
     case 'app':
-      return <span><em>F</em> {choice.funcDefNode.name && choice.funcDefNode.name.text} {/*choice.node.signature.parameters.map(param => (param.name.startsWith('_') ? '\u25A1' : param.name)).join(', ')*/}</span>
+      return <span><em>F</em> {choice.text}</span>
 
     default:
       throw new Error();
@@ -95,7 +97,7 @@ interface DropdownState {
   index: number;
 }
 
-const ExpressionChooser: React.FC<{initNode: Node, envLookups: EnvironmentLookups, dispatch: (action: any) => void}> = ({ initNode, envLookups, dispatch }) => {
+const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: EnvironmentLookups, dispatch: (action: any) => void}> = ({ overNode, atRoot, envLookups, dispatch }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     inputRef.current && inputRef.current.select();
@@ -108,17 +110,19 @@ const ExpressionChooser: React.FC<{initNode: Node, envLookups: EnvironmentLookup
     }
   });
 
+  const [origNode] = useState(overNode);
+
   const [text, setText] = useState(() => {
     // Initialize text based on node
-    switch (initNode.kind) {
+    switch (origNode.kind) {
       case NodeKind.UndefinedLiteral:
         return '';
 
       case NodeKind.NumberLiteral:
-        return initNode.val.toString();
+        return origNode.val.toString();
 
       case NodeKind.StreamIndirection:
-        return initNode.name || '';
+        return origNode.name || '';
 
       case NodeKind.StreamReference:
       case NodeKind.Application:
@@ -146,7 +150,7 @@ const ExpressionChooser: React.FC<{initNode: Node, envLookups: EnvironmentLookup
       });
     }
 
-    const nearestDef = envLookups.nodeToNearestTreeDef.get(initNode);
+    const nearestDef = envLookups.nodeToNearestTreeDef.get(overNode);
     if (!nearestDef) {
       throw new Error();
     }
@@ -161,7 +165,7 @@ const ExpressionChooser: React.FC<{initNode: Node, envLookups: EnvironmentLookup
 
     const namedStreams: Array<[string, StreamDefinition]> = [];
     streamEnv.forEach((sdef, ) => {
-      const selfRef = (sdef.kind === 'expr') && (sdef.expr === initNode);
+      const selfRef = (sdef.kind === 'expr') && (sdef.expr === overNode);
       if (sdef.name && !selfRef) {
         namedStreams.push([sdef.name, sdef]);
       }
@@ -176,17 +180,36 @@ const ExpressionChooser: React.FC<{initNode: Node, envLookups: EnvironmentLookup
       });
     }
 
-    const namedFunctions: Array<[string, FunctionDefinitionNode]> = [];
+    const namedFunctions: Array<[string, [FunctionDefinitionNode, number | undefined]]> = [];
     functionEnv.forEach((defNode, ) => {
       if (defNode.name) {
-        namedFunctions.push([defNode.name.text, defNode]);
+        const defName = defNode.name.text;
+        const yields = defNode.sig.yields;
+        if (atRoot) {
+          namedFunctions.push([defName, [defNode, undefined]]);
+        } else {
+          if (yields.length > 0) {
+            yields.forEach((y, idx) => {
+              let yieldExt: string;
+              if (!y.name && (yields.length === 1)) {
+                yieldExt = '';
+              } else {
+                yieldExt = '.' + (y.name ? y.name.text : idx.toString());
+              }
+              namedFunctions.push([defName + yieldExt, [defNode, idx]]);
+            });
+          }
+        }
       }
     });
     const functionSearchResults = fuzzySearch(text, namedFunctions);
     for (const result of functionSearchResults) {
+      const [funcDefNode, retIdx] = result.data;
       choices.push({
         type: 'app',
-        funcDefNode: result.data,
+        text: result.name,
+        funcDefNode,
+        retIdx,
       });
     }
 
@@ -210,16 +233,16 @@ const ExpressionChooser: React.FC<{initNode: Node, envLookups: EnvironmentLookup
   const realizeChoice = (state: DropdownState): void => {
     const choice = state.choices[state.index];
 
-    if (isStreamExpressionNode(initNode)) {
+    if (isStreamExpressionNode(origNode)) {
       let newNode: Node;
-      const newSid: StreamID = (initNode.kind === NodeKind.StreamReference) ? generateStreamId() : streamExprReturnedId(initNode);
+      const newSid: StreamID = (origNode.kind === NodeKind.StreamReference) ? generateStreamId() : (streamExprReturnedId(origNode) || generateStreamId());
 
       switch (choice.type) {
         case 'undefined':
           newNode = {
             kind: NodeKind.UndefinedLiteral,
             sid: newSid,
-          }
+          };
           break;
 
         case 'number':
@@ -227,7 +250,7 @@ const ExpressionChooser: React.FC<{initNode: Node, envLookups: EnvironmentLookup
             kind: NodeKind.NumberLiteral,
             sid: newSid,
             val: choice.value,
-          }
+          };
           break;
 
         case 'streamind':
@@ -254,7 +277,7 @@ const ExpressionChooser: React.FC<{initNode: Node, envLookups: EnvironmentLookup
           const n: ApplicationNode = {
             kind: NodeKind.Application,
             sids: choice.funcDefNode.sig.yields.map(() => generateStreamId()),
-            reti: 0,
+            reti: choice.retIdx,
             func: {
               kind: NodeKind.FunctionReference,
               ref: choice.funcDefNode.fid,
@@ -283,7 +306,7 @@ const ExpressionChooser: React.FC<{initNode: Node, envLookups: EnvironmentLookup
                 },
               }
             }),
-          }
+          };
           newNode = n;
           break;
 

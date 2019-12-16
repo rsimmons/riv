@@ -87,7 +87,7 @@ export interface StreamReferenceNode {
 export interface ApplicationNode {
   readonly kind: NodeKind.Application;
   readonly sids: ReadonlyArray<StreamID>; // array since there can be multiple yields
-  readonly reti: number; // index of which of sids is "returned" to parent
+  readonly reti: number | undefined; // index of which of sids is "returned" to parent
   readonly func: FunctionExpressionNode; // function being applied
   readonly sargs: ReadonlyArray<StreamExpressionNode>;
   readonly fargs: ReadonlyArray<FunctionExpressionNode>;
@@ -99,7 +99,7 @@ export function isStreamExpressionNode(node: Node): node is StreamExpressionNode
   return (node.kind === NodeKind.UndefinedLiteral) || (node.kind === NodeKind.NumberLiteral) || (node.kind === NodeKind.ArrayLiteral) || (node.kind === NodeKind.StreamIndirection) || (node.kind === NodeKind.StreamReference) || (node.kind === NodeKind.Application);
 }
 
-export function streamExprReturnedId(node: StreamExpressionNode): StreamID {
+export function streamExprReturnedId(node: StreamExpressionNode): StreamID | undefined {
   switch (node.kind) {
     case NodeKind.UndefinedLiteral:
     case NodeKind.NumberLiteral:
@@ -111,7 +111,7 @@ export function streamExprReturnedId(node: StreamExpressionNode): StreamID {
       return node.ref;
 
     case NodeKind.Application:
-      return node.sids[node.reti];
+      return (node.reti === undefined) ? undefined : node.sids[node.reti];
 
     default: {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars

@@ -18,10 +18,15 @@ export interface SelTree {
   readonly selectedNode: Node;
 }
 
+interface EditState {
+  origSelTree: SelTree;
+  curSelTree: SelTree;
+}
+
 export interface State {
   readonly programInfo: ProgramInfo;
   readonly stableSelTree: SelTree;
-  readonly editingSelTree: SelTree | null;
+  readonly editing: EditState | null;
   readonly nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>;
   /*
   readonly liveMain: {

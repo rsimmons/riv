@@ -458,7 +458,10 @@ function attemptBeginEditSelected(state: State): State {
   if (isStreamExpressionNode(state.stableSelTree.selectedNode)) {
     return {
       ...state,
-      editingSelTree: state.stableSelTree,
+      editing: {
+        origSelTree: state.stableSelTree,
+        curSelTree: state.stableSelTree,
+      },
     };
   } else {
     console.log('Not starting edit because not a stream expression');
@@ -499,11 +502,15 @@ function attemptInsertBeforeAfter(state: State, before: boolean): State {
       if (newMain.kind !== NodeKind.TreeFunctionDefinition) {
         throw new Error();
       }
+      const origSelTree = {
+        mainDefinition: newMain,
+        selectedNode: newElem,
+      };
       return {
         ...state,
-        editingSelTree: {
-          mainDefinition: newMain,
-          selectedNode: newElem,
+        editing: {
+          origSelTree,
+          curSelTree: origSelTree,
         },
       };
     } else if (parent.kind === NodeKind.TreeFunctionBody) {
@@ -520,11 +527,15 @@ function attemptInsertBeforeAfter(state: State, before: boolean): State {
       if (newMain.kind !== NodeKind.TreeFunctionDefinition) {
         throw new Error();
       }
+      const origSelTree = {
+        mainDefinition: newMain,
+        selectedNode: newElem,
+      };
       return {
         ...state,
-        editingSelTree: {
-          mainDefinition: newMain,
-          selectedNode: newElem,
+        editing: {
+          origSelTree,
+          curSelTree: origSelTree,
         },
       };
     } else {
@@ -718,49 +729,53 @@ export function reducer(state: State, action: Action): State {
   */
 
   if (action.type === 'BEGIN_EDIT') {
-    if (!state.editingSelTree) {
+    if (!state.editing) {
       return attemptBeginEditSelected(state);
     }
   } else if (action.type === 'INSERT_BEFORE') {
-    if (!state.editingSelTree) {
+    if (!state.editing) {
       return attemptInsertBeforeAfter(state, true);
     }
   } else if (action.type === 'INSERT_AFTER') {
-    if (!state.editingSelTree) {
+    if (!state.editing) {
       return attemptInsertBeforeAfter(state, false);
     }
   } else if (action.type === 'TOGGLE_EDIT') {
-    if (state.editingSelTree) {
+    if (state.editing) {
       return updateAfterEdit({
         ...pushUndo(state),
-        stableSelTree: state.editingSelTree,
-        editingSelTree: null,
+        stableSelTree: state.editing.curSelTree,
+        editing: null,
       });
     } else {
       return attemptBeginEditSelected(state);
     }
   } else if (action.type === 'ABORT_EDIT') {
-    if (state.editingSelTree) {
+    if (state.editing) {
       return {
         ...state,
-        editingSelTree: null,
+        editing: null,
       };
     }
   } else if (action.type === 'UPDATE_EDITING_NODE') {
-    if (!state.editingSelTree) {
+    if (!state.editing) {
       throw new Error();
     }
-    const parentLookup = computeParentLookup(state.editingSelTree.mainDefinition); // TODO: memoize
-    const newMain = replaceNode(state.editingSelTree.selectedNode, action.newNode!, parentLookup);
+    const parentLookup = computeParentLookup(state.editing.origSelTree.mainDefinition); // TODO: memoize
+    const newMain = replaceNode(state.editing.origSelTree.selectedNode, action.newNode!, parentLookup);
     if (newMain.kind !== NodeKind.TreeFunctionDefinition) {
       throw new Error();
     }
+
+    // TODO: handle compilation exceptions
+    const [fixedSelTree, ] = fixupAndCompileTree({mainDefinition: newMain, selectedNode: action.newNode!}, state.nativeFunctions)
+
     return {
       ...state,
-      editingSelTree: {
-        mainDefinition: newMain,
-        selectedNode: action.newNode!,
-      }
+      editing: {
+        ...state.editing,
+        curSelTree: fixedSelTree,
+      },
     };
   } else if (action.type === 'UNDO') {
     if (state.undoStack.length > 0) {
@@ -768,7 +783,7 @@ export function reducer(state: State, action: Action): State {
       return updateAfterEdit({
         ...state,
         stableSelTree: newSelTree,
-        editingSelTree: null,
+        editing: null,
         undoStack: state.undoStack.slice(0, state.undoStack.length-1),
       });
     } else {
@@ -788,7 +803,7 @@ export function reducer(state: State, action: Action): State {
           ...state.stableSelTree,
           selectedNode: newSelectedNode,
         },
-        editingSelTree: null, // abort any edits
+        editing: null, // abort any edits
       };
     } else {
       return state;
@@ -859,7 +874,7 @@ function initialStateFromDefinition(mainDefinition: TreeFunctionDefinitionNode):
       mainDefinition,
       selectedNode: mainDefinition,
     },
-    editingSelTree: null,
+    editing: null,
     nativeFunctions,
     // liveMain: null,
     undoStack: [],

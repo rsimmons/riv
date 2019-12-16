@@ -11,6 +11,7 @@ export interface TreeViewContextData {
   selectedNode: Node;
   editing: boolean;
   envLookups: EnvironmentLookups;
+  parentLookup: Map<Node, Node>;
   dispatch: (action: any) => void; // TODO: tighten up type
   onSelectNode: (node: Node) => void;
 };
@@ -171,7 +172,7 @@ interface AppishNodeProps {
   streamArgs: ReadonlyArray<AppishNodeChild<StreamExpressionNode>>;
   functionArgs: ReadonlyArray<AppishNodeChild<FunctionDefinitionNode>>;
   yields: ReadonlyArray<string | undefined>;
-  retIdx: number; // which yield is connected to parent
+  retIdx: number | undefined; // which yield is connected to parent
   reportAttachmentOffset?: (offset: number) => void;
 }
 
@@ -245,7 +246,7 @@ const AppishNodeView: React.FC<AppishNodeProps> = ({node, name, topBarExtraClass
 
     setTopMargin(nameBarRef.current, nameBarSpacing);
 
-    if (reportAttachmentOffset) {
+    if (reportAttachmentOffset && (retIdx !== undefined)) {
       if (yieldAtBar) {
         reportAttachmentOffset(nameBarSpacing + nameBarAttachmentOffset);
       } else if (yieldLabels.length > 0) {
@@ -434,10 +435,16 @@ const StreamExpressionView: React.FC<{node: StreamExpressionNode, reportAttachme
 
   const selected = (ctxData.selectedNode === node);
   if (selected && ctxData.editing) {
+    const parent = ctxData.parentLookup.get(node);
+    if (!parent) {
+      throw new Error();
+    }
+    const atRoot = parent.kind === NodeKind.TreeFunctionBody;
+
     return (
       <div style={{position: 'relative'}}>
         {nodeView}
-        <div style={{position: 'absolute', top: 0}}><ExpressionChooser initNode={node} envLookups={ctxData.envLookups} dispatch={ctxData.dispatch} /></div>
+        <div style={{position: 'absolute', top: 0}}><ExpressionChooser overNode={node} atRoot={atRoot} envLookups={ctxData.envLookups} dispatch={ctxData.dispatch} /></div>
       </div>
     );
   } else {
