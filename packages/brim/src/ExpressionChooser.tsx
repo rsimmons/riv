@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './ExpressionChooser.css';
-import { generateStreamId, Node, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, SignatureStreamParameterNode, ApplicationNode, SignatureFunctionParameterNode, generateFunctionId, StreamID, ArrayLiteralNode, UndefinedLiteralNode } from './Tree';
+import { generateStreamId, Node, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, SignatureStreamParameterNode, ApplicationNode, SignatureFunctionParameterNode, generateFunctionId, StreamID, ArrayLiteralNode, UndefinedLiteralNode, streamExprReturnedId } from './Tree';
 import { fuzzy_match } from './vendor/fts_fuzzy_match';
 import { EnvironmentLookups, StreamDefinition } from './EditReducer';
 
@@ -161,7 +161,8 @@ const ExpressionChooser: React.FC<{initNode: Node, envLookups: EnvironmentLookup
 
     const namedStreams: Array<[string, StreamDefinition]> = [];
     streamEnv.forEach((sdef, ) => {
-      if (sdef.name) {
+      const selfRef = (sdef.kind === 'expr') && (sdef.expr === initNode);
+      if (sdef.name && !selfRef) {
         namedStreams.push([sdef.name, sdef]);
       }
     });
@@ -211,18 +212,20 @@ const ExpressionChooser: React.FC<{initNode: Node, envLookups: EnvironmentLookup
 
     if (isStreamExpressionNode(initNode)) {
       let newNode: Node;
+      const newSid: StreamID = (initNode.kind === NodeKind.StreamReference) ? generateStreamId() : streamExprReturnedId(initNode);
+
       switch (choice.type) {
         case 'undefined':
           newNode = {
             kind: NodeKind.UndefinedLiteral,
-            sid: generateStreamId(),
+            sid: newSid,
           }
           break;
 
         case 'number':
           newNode = {
             kind: NodeKind.NumberLiteral,
-            sid: generateStreamId(),
+            sid: newSid,
             val: choice.value,
           }
           break;
@@ -230,7 +233,7 @@ const ExpressionChooser: React.FC<{initNode: Node, envLookups: EnvironmentLookup
         case 'streamind':
           newNode = {
             kind: NodeKind.StreamIndirection,
-            sid: generateStreamId(),
+            sid: newSid,
             name: choice.name,
             expr: {
               kind: NodeKind.UndefinedLiteral,
@@ -247,6 +250,7 @@ const ExpressionChooser: React.FC<{initNode: Node, envLookups: EnvironmentLookup
           break;
 
         case 'app':
+          // TODO: use newSid
           const n: ApplicationNode = {
             kind: NodeKind.Application,
             sids: choice.funcDefNode.sig.yields.map(() => generateStreamId()),
