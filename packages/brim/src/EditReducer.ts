@@ -1,6 +1,6 @@
 import genuid from './uid';
 import { State, ProgramInfo, SelTree } from './State';
-import { StreamID, FunctionID, generateStreamId, generateFunctionId, NodeKind, Node, TreeFunctionDefinitionNode, FunctionDefinitionNode, isFunctionDefinitionNode, StreamExpressionNode, NativeFunctionDefinitionNode, isStreamExpressionNode, UndefinedLiteralNode, NameNode, BodyExpressionNode } from './Tree';
+import { StreamID, FunctionID, generateStreamId, generateFunctionId, NodeKind, Node, TreeFunctionDefinitionNode, FunctionDefinitionNode, isFunctionDefinitionNode, StreamExpressionNode, NativeFunctionDefinitionNode, isStreamExpressionNode, UndefinedLiteralNode, BodyExpressionNode } from './Tree';
 import { CompiledDefinition } from './CompiledDefinition';
 import { compileGlobalTreeDefinition, CompilationError } from './Compiler';
 // import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
@@ -701,7 +701,7 @@ function updateLiveExecution(state: State): State {
 
 // NOTE: may throw a compiler exception
 function updateAfterEdit(state: State): State {
-  const [newSelTree, compiledDef] = fixupAndCompileTree(state.stableSelTree, state.nativeFunctions);
+  const [newSelTree, ] = fixupAndCompileTree(state.stableSelTree, state.nativeFunctions);
   return updateLiveExecution({
     ...state,
     stableSelTree: newSelTree,

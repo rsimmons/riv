@@ -1,7 +1,7 @@
 import React, { useReducer, useRef, useEffect, useState, useMemo } from 'react';
 import { HotKeys, ObserveKeys } from "react-hotkeys";
 import { initialState, reducer, computeEnvironmentLookups, computeParentLookup } from './EditReducer';
-import StoragePanel from './StoragePanel';
+// import StoragePanel from './StoragePanel';
 import './Editor.css';
 import { TreeFunctionDefinitionView, TreeViewContextProvider, TreeViewContextData } from './TreeView';
 import { Node } from './Tree';
@@ -94,13 +94,15 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
     }
   };
 
+  /*
   const handleChangeProgramName = (newName: string) => {
     dispatch({type: 'SET_PROGRAM_NAME', newName});
   };
 
-  // const handleLoadProgram = (program: Program) => {
-  //   dispatch({type: 'LOAD_PROGRAM', program});
-  // };
+  const handleLoadProgram = (program: Program) => {
+    dispatch({type: 'LOAD_PROGRAM', program});
+  };
+  */
 
   const displayedSelTree = state.editing ? state.editing.curSelTree : state.stableSelTree;
   const editing = !!state.editing;

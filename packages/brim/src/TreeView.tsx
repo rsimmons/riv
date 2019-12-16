@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useRef, RefObject, useLayoutEffect } from 'react';
-import { Node, NameNode, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, isFunctionExpressionNode, TreeFunctionBodyNode, FunctionExpressionNode, isFunctionDefinitionNode, UndefinedLiteralNode, NumberLiteralNode, StreamReferenceNode } from './Tree';
+import { Node, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, isFunctionExpressionNode, TreeFunctionBodyNode, FunctionExpressionNode, isFunctionDefinitionNode, UndefinedLiteralNode, NumberLiteralNode, StreamReferenceNode } from './Tree';
 import ExpressionChooser from './ExpressionChooser';
 import './TreeView.css';
 import { EnvironmentLookups } from './EditReducer';
@@ -101,26 +101,6 @@ function useReportSimpleAttachmentOffset(reportAttachmentOffset?: (offset: numbe
 
   return ref;
 }
-
-const NameNodeView: React.FC<{node: NameNode, reportAttachmentOffset?: (offset: number) => void}> = ({node, reportAttachmentOffset}) => {
-  const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node);
-  const ref = useReportSimpleAttachmentOffset(reportAttachmentOffset);
-  return (
-    <div ref={ref} className={selectionClasses.concat(['TreeView-simple-node', 'TreeView-common-padding']).join(' ')} {...selectionHandlers}>{node.text}&nbsp;=</div>
-  );
-}
-
-const SingleChildNodeView: React.FC<{node: Node, contents: React.ReactNode, boxColor: string, child: React.ReactNode}> = ({node, contents, boxColor, child}) => {
-  const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node);
-
-  return (
-    <div style={{display: 'flex'}}>
-      <div className={selectionClasses.concat(['TreeView-simple-node', 'TreeView-common-padding']).join(' ')} {...selectionHandlers} style={{background: boxColor}}>{contents}</div>
-      <div className="TreeView-appish-node-child-cxn-triangle"><div /></div>
-      {child}
-    </div>
-  );
-};
 
 const ChildlessStreamNodeView: React.FC<{node: UndefinedLiteralNode | NumberLiteralNode, contents: React.ReactNode, boxColor: string, reportAttachmentOffset?: (offset: number) => void}> = ({node, contents, boxColor, reportAttachmentOffset}) => {
   const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node);

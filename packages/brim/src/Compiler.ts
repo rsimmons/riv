@@ -197,8 +197,8 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
           streamArgIds.push(sargRetSid);
         }
 
+        /*
         for (const farg of node.fargs) {
-          /*
           const compiledContainedDef = compileTreeDefinition(argument, streamEnvironment, functionEnvironment);
 
           compiledContainedDef.externalReferencedStreamIds.forEach((sid) => {
@@ -224,8 +224,8 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
           });
 
           argumentIds.push(argument.id);
-          */
         }
+        */
 
         temporaryMarked.delete(node);
 
