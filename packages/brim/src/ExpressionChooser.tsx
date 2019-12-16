@@ -272,11 +272,15 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
           };
           break;
 
-        case 'app':
-          // TODO: use newSid
+        case 'app': {
+          const sids = choice.funcDefNode.sig.yields.map(() => generateStreamId());
+          if (choice.retIdx !== undefined) {
+            sids[choice.retIdx] = newSid;
+          }
+
           const n: ApplicationNode = {
             kind: NodeKind.Application,
-            sids: choice.funcDefNode.sig.yields.map(() => generateStreamId()),
+            sids,
             reti: choice.retIdx,
             func: {
               kind: NodeKind.FunctionReference,
@@ -309,6 +313,7 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
           };
           newNode = n;
           break;
+        }
 
         default:
           throw new Error();
