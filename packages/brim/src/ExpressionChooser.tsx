@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './ExpressionChooser.css';
-import { generateStreamId, Node, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, SignatureStreamParameterNode, ApplicationNode, SignatureFunctionParameterNode, generateFunctionId, StreamID, ArrayLiteralNode, UndefinedLiteralNode, streamExprReturnedId } from './Tree';
+import { generateStreamId, Node, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, SignatureStreamParameterNode, ApplicationNode, SignatureFunctionParameterNode, generateFunctionId, StreamID, ArrayLiteralNode, UndefinedLiteralNode, streamExprReturnedId, StreamExpressionNode } from './Tree';
 import { fuzzy_match } from './vendor/fts_fuzzy_match';
 import { EnvironmentLookups, StreamDefinition } from './EditReducer';
 
@@ -237,6 +237,30 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
       let newNode: Node;
       const newSid: StreamID = (origNode.kind === NodeKind.StreamReference) ? generateStreamId() : (streamExprReturnedId(origNode) || generateStreamId());
 
+      let origStreamChildren: ReadonlyArray<StreamExpressionNode>;
+      switch (origNode.kind) {
+        case NodeKind.UndefinedLiteral:
+        case NodeKind.NumberLiteral:
+        case NodeKind.StreamReference:
+          origStreamChildren = [];
+          break;
+
+        case NodeKind.StreamIndirection:
+          origStreamChildren = [origNode.expr];
+          break;
+
+        case NodeKind.ArrayLiteral:
+          origStreamChildren = origNode.elems;
+          break;
+
+        case NodeKind.Application:
+          origStreamChildren = origNode.sargs;
+          break;
+
+        default:
+          throw new Error();
+      }
+
       switch (choice.type) {
         case 'undefined':
           newNode = {
@@ -258,7 +282,7 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
             kind: NodeKind.StreamIndirection,
             sid: newSid,
             name: choice.name,
-            expr: {
+            expr: (origStreamChildren.length > 0) ? origStreamChildren[0] : {
               kind: NodeKind.UndefinedLiteral,
               sid: generateStreamId(),
             },
@@ -278,6 +302,13 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
             sids[choice.retIdx] = newSid;
           }
 
+          const sargs: ReadonlyArray<StreamExpressionNode> = choice.funcDefNode.sig.streamParams.map((_, idx) => (
+            (idx < origStreamChildren.length) ? origStreamChildren[idx] : {
+              kind: NodeKind.UndefinedLiteral,
+              sid: generateStreamId(),
+            }
+          ));
+
           const n: ApplicationNode = {
             kind: NodeKind.Application,
             sids,
@@ -286,10 +317,7 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
               kind: NodeKind.FunctionReference,
               ref: choice.funcDefNode.fid,
             },
-            sargs: choice.funcDefNode.sig.streamParams.map((param: SignatureStreamParameterNode) => ({
-              kind: NodeKind.UndefinedLiteral,
-              sid: generateStreamId(),
-            })),
+            sargs,
             fargs: choice.funcDefNode.sig.funcParams.map((param: SignatureFunctionParameterNode) => {
               return {
                 kind: NodeKind.TreeFunctionDefinition,
