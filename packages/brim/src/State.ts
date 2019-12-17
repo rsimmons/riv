@@ -28,13 +28,11 @@ export interface State {
   readonly stableSelTree: SelTree;
   readonly editing: EditState | null;
   readonly nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>;
-  /*
-  readonly liveMain: {
+  readonly undoStack: ReadonlyArray<SelTree>;
+  readonly clipboardStack: ReadonlyArray<ClipboardStackFrame>;
+  readonly execution: {
     context: ExecutionContext;
     compiledDefinition: CompiledDefinition | null;
     updateCompiledDefinition: (newDefinition: CompiledDefinition) => void;
   } | null;
-  */
-  readonly undoStack: ReadonlyArray<SelTree>;
-  readonly clipboardStack: ReadonlyArray<ClipboardStackFrame>;
 }

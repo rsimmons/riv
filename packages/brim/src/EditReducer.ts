@@ -3,8 +3,8 @@ import { State, ProgramInfo, SelTree } from './State';
 import { StreamID, FunctionID, generateStreamId, generateFunctionId, NodeKind, Node, TreeFunctionDefinitionNode, FunctionDefinitionNode, isFunctionDefinitionNode, StreamExpressionNode, NativeFunctionDefinitionNode, isStreamExpressionNode, UndefinedLiteralNode, BodyExpressionNode, generateApplicationId } from './Tree';
 import { CompiledDefinition } from './CompiledDefinition';
 import { compileGlobalTreeDefinition, CompilationError } from './Compiler';
-// import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
-// import { createLiveFunction } from './LiveFunction';
+import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
+import { createLiveFunction } from './LiveFunction';
 import Environment from './Environment';
 import { iterChildren, visitChildren, replaceChild, deleteArrayElementChild, transformChildren } from './Traversal';
 import globalNativeFunctions from './globalNatives';
@@ -624,89 +624,45 @@ function fixupAndCompileTree(selTree: SelTree, nativeFunctions: ReadonlyArray<Na
     }
   }
 
-  console.log('COMPILED DEF', compiledDefinition);
+  console.log('compiled definition', compiledDefinition);
 
-  // TODO: return new tree and compiled definition
   return [fixedSelTree, compiledDefinition];
 }
 
-function updateLiveExecution(state: State): State {
-  /*
-  // We initialize with an "empty" definition, which we fall back on if compilation fails
-  let newCompiledDefinition: CompiledDefinition = {
-    parameters: [],
-    constantStreamValues: [],
-    applications: [],
-    containedFunctionDefinitions: [],
-    yieldStreamId: null,
-    externalReferencedStreamIds: new Set(),
-    externalReferencedFunctionIds: new Set(),
-  };
+function updateExecution(state: State, newCompiledDefinition: CompiledDefinition): State {
+  if (state.execution) {
+    const { updateCompiledDefinition } = state.execution;
 
-  try {
-    // NOTE: We could avoid repeating this work, but this is sort of temporary anyways
-    const globalFunctionEnvironment: Environment<FunctionDefinitionNode> = new Environment();
-    for (const nf of newState.nativeFunctions) {
-      globalFunctionEnvironment.set(nf.id, nf);
-    }
-
-    newCompiledDefinition = compileGlobalUserDefinition(newState.program.mainDefinition, globalFunctionEnvironment);
-    // console.log('compiled to', newCompiledDefinition);
-  } catch (e) {
-    if (e instanceof CompilationError) {
-      console.log('COMPILATION ERROR', e.message);
-    } else {
-      throw e;
-    }
-  }
-
-  let newLiveMain;
-
-  if (oldState) {
-    const { context, updateCompiledDefinition } = oldState.liveMain!;
-
-    // console.log('updating compiled definition to', newCompiledDefinition);
     beginBatch();
     updateCompiledDefinition(newCompiledDefinition);
     endBatch();
 
-    newLiveMain = {
-      context,
-      updateCompiledDefinition,
-      compiledDefinition: newCompiledDefinition,
-    };
+    return state;
   } else {
     // There is no old state, so we need to create the long-lived stuff
-    // console.log('initializing compiled definition to', newCompiledDefinition);
     const [liveStreamFunc, updateCompiledDefinition] = createLiveFunction(newCompiledDefinition, nativeFunctionEnvironment);
     const context = createNullaryVoidRootExecutionContext(liveStreamFunc);
 
     context.update(); // first update that generally kicks off further async updates
 
-    newLiveMain = {
-      context,
-      updateCompiledDefinition,
-      compiledDefinition: newCompiledDefinition,
+    return {
+      ...state,
+      execution: {
+        context,
+        compiledDefinition: newCompiledDefinition,
+        updateCompiledDefinition,
+      },
     };
   }
-
-  return {
-    ...newState,
-    liveMain: newLiveMain,
-  };
-  */
-
-  return state;
 }
 
 // NOTE: may throw a compiler exception
 function updateAfterEdit(state: State): State {
-  const [newSelTree, ] = fixupAndCompileTree(state.stableSelTree, state.nativeFunctions);
-  return updateLiveExecution({
+  const [newSelTree, compiledDef] = fixupAndCompileTree(state.stableSelTree, state.nativeFunctions);
+  return updateExecution({
     ...state,
     stableSelTree: newSelTree,
-    // TODO: put in compiledDef
-  });
+  }, compiledDef);
 }
 
 export function reducer(state: State, action: Action): State {
@@ -865,21 +821,20 @@ function initialStateFromDefinition(mainDefinition: TreeFunctionDefinitionNode):
     sig: signature,
   }));
 
-  return {
+  const [fixedSelTree, compiledDef] = fixupAndCompileTree({mainDefinition, selectedNode: mainDefinition}, nativeFunctions);
+
+  return updateExecution({
     programInfo: {
       id: genuid(),
       name: 'my program',
     },
-    stableSelTree: {
-      mainDefinition,
-      selectedNode: mainDefinition,
-    },
+    stableSelTree: fixedSelTree,
     editing: null,
     nativeFunctions,
-    // liveMain: null,
     undoStack: [],
     clipboardStack: [],
-  };
+    execution: null,
+  }, compiledDef);
 }
 
 const mdId = generateStreamId();

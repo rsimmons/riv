@@ -17,6 +17,10 @@ function arraysShallowEqual(a: Array<any>, b: Array<any>): boolean {
   return true;
 }
 
+export function createLiveFunction(initialDefinition: CompiledDefinition, outerFunctionEnvironment: Environment<FunctionID, Function>): [Function, (newDefinition: CompiledDefinition) => void] {
+  return [() => { console.log('live function call') }, () => {}];
+}
+
 /**
  * I think that functions in outer environment are not allowed to change identity.
  */
