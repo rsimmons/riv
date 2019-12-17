@@ -1,5 +1,5 @@
 import { StreamID, FunctionID, Node, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, NodeKind, isFunctionDefinitionNode, isStreamExpressionNode, SignatureNode, streamExprReturnedId, functionExprId } from './Tree';
-import { CompiledDefinition, ConstStreamSpec, LocalFunctionDefinition, AppStreamSpec } from './CompiledDefinition';
+import { CompiledDefinition, ConstStreamSpec, LocalFunctionDefinition, AppSpec } from './CompiledDefinition';
 import Environment from './Environment';
 import { visitChildren } from './Traversal';
 
@@ -88,7 +88,7 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
   visitChildren(definition.body, visitToFindLocals);
 
   const constStreams: Array<ConstStreamSpec> = [];
-  const appStreams: Array<AppStreamSpec> = [];
+  const apps: Array<AppSpec> = [];
   const localDefs: Array<LocalFunctionDefinition> = [];
   const yieldIds: Array<StreamID> = [];
   const externalReferencedStreamIds: Set<StreamID> = new Set();
@@ -129,7 +129,7 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
         }
         temporaryMarked.delete(node);
 
-        appStreams.push({
+        apps.push({
           sids: [node.sid],
           appId: node.sid, // NOTE: this is a hack, but safe
           funcId: 'Array_of',
@@ -149,7 +149,7 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
           throw new Error();
         }
 
-        appStreams.push({
+        apps.push({
           sids: [node.sid],
           appId: node.sid, // NOTE: this is a hack, but safe
           funcId: 'id',
@@ -231,7 +231,7 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
 
         temporaryMarked.delete(node);
 
-        appStreams.push({
+        apps.push({
           sids: node.sids,
           appId: node.aid,
           funcId: functionExprId(node.func),
@@ -268,10 +268,10 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
   // TODO: verify that yieldIds doesn't have any "holes" and matches signature
 
   return {
-    paramStreamIds: definition.spids,
-    paramFuncIds: definition.fpids,
+    streamParamIds: definition.spids,
+    funcParamIds: definition.fpids,
     constStreams,
-    appStreams,
+    apps,
     localDefs,
     yieldIds,
   };

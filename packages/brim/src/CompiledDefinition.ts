@@ -5,7 +5,7 @@ export interface ConstStreamSpec {
   readonly val: any;
 }
 
-export interface AppStreamSpec {
+export interface AppSpec {
   readonly sids: ReadonlyArray<StreamID>;
   readonly appId: ApplicationID;
   readonly funcId: FunctionID;
@@ -19,10 +19,10 @@ export interface LocalFunctionDefinition {
 }
 
 export interface CompiledDefinition {
-  readonly paramStreamIds: ReadonlyArray<StreamID>;
-  readonly paramFuncIds: ReadonlyArray<FunctionID>;
+  readonly streamParamIds: ReadonlyArray<StreamID>;
+  readonly funcParamIds: ReadonlyArray<FunctionID>;
   readonly constStreams: ReadonlyArray<ConstStreamSpec>;
-  readonly appStreams: ReadonlyArray<AppStreamSpec>;
+  readonly apps: ReadonlyArray<AppSpec>;
   readonly localDefs: ReadonlyArray<LocalFunctionDefinition>;
   readonly yieldIds: ReadonlyArray<StreamID>;
 }

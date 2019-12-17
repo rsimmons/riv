@@ -640,7 +640,7 @@ function updateExecution(state: State, newCompiledDefinition: CompiledDefinition
     return state;
   } else {
     // There is no old state, so we need to create the long-lived stuff
-    const [liveStreamFunc, updateCompiledDefinition] = createLiveFunction(newCompiledDefinition, nativeFunctionEnvironment);
+    const [liveStreamFunc, updateCompiledDefinition] = createLiveFunction(newCompiledDefinition, new Environment(), nativeFunctionEnvironment);
     const context = createNullaryVoidRootExecutionContext(liveStreamFunc);
 
     context.update(); // first update that generally kicks off further async updates

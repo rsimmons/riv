@@ -12,7 +12,7 @@ export default class Environment<K, V> {
   }
 
   get(key: K): V | undefined {
-    return this.local.get(key) || (this.outer && this.outer.get(key));
+    return this.local.has(key) ? this.local.get(key) : (this.outer ? this.outer.get(key) : undefined);
   }
 
   set(key: K, value: V): void {
