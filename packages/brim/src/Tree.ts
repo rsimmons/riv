@@ -5,6 +5,7 @@ import genuid from './uid';
  */
 export type StreamID = string;
 export type FunctionID = string;
+export type ApplicationID = string;
 
 const STREAM_ID_PREFIX = 'S-';
 export function generateStreamId(): StreamID {
@@ -20,6 +21,14 @@ export function generateFunctionId(): FunctionID {
 }
 export function validFunctionId(s: string): s is FunctionID {
   return s.startsWith(FUNCTION_ID_PREFIX);
+}
+
+const APPLICATION_ID_PREFIX = 'A-';
+export function generateApplicationId(): ApplicationID {
+  return APPLICATION_ID_PREFIX + genuid();
+}
+export function validApplicationId(s: string): s is ApplicationID {
+  return s.startsWith(APPLICATION_ID_PREFIX);
 }
 
 /**
@@ -86,6 +95,7 @@ export interface StreamReferenceNode {
 
 export interface ApplicationNode {
   readonly kind: NodeKind.Application;
+  readonly aid: ApplicationID;
   readonly sids: ReadonlyArray<StreamID>; // array since there can be multiple yields
   readonly reti: number | undefined; // index of which of sids is "returned" to parent
   readonly func: FunctionExpressionNode; // function being applied

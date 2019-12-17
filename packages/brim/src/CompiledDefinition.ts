@@ -1,4 +1,4 @@
-import { StreamID, FunctionID } from './Tree';
+import { StreamID, FunctionID, ApplicationID } from './Tree';
 
 export interface ConstStreamSpec {
   readonly sid: StreamID;
@@ -7,6 +7,7 @@ export interface ConstStreamSpec {
 
 export interface AppStreamSpec {
   readonly sids: ReadonlyArray<StreamID>;
+  readonly appId: ApplicationID;
   readonly funcId: FunctionID;
   readonly sargIds: ReadonlyArray<StreamID>;
   readonly fargIds: ReadonlyArray<FunctionID>;

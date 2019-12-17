@@ -131,6 +131,7 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
 
         appStreams.push({
           sids: [node.sid],
+          appId: node.sid, // NOTE: this is a hack, but safe
           funcId: 'Array_of',
           sargIds: elemStreamIds,
           fargIds: [],
@@ -150,6 +151,7 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
 
         appStreams.push({
           sids: [node.sid],
+          appId: node.sid, // NOTE: this is a hack, but safe
           funcId: 'id',
           sargIds: [exprRetSid],
           fargIds: [],
@@ -231,6 +233,7 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
 
         appStreams.push({
           sids: node.sids,
+          appId: node.aid,
           funcId: functionExprId(node.func),
           sargIds: streamArgIds,
           fargIds: [],

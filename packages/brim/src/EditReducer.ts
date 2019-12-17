@@ -1,6 +1,6 @@
 import genuid from './uid';
 import { State, ProgramInfo, SelTree } from './State';
-import { StreamID, FunctionID, generateStreamId, generateFunctionId, NodeKind, Node, TreeFunctionDefinitionNode, FunctionDefinitionNode, isFunctionDefinitionNode, StreamExpressionNode, NativeFunctionDefinitionNode, isStreamExpressionNode, UndefinedLiteralNode, BodyExpressionNode } from './Tree';
+import { StreamID, FunctionID, generateStreamId, generateFunctionId, NodeKind, Node, TreeFunctionDefinitionNode, FunctionDefinitionNode, isFunctionDefinitionNode, StreamExpressionNode, NativeFunctionDefinitionNode, isStreamExpressionNode, UndefinedLiteralNode, BodyExpressionNode, generateApplicationId } from './Tree';
 import { CompiledDefinition } from './CompiledDefinition';
 import { compileGlobalTreeDefinition, CompilationError } from './Compiler';
 // import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
@@ -904,6 +904,7 @@ const INITIAL_MAIN: TreeFunctionDefinitionNode = {
         name: 'md',
         expr: {
           kind: NodeKind.Application,
+          aid: generateApplicationId(),
           sids: [generateStreamId()],
           reti: 0,
           func: {
@@ -916,6 +917,7 @@ const INITIAL_MAIN: TreeFunctionDefinitionNode = {
       },
       {
         kind: NodeKind.Application,
+        aid: generateApplicationId(),
         sids: [],
         reti: 0,
         func: {
@@ -925,6 +927,7 @@ const INITIAL_MAIN: TreeFunctionDefinitionNode = {
         sargs: [
           {
             kind: NodeKind.Application,
+            aid: generateApplicationId(),
             sids: [generateStreamId()],
             reti: 0,
             func: {
@@ -938,6 +941,7 @@ const INITIAL_MAIN: TreeFunctionDefinitionNode = {
               },
               {
                 kind: NodeKind.Application,
+                aid: generateApplicationId(),
                 sids: [generateStreamId(), generateStreamId(), generateStreamId()],
                 reti: 1,
                 func: {
