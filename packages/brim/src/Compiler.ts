@@ -9,9 +9,9 @@ export class CompilationError extends Error {
 // A stream id can be defined by either a stream expression or a parameter. If a stream id was
 // created by a parameter, then it maps to null (because we don't need to traverse from the param).
 type CompilationStreamEnvironment = Environment<StreamID, StreamExpressionNode | null>;
-type CompilationFunctionEnvironment = Environment<FunctionID, SignatureNode>;
+type CompilationFunctionEnvironment = Environment<FunctionID, FunctionDefinitionNode>;
 
-function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStreamEnvironment: CompilationStreamEnvironment, outerFunctionEnvironment: CompilationFunctionEnvironment): CompiledDefinition {
+function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStreamEnvironment: CompilationStreamEnvironment, outerFunctionEnvironment: CompilationFunctionEnvironment): [CompiledDefinition, Set<StreamID>] {
   const streamEnvironment: CompilationStreamEnvironment = new Environment(outerStreamEnvironment);
   const functionEnvironment: CompilationFunctionEnvironment = new Environment(outerFunctionEnvironment);
   const localStreamIds: Set<StreamID> = new Set();
@@ -28,6 +28,7 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
     localStreamIds.add(spid);
   });
 
+  /*
   definition.sig.funcParams.forEach((fparam, idx) => {
     const fpid = definition.fpids[idx];
     if (functionEnvironment.has(fpid)) {
@@ -36,6 +37,7 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
     functionEnvironment.set(fpid, fparam.sig);
     localFunctionIds.add(fpid);
   });
+  */
 
   const visitToFindLocals = (node: Node): void => {
     if (isStreamExpressionNode(node)) {
@@ -76,7 +78,7 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
       if (functionEnvironment.has(node.fid)) {
         throw new Error('must be unique');
       }
-      functionEnvironment.set(node.fid, node.sig);
+      functionEnvironment.set(node.fid, node);
       localFunctionIds.add(node.fid);
     }
 
@@ -92,6 +94,18 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
   const localDefs: Array<LocalFunctionDefinition> = [];
   const yieldIds: Array<StreamID> = [];
   const externalReferencedStreamIds: Set<StreamID> = new Set();
+
+  // Compile local tree function definitions
+  for (const fid of localFunctionIds) {
+    const funcDef = functionEnvironment.get(fid);
+    if (!funcDef) {
+      throw new Error();
+    }
+    if (funcDef.kind === NodeKind.TreeFunctionDefinition) {
+      const [innerCompiledDef, innerExternalReferencedStreamIds] = compileTreeDefinition(funcDef, streamEnvironment, functionEnvironment);
+      localDefs.push({fid, def: innerCompiledDef});
+    }
+  }
 
   // Using terminology from https://en.wikipedia.org/wiki/Topological_sorting#Depth-first_search
   const temporaryMarked: Set<StreamExpressionNode> = new Set();
@@ -187,6 +201,7 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
         // TODO: make sure that sargs, fargs, yields all match signature
 
         const streamArgIds: Array<StreamID> = [];
+        const funcArgIds: Array<FunctionID> = [];
 
         temporaryMarked.add(node);
 
@@ -199,35 +214,43 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
           streamArgIds.push(sargRetSid);
         }
 
-        /*
         for (const farg of node.fargs) {
-          const compiledContainedDef = compileTreeDefinition(argument, streamEnvironment, functionEnvironment);
+          const fid = functionExprId(farg);
+          const funcDef = functionEnvironment.get(fid);
+          if (!funcDef) {
+            throw new Error();
+          }
 
-          compiledContainedDef.externalReferencedStreamIds.forEach((sid) => {
-            compiledDefinition.externalReferencedStreamIds.add(sid);
-          });
+          /*
+          if (funcDef.kind === NodeKind.TreeFunctionDefinition) {
+            const compiledContainedDef = compileTreeDefinition(funcDef, streamEnvironment, functionEnvironment);
 
-          // An application needs to traverse from its function-arguments out to any streams (in this exact scope)
-          // that it refers to (outer-scope references), because these are dependencies. So this would be an invalid cycle:
-          // x = map(v => x, [1,2,3])
-          compiledContainedDef.externalReferencedStreamIds.forEach((sid) => {
-            if (localStreamIds.has(sid)) {
-              const depLocalExprNode = streamEnvironment.get(sid);
-              if (depLocalExprNode === undefined) {
-                throw new Error();
+            compiledContainedDef.externalReferencedStreamIds.forEach((sid) => {
+              compiledDefinition.externalReferencedStreamIds.add(sid);
+            });
+
+            // An application needs to traverse from its function-arguments out to any streams (in this exact scope)
+            // that it refers to (outer-scope references), because these are dependencies. So this would be an invalid cycle:
+            // x = map(v => x, [1,2,3])
+            compiledContainedDef.externalReferencedStreamIds.forEach((sid) => {
+              if (localStreamIds.has(sid)) {
+                const depLocalExprNode = streamEnvironment.get(sid);
+                if (depLocalExprNode === undefined) {
+                  throw new Error();
+                }
+                traverseFromStreamCreation(depLocalExprNode, context);
               }
-              traverseFromStreamCreation(depLocalExprNode, context);
-            }
-          });
+            });
 
-          compiledDefinition.containedFunctionDefinitions.push({
-            id: argument.id,
-            definition: compiledContainedDef,
-          });
+            compiledDefinition.containedFunctionDefinitions.push({
+              id: argument.id,
+              definition: compiledContainedDef,
+            });
+          }
+          */
 
-          argumentIds.push(argument.id);
+          funcArgIds.push(fid);
         }
-        */
 
         temporaryMarked.delete(node);
 
@@ -236,7 +259,7 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
           appId: node.aid,
           funcId: functionExprId(node.func),
           sargIds: streamArgIds,
-          fargIds: [],
+          fargIds: funcArgIds,
         });
         break;
 
@@ -252,6 +275,8 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
 
   for (const node of definition.body.exprs) {
     if (node.kind === NodeKind.YieldExpression) {
+      traverseStreamExpr(node.expr);
+
       const exprRetSid = streamExprReturnedId(node.expr);
       if (!exprRetSid) {
         throw new Error();
@@ -267,7 +292,7 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
 
   // TODO: verify that yieldIds doesn't have any "holes" and matches signature
 
-  return {
+  const compiledDefinition: CompiledDefinition = {
     streamParamIds: definition.spids,
     funcParamIds: definition.fpids,
     constStreams,
@@ -275,6 +300,8 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
     localDefs,
     yieldIds,
   };
+
+  return [compiledDefinition, externalReferencedStreamIds];
 }
 
 export function compileGlobalTreeDefinition(definition: TreeFunctionDefinitionNode, globalFunctionEnvironment: Environment<FunctionID, FunctionDefinitionNode>): CompiledDefinition {
@@ -282,9 +309,15 @@ export function compileGlobalTreeDefinition(definition: TreeFunctionDefinitionNo
 
   const compGlobalFuncEnv: CompilationFunctionEnvironment = new Environment();
   globalFunctionEnvironment.forEach((defNode, fid) => {
-    compGlobalFuncEnv.set(fid, defNode.sig);
+    compGlobalFuncEnv.set(fid, defNode);
   });
   const funcEnv: CompilationFunctionEnvironment = new Environment(compGlobalFuncEnv);
 
-  return compileTreeDefinition(definition, streamEnv, funcEnv);
+  const [compiledDefinition, externalReferencedStreamIds] = compileTreeDefinition(definition, streamEnv, funcEnv);
+
+  if (externalReferencedStreamIds.size > 0) {
+    throw new Error();
+  }
+
+  return compiledDefinition;
 }

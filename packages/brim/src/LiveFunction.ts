@@ -14,8 +14,10 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerF
  */
 export function createLiveFunction(initialDefinition: CompiledDefinition, outerStreamEnv: Environment<StreamID, any>, outerFuncEnv: Environment<FunctionID, Function>): [Function, (newDefinition: CompiledDefinition) => void] {
   interface Activation {
+    streamEnv: Environment<StreamID, any>; // local streams ids to their latest values
+    funcEnv: Environment<FunctionID, Function>; // local function ids to their JS functions
     applicationContexts: Map<ApplicationID, ExecutionContext>;
-    updateContainedDefinition: Map<FunctionID, (newDefinition: CompiledDefinition) => void>;
+    updateLocalDef: Map<FunctionID, (newDefinition: CompiledDefinition) => void>;
     requestUpdate: () => void;
   }
 
@@ -26,22 +28,23 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerS
     /* eslint-disable react-hooks/rules-of-hooks */
     const requestUpdate = useRequestUpdate();
 
-    const funcEnv = new Environment(outerFuncEnv);
-
-    const activation = useVar<Activation>(() => {
+    const activation = useVar<Activation>((): Activation => {
+      const streamEnv = new Environment(outerStreamEnv);
+      const funcEnv = new Environment(outerFuncEnv);
       const applicationContexts: Map<ApplicationID, ExecutionContext> = new Map();
-      const updateContainedDefinition: Map<FunctionID, (newDefinition: CompiledDefinition) => void> = new Map();
-      /*
-      for (const {id: fid, definition: def} of currentDefinition.containedFunctionDefinitions) {
-        const [sf, updateDef] = createLiveFunction(def, environment);
-        environment.set(fid, sf);
-        updateContainedDefinition.set(fid, updateDef);
+      const updateLocalDef: Map<FunctionID, (newDefinition: CompiledDefinition) => void> = new Map();
+
+      for (const {fid, def} of currentDefinition.localDefs) {
+        const [sf, updateDef] = createLiveFunction(def, streamEnv, funcEnv);
+        funcEnv.set(fid, sf);
+        updateLocalDef.set(fid, updateDef);
       }
-      */
 
       return {
+        streamEnv,
+        funcEnv,
         applicationContexts,
-        updateContainedDefinition,
+        updateLocalDef,
         requestUpdate,
       };
     });
@@ -56,13 +59,12 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerS
       };
     });
 
+    const { streamEnv, funcEnv, applicationContexts } = activation.current;
 
     const expectedArgCount = currentDefinition.streamParamIds.length + currentDefinition.funcParamIds.length;
     if (arguments.length !== expectedArgCount) {
       throw new Error('wrong number of arguments to live function, got ' + arguments.length + ' expected ' + expectedArgCount);
     }
-
-    const streamEnv = new Environment(outerStreamEnv);
 
     const args = arguments;
     currentDefinition.streamParamIds.forEach((sid, idx) => {
@@ -73,11 +75,11 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerS
       streamEnv.set(sid, val);
     }
 
-    const { applicationContexts } = activation.current;
     const unusedAppCtxIds = new Set(applicationContexts.keys());
 
-    for (const {sids, appId, funcId, sargIds} of currentDefinition.apps) {
+    for (const {sids, appId, funcId, sargIds, fargIds} of currentDefinition.apps) {
       const sargVals = sargIds.map(sid => streamEnv.get(sid));
+      const fargVals = fargIds.map(fid => funcEnv.get(fid));
 
       let context = applicationContexts.get(appId);
       if (!context) {
@@ -93,7 +95,7 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerS
 
       let retval: any;
       try {
-        retval = context.update(...sargVals);
+        retval = context.update(...sargVals, ...fargVals);
       } catch (e) {
         console.log('application error');
       }
@@ -131,6 +133,28 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerS
     console.log('update definition');
     if (JSON.stringify(newDefinition) === JSON.stringify(currentDefinition)) {
       return;
+    }
+
+    const oldLocalDefsMap: Map<string, CompiledDefinition> = new Map();
+    for (const {fid, def} of currentDefinition.localDefs) {
+      oldLocalDefsMap.set(fid, def);
+    }
+    for (const {fid, def} of newDefinition.localDefs) {
+      if (oldLocalDefsMap.has(fid)) {
+        activations.forEach(activation => {
+          const update = activation.updateLocalDef.get(fid);
+          if (!update) {
+            throw new Error();
+          }
+          update(def);
+        });
+      } else {
+        activations.forEach(activation => {
+          const [sf, updateDef] = createLiveFunction(def, activation.streamEnv, activation.funcEnv);
+          activation.funcEnv.set(fid, sf);
+          activation.updateLocalDef.set(fid, updateDef);
+        });
+      }
     }
 
     currentDefinition = newDefinition;
@@ -236,7 +260,7 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerS
       if (!newDefMap.has(fid)) {
         activations.forEach(activation => {
           activation.environment.delete(fid);
-          activation.updateContainedDefinition.delete(fid);
+          activation.updateLocalDef.delete(fid);
         });
       }
     }
@@ -246,11 +270,11 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerS
         activations.forEach(activation => {
           const [sf, updateDef] = createLiveFunction(def, activation.environment);
           activation.environment.set(fid, sf);
-          activation.updateContainedDefinition.set(fid, updateDef);
+          activation.updateLocalDef.set(fid, updateDef);
         });
       } else {
         activations.forEach(activation => {
-          activation.updateContainedDefinition.get(fid)!(def);
+          activation.updateLocalDef.get(fid)!(def);
         });
       }
     }
