@@ -461,6 +461,7 @@ function attemptBeginEditSelected(state: State): State {
       editing: {
         origSelTree: state.stableSelTree,
         curSelTree: state.stableSelTree,
+        compileError: undefined, // we assume
       },
     };
   } else {
@@ -511,6 +512,7 @@ function attemptInsertBeforeAfter(state: State, before: boolean): State {
         editing: {
           origSelTree,
           curSelTree: origSelTree,
+          compileError: undefined, // TODO: assumed, not sure if guaranteed safe
         },
       };
     } else if (parent.kind === NodeKind.TreeFunctionBody) {
@@ -536,6 +538,7 @@ function attemptInsertBeforeAfter(state: State, before: boolean): State {
         editing: {
           origSelTree,
           curSelTree: origSelTree,
+          compileError: undefined, // TODO: assumed, not sure if guaranteed safe
         },
       };
     } else {
@@ -603,9 +606,7 @@ function fixupDanglingRefs(selTree: SelTree, nativeFunctions: ReadonlyArray<Nati
 }
 
 // NOTE: May throw a compiler exception
-function fixupAndCompileTree(selTree: SelTree, nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>): [SelTree, CompiledDefinition] {
-  const fixedSelTree = fixupDanglingRefs(selTree, nativeFunctions);
-
+function compileSelTree(selTree: SelTree, nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>): CompiledDefinition {
   // NOTE: We could avoid repeating this work, but this is sort of temporary anyways
   const globalFunctionEnvironment: Environment<FunctionID, FunctionDefinitionNode> = new Environment();
   for (const nf of nativeFunctions) {
@@ -614,7 +615,7 @@ function fixupAndCompileTree(selTree: SelTree, nativeFunctions: ReadonlyArray<Na
 
   let compiledDefinition: CompiledDefinition;
   try {
-    compiledDefinition = compileGlobalTreeDefinition(fixedSelTree.mainDefinition, globalFunctionEnvironment);
+    compiledDefinition = compileGlobalTreeDefinition(selTree.mainDefinition, globalFunctionEnvironment);
   } catch (e) {
     if (e instanceof CompilationError) {
       console.log('COMPILATION ERROR', e.message);
@@ -626,7 +627,7 @@ function fixupAndCompileTree(selTree: SelTree, nativeFunctions: ReadonlyArray<Na
 
   console.log('compiled definition', compiledDefinition);
 
-  return [fixedSelTree, compiledDefinition];
+  return compiledDefinition;
 }
 
 function updateExecution(state: State, newCompiledDefinition: CompiledDefinition): State {
@@ -656,13 +657,34 @@ function updateExecution(state: State, newCompiledDefinition: CompiledDefinition
   }
 }
 
-// NOTE: may throw a compiler exception
-function updateAfterEdit(state: State): State {
-  const [newSelTree, compiledDef] = fixupAndCompileTree(state.stableSelTree, state.nativeFunctions);
-  return updateExecution({
-    ...state,
-    stableSelTree: newSelTree,
-  }, compiledDef);
+// If the given seltree compiles, make it the new stable one and update execution. Otherwise keep current stable one.
+// Also, end any edit.
+function attemptCommitEdit(state: State, newSelTree: SelTree): State {
+  const fixedSelTree = fixupDanglingRefs(newSelTree, state.nativeFunctions);
+
+  let compiledDefinition: CompiledDefinition | undefined;
+  try {
+    compiledDefinition = compileSelTree(fixedSelTree, state.nativeFunctions);
+  } catch (e) {
+    if (e instanceof CompilationError) {
+      compiledDefinition = undefined;
+    } else {
+      throw e;
+    }
+  }
+
+  if (compiledDefinition) {
+    return updateExecution({
+      ...state,
+      stableSelTree: fixedSelTree,
+      editing: null,
+    }, compiledDefinition);
+  } else {
+    return {
+      ...state,
+      editing: null,
+    };
+  }
 }
 
 export function reducer(state: State, action: Action): State {
@@ -698,11 +720,9 @@ export function reducer(state: State, action: Action): State {
     }
   } else if (action.type === 'TOGGLE_EDIT') {
     if (state.editing) {
-      return updateAfterEdit({
+      return attemptCommitEdit({
         ...pushUndo(state),
-        stableSelTree: state.editing.curSelTree,
-        editing: null,
-      });
+      }, state.editing.curSelTree);
     } else {
       return attemptBeginEditSelected(state);
     }
@@ -723,25 +743,36 @@ export function reducer(state: State, action: Action): State {
       throw new Error();
     }
 
-    // TODO: handle compilation exceptions
-    const [fixedSelTree, ] = fixupAndCompileTree({mainDefinition: newMain, selectedNode: action.newNode!}, state.nativeFunctions)
+    const fixedSelTree = fixupDanglingRefs({mainDefinition: newMain, selectedNode: action.newNode!}, state.nativeFunctions);
+
+    // Check if tentative tree compiles
+    let compileError: string | undefined;
+    try {
+      compileSelTree(fixedSelTree, state.nativeFunctions);
+      compileError = undefined;
+    } catch (e) {
+      if (e instanceof CompilationError) {
+        compileError = 'cyclic reference';
+      } else {
+        throw e;
+      }
+    }
 
     return {
       ...state,
       editing: {
         ...state.editing,
         curSelTree: fixedSelTree,
+        compileError,
       },
     };
   } else if (action.type === 'UNDO') {
     if (state.undoStack.length > 0) {
       const newSelTree = state.undoStack[state.undoStack.length-1];
-      return updateAfterEdit({
+      return attemptCommitEdit({
         ...state,
-        stableSelTree: newSelTree,
-        editing: null,
         undoStack: state.undoStack.slice(0, state.undoStack.length-1),
-      });
+      }, newSelTree);
     } else {
       console.log('nothing to undo');
       return state;
@@ -772,10 +803,9 @@ export function reducer(state: State, action: Action): State {
     const newSelTree = handleEditActionResult;
 
     if (newSelTree !== state.stableSelTree) {
-      return updateAfterEdit({
+      return attemptCommitEdit({
         ...pushUndo(state),
-        stableSelTree: newSelTree,
-      });
+      }, newSelTree);
     } else {
       return state;
     }
@@ -821,20 +851,22 @@ function initialStateFromDefinition(mainDefinition: TreeFunctionDefinitionNode):
     sig: signature,
   }));
 
-  const [fixedSelTree, compiledDef] = fixupAndCompileTree({mainDefinition, selectedNode: mainDefinition}, nativeFunctions);
+  const initSelTree = {mainDefinition, selectedNode: mainDefinition};
+
+  const compiledDefinition = compileSelTree(initSelTree, nativeFunctions);
 
   return updateExecution({
     programInfo: {
       id: genuid(),
       name: 'my program',
     },
-    stableSelTree: fixedSelTree,
+    stableSelTree: initSelTree,
     editing: null,
     nativeFunctions,
     undoStack: [],
     clipboardStack: [],
     execution: null,
-  }, compiledDef);
+  }, compiledDefinition);
 }
 
 const mdId = generateStreamId();

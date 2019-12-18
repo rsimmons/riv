@@ -97,7 +97,7 @@ interface DropdownState {
   index: number;
 }
 
-const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: EnvironmentLookups, dispatch: (action: any) => void}> = ({ overNode, atRoot, envLookups, dispatch }) => {
+const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: EnvironmentLookups, dispatch: (action: any) => void, compileError: string | undefined}> = ({ overNode, atRoot, envLookups, dispatch, compileError }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     inputRef.current && inputRef.current.select();
@@ -420,9 +420,24 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
     <div>
       <input className="ExpressionChooser-input" value={text} onChange={onChange} onKeyDown={onKeyDown} ref={inputRef} autoFocus />
       <ul className="ExpressionChooser-dropdown">
-        {dropdownState.choices.map((choice, idx) =>
-          <li key={idx} className={(idx === dropdownState.index) ? 'ExpressionChooser-dropdown-selected' : ''} ref={(idx === dropdownState.index) ? selectedListElem : undefined}><Choice choice={choice} /></li>
-        )}
+        {dropdownState.choices.map((choice, idx) => {
+          const classNames = [];
+          if (idx == dropdownState.index) {
+            if (compileError) {
+              classNames.push('ExpressionChooser-dropdown-selected-error');
+            } else {
+              classNames.push('ExpressionChooser-dropdown-selected');
+            }
+          }
+          return (
+            <li key={idx} className={classNames.join(' ')} ref={(idx === dropdownState.index) ? selectedListElem : undefined}>
+              <Choice choice={choice} />
+              {(compileError && (idx === dropdownState.index)) ?
+                <div className="ExpressionChooser-dropdown-compile-error">{compileError}</div>
+              : null}
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

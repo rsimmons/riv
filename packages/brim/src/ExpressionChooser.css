@@ -27,3 +27,12 @@
 .ExpressionChooser-dropdown li.ExpressionChooser-dropdown-selected {
   background: #bbb;
 }
+
+.ExpressionChooser-dropdown li.ExpressionChooser-dropdown-selected-error {
+  background: #bbb;
+  color: #555;
+}
+
+.ExpressionChooser-dropdown-compile-error {
+  color: red;
+}

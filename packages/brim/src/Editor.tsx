@@ -113,6 +113,7 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
   const treeViewCtxData: TreeViewContextData = {
     selectedNode: displayedSelTree.selectedNode,
     editing,
+    compileError: state.editing ? state.editing.compileError : undefined,
     // clipboardTopNode: (state.clipboardStack.length > 0) ? state.derivedLookups.streamIdToNode!.get(state.clipboardStack[state.clipboardStack.length-1].streamId) : null,
     // clipboardRestNodes: state.clipboardStack.slice(0, -1).map(frame => state.derivedLookups.streamIdToNode!.get(frame.streamId)),
     envLookups,

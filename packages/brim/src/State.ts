@@ -21,6 +21,13 @@ export interface SelTree {
 interface EditState {
   origSelTree: SelTree;
   curSelTree: SelTree;
+  compileError: string | undefined;
+}
+
+interface ExecutionState {
+  context: ExecutionContext;
+  compiledDefinition: CompiledDefinition | null;
+  updateCompiledDefinition: (newDefinition: CompiledDefinition) => void;
 }
 
 export interface State {
@@ -30,9 +37,5 @@ export interface State {
   readonly nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>;
   readonly undoStack: ReadonlyArray<SelTree>;
   readonly clipboardStack: ReadonlyArray<ClipboardStackFrame>;
-  readonly execution: {
-    context: ExecutionContext;
-    compiledDefinition: CompiledDefinition | null;
-    updateCompiledDefinition: (newDefinition: CompiledDefinition) => void;
-  } | null;
+  readonly execution: ExecutionState | null;
 }

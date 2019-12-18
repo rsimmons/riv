@@ -10,6 +10,7 @@ const STREAM_REFERENCE_BOX_COLOR = '#a1cdff';
 export interface TreeViewContextData {
   selectedNode: Node;
   editing: boolean;
+  compileError: string | undefined;
   envLookups: EnvironmentLookups;
   parentLookup: Map<Node, Node>;
   dispatch: (action: any) => void; // TODO: tighten up type
@@ -424,7 +425,7 @@ const StreamExpressionView: React.FC<{node: StreamExpressionNode, reportAttachme
     return (
       <div style={{position: 'relative'}}>
         {nodeView}
-        <div style={{position: 'absolute', top: 0}}><ExpressionChooser overNode={node} atRoot={atRoot} envLookups={ctxData.envLookups} dispatch={ctxData.dispatch} /></div>
+        <div style={{position: 'absolute', top: 0}}><ExpressionChooser overNode={node} atRoot={atRoot} envLookups={ctxData.envLookups} dispatch={ctxData.dispatch} compileError={ctxData.compileError} /></div>
       </div>
     );
   } else {
