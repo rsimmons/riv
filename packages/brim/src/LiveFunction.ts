@@ -1,13 +1,7 @@
 import { ExecutionContext, useVar, useInitialize, useRequestUpdate } from 'riv-runtime';
-import { CompiledDefinition } from './CompiledDefinition';
+import { CompiledDefinition, AppSpec } from './CompiledDefinition';
 import { StreamID, FunctionID, ApplicationID } from './Tree';
 import Environment from './Environment';
-
-/*
-export function createLiveFunction(initialDefinition: CompiledDefinition, outerFunctionEnvironment: Environment<FunctionID, Function>): [Function, (newDefinition: CompiledDefinition) => void] {
-  return [() => { console.log('live function call') }, () => {}];
-}
-*/
 
 /**
  * I think that functions in outer environment are not allowed to change identity.
@@ -33,6 +27,19 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerS
       const funcEnv = new Environment(outerFuncEnv);
       const applicationContexts: Map<ApplicationID, ExecutionContext> = new Map();
       const updateLocalDef: Map<FunctionID, (newDefinition: CompiledDefinition) => void> = new Map();
+
+      for (const {sid, val} of currentDefinition.constStreams) {
+        streamEnv.set(sid, val);
+      }
+
+      for (const {appId, funcId} of currentDefinition.apps) {
+        const func = funcEnv.get(funcId);
+        if (!func) {
+          throw Error();
+        }
+        const context = new ExecutionContext(func, requestUpdate);
+        applicationContexts.set(appId, context);
+      }
 
       for (const {fid, def} of currentDefinition.localDefs) {
         const [sf, updateDef] = createLiveFunction(def, streamEnv, funcEnv);
@@ -71,27 +78,17 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerS
       streamEnv.set(sid, args[idx]);
     });
 
-    for (const {sid, val} of currentDefinition.constStreams) {
-      streamEnv.set(sid, val);
-    }
-
-    const unusedAppCtxIds = new Set(applicationContexts.keys());
-
     for (const {sids, appId, funcId, sargIds, fargIds} of currentDefinition.apps) {
-      const sargVals = sargIds.map(sid => streamEnv.get(sid));
-      const fargVals = fargIds.map(fid => funcEnv.get(fid));
+      const appFunc = funcEnv.getExisting(funcId);
+      const sargVals = sargIds.map(sid => streamEnv.getExisting(sid));
+      const fargVals = fargIds.map(fid => funcEnv.getExisting(fid));
 
       let context = applicationContexts.get(appId);
       if (!context) {
-        const func = funcEnv.get(funcId);
-        if (!func) {
-          throw Error();
-        }
-        context = new ExecutionContext(func, requestUpdate);
-        applicationContexts.set(appId, context);
+        throw new Error();
       }
 
-      unusedAppCtxIds.delete(appId);
+      context._setStreamFunc(appFunc);
 
       let retval: any;
       try {
@@ -109,17 +106,6 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerS
       }
     }
 
-    // "GC" unused application contexts
-    for (const appId of unusedAppCtxIds) {
-      const ctx = applicationContexts.get(appId);
-      if (!ctx) {
-        throw new Error();
-      }
-      ctx.terminate();
-
-      applicationContexts.delete(appId);
-    }
-
     if (currentDefinition.yieldIds.length === 1) {
       return streamEnv.get(currentDefinition.yieldIds[0]);
     } else if (currentDefinition.yieldIds.length > 1) {
@@ -130,15 +116,114 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerS
   };
 
   const updateDefinition = (newDefinition: CompiledDefinition): void => {
-    console.log('update definition');
     if (JSON.stringify(newDefinition) === JSON.stringify(currentDefinition)) {
       return;
     }
 
+    // Track these so we know which streams to delete
+    const oldDefStreams: Set<StreamID> = new Set();
+    const newDefStreams: Set<StreamID> = new Set();
+
+    // PARAM STREAMS
+    for (const sid of currentDefinition.streamParamIds) {
+      oldDefStreams.add(sid);
+    }
+    for (const sid of newDefinition.streamParamIds) {
+      newDefStreams.add(sid);
+    }
+
+    //
+    // CONST STREAMS
+    //
+    for (const {sid} of currentDefinition.constStreams) {
+      oldDefStreams.add(sid);
+    }
+
+    for (const {sid, val} of newDefinition.constStreams) {
+      // It's easier to just always set regardless of change
+      activations.forEach(activation => {
+        activation.streamEnv.set(sid, val);
+      });
+
+      newDefStreams.add(sid);
+    }
+
+    //
+    // APPLICATIONS
+    //
+    const oldAppMap: Map<ApplicationID, AppSpec> = new Map();
+    const newAppMap: Map<ApplicationID, AppSpec> = new Map();
+    for (const app of currentDefinition.apps) {
+      oldAppMap.set(app.appId, app);
+
+      app.sids.forEach(sid => {
+        oldDefStreams.add(sid);
+      });
+    }
+    for (const app of newDefinition.apps) {
+      newAppMap.set(app.appId, app);
+
+      app.sids.forEach(sid => {
+        newDefStreams.add(sid);
+      });
+    }
+
+    for (const {appId} of currentDefinition.apps) {
+      if (!newAppMap.has(appId)) {
+        activations.forEach(activation => {
+          const context = activation.applicationContexts.get(appId);
+          if (!context) {
+            throw new Error();
+          }
+          context.terminate();
+          activation.applicationContexts.delete(appId);
+        });
+      }
+    }
+
+    for (const {appId, funcId} of newDefinition.apps) {
+      if (!oldAppMap.has(appId)) {
+        activations.forEach(activation => {
+          const func = activation.funcEnv.get(funcId);
+          if (!func) {
+            throw Error();
+          }
+          const context = new ExecutionContext(func, activation.requestUpdate);
+          activation.applicationContexts.set(appId, context);
+        });
+      }
+    }
+
+    // DELETE STREAMS THAT NO LONGER EXIST
+    for (const sid of oldDefStreams) {
+      if (!newDefStreams.has(sid)) {
+        activations.forEach(activation => {
+          activation.streamEnv.delete(sid);
+        });
+      }
+    }
+
+    //
+    // LOCAL FUNCTION DEFINITIONS
+    //
     const oldLocalDefsMap: Map<string, CompiledDefinition> = new Map();
+    const newLocalDefsMap: Map<string, CompiledDefinition> = new Map();
     for (const {fid, def} of currentDefinition.localDefs) {
       oldLocalDefsMap.set(fid, def);
     }
+    for (const {fid, def} of newDefinition.localDefs) {
+      newLocalDefsMap.set(fid, def);
+    }
+
+    for (const {fid} of currentDefinition.localDefs) {
+      if (!newLocalDefsMap.has(fid)) {
+        activations.forEach(activation => {
+          activation.funcEnv.delete(fid);
+          activation.updateLocalDef.delete(fid);
+        });
+      }
+    }
+
     for (const {fid, def} of newDefinition.localDefs) {
       if (oldLocalDefsMap.has(fid)) {
         activations.forEach(activation => {
@@ -157,128 +242,14 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerS
       }
     }
 
+    //
+    // FINISH UP
+    //
     currentDefinition = newDefinition;
 
     activations.forEach(activation => {
       activation.requestUpdate();
     });
-
-    /*
-    //
-    // RECONCILE LITERALS
-    //
-    const oldLiteralMap: Map<string, any> = new Map();
-    const newLiteralMap: Map<string, any> = new Map();
-
-    for (const {streamId: sid, value: val} of currentDefinition.constantStreamValues) {
-      oldLiteralMap.set(sid, val);
-    }
-    for (const {streamId: sid, value: val} of newDefinition.constantStreamValues) {
-      newLiteralMap.set(sid, val);
-    }
-
-    for (const {streamId: sid} of currentDefinition.constantStreamValues) {
-      if (!newLiteralMap.has(sid)) {
-        activations.forEach(activation => {
-          activation.environment.delete(sid);
-        });
-      }
-    }
-
-    for (const {streamId: sid, value: val} of newDefinition.constantStreamValues) {
-      if (!oldLiteralMap.has(sid) || (oldLiteralMap.get(sid) !== val)) {
-        activations.forEach(activation => {
-          activation.environment.set(sid, val);
-        });
-      }
-    }
-
-    //
-    // RECONCILE APPLICATIONS
-    //
-    const oldAppMap: Map<string, [FunctionID, Array<AnyID>]> = new Map();
-    const newAppMap: Map<string, [FunctionID, Array<AnyID>]> = new Map();
-
-    for (const {resultStreamId: sid, appliedFunction: func, argumentIds: args} of currentDefinition.applications) {
-      oldAppMap.set(sid, [func, args]);
-    }
-    for (const {resultStreamId: sid, appliedFunction: func, argumentIds: args} of newDefinition.applications) {
-      newAppMap.set(sid, [func, args]);
-    }
-
-    for (const {resultStreamId: sid} of currentDefinition.applications) {
-      if (!newAppMap.has(sid)) {
-        activations.forEach(activation => {
-          activation.applicationContexts.get(sid)!.terminate();
-        });
-      }
-    }
-
-    for (const {resultStreamId: sid, appliedFunction: funcId, argumentIds: args} of newDefinition.applications) {
-      let createNew = false;
-
-      const oldApp = oldAppMap.get(sid);
-      if (oldApp) {
-        const [oldFuncId, oldArgs] = oldApp;
-
-        if ((funcId !== oldFuncId) || !arraysShallowEqual(args, oldArgs)) {
-          activations.forEach(activation => {
-            activation.applicationContexts.get(sid)!.terminate();
-          });
-
-          createNew = true;
-        }
-      } else {
-        createNew = true;
-      }
-
-      if (createNew) {
-        activations.forEach(activation => {
-          const func = activation.environment.get(funcId);
-          if (!func) {
-            throw Error();
-          }
-          activation.applicationContexts.set(sid, new ExecutionContext(func, activation.requestUpdate));
-        });
-      }
-    }
-
-    //
-    // RECONCILE CONTAINED DEFINITIONS
-    //
-    const oldDefMap: Map<FunctionID, CompiledDefinition> = new Map();
-    const newDefMap: Map<FunctionID, CompiledDefinition> = new Map();
-
-    for (const {id: fid, definition: def} of currentDefinition.containedFunctionDefinitions) {
-      oldDefMap.set(fid, def);
-    }
-    for (const {id: fid, definition: def} of newDefinition.containedFunctionDefinitions) {
-      newDefMap.set(fid, def);
-    }
-
-    for (const {id: fid} of currentDefinition.containedFunctionDefinitions) {
-      if (!newDefMap.has(fid)) {
-        activations.forEach(activation => {
-          activation.environment.delete(fid);
-          activation.updateLocalDef.delete(fid);
-        });
-      }
-    }
-
-    for (const {id: fid, definition: def} of newDefinition.containedFunctionDefinitions) {
-      if (!oldDefMap.has(fid)) {
-        activations.forEach(activation => {
-          const [sf, updateDef] = createLiveFunction(def, activation.environment);
-          activation.environment.set(fid, sf);
-          activation.updateLocalDef.set(fid, updateDef);
-        });
-      } else {
-        activations.forEach(activation => {
-          activation.updateLocalDef.get(fid)!(def);
-        });
-      }
-    }
-    */
   };
 
   return [streamFunc, updateDefinition];
