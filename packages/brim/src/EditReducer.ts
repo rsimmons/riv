@@ -340,7 +340,7 @@ function deleteNodeSubtree(node: Node, parentLookup: Map<Node, Node>, selMoveLoo
   }
 
   if (isStreamExpressionNode(node)) {
-    if ((parent.kind === NodeKind.Application) || (parent.kind === NodeKind.StreamIndirection)) {
+    if ((parent.kind === NodeKind.Application) || (parent.kind === NodeKind.StreamIndirection) || (parent.kind === NodeKind.YieldExpression)) {
       const newNode: UndefinedLiteralNode = {
         kind: NodeKind.UndefinedLiteral,
         sid: generateStreamId(),
