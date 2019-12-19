@@ -126,6 +126,7 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
 
       case NodeKind.StreamReference:
       case NodeKind.Application:
+      case NodeKind.ArrayLiteral:
         return ''; // Don't prefill with text
 
       default:
