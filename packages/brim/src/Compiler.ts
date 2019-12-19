@@ -1,4 +1,4 @@
-import { StreamID, FunctionID, Node, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, NodeKind, isFunctionDefinitionNode, isStreamExpressionNode, SignatureNode, streamExprReturnedId, functionExprId } from './Tree';
+import { StreamID, FunctionID, Node, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, NodeKind, isFunctionDefinitionNode, isStreamExpressionNode, streamExprReturnedId, functionExprId } from './Tree';
 import { CompiledDefinition, ConstStreamSpec, LocalFunctionDefinition, AppSpec } from './CompiledDefinition';
 import Environment from './Environment';
 import { visitChildren } from './Traversal';
@@ -102,7 +102,7 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
       throw new Error();
     }
     if (funcDef.kind === NodeKind.TreeFunctionDefinition) {
-      const [innerCompiledDef, innerExternalReferencedStreamIds] = compileTreeDefinition(funcDef, streamEnvironment, functionEnvironment);
+      const [innerCompiledDef, ] = compileTreeDefinition(funcDef, streamEnvironment, functionEnvironment);
       localDefs.push({fid, def: innerCompiledDef});
     }
   }
