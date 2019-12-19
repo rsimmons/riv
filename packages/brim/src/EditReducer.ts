@@ -1014,28 +1014,6 @@ const INITIAL_MAIN: TreeFunctionDefinitionNode = {
                 ],
                 fargs: [],
               },
-              /*
-              {
-                kind: NodeKind.Application,
-                dsids: [{sid: generateStreamId(), desc: {kind: NodeKind.Description, text: 'luuux'}}],
-                reti: 0,
-                func: {
-                  kind: NodeKind.FunctionReference,
-                  ref: 'mult',
-                },
-                sargs: [
-                  {
-                    kind: NodeKind.UndefinedLiteral,
-                    sid: generateStreamId(),
-                  },
-                  {
-                    kind: NodeKind.UndefinedLiteral,
-                    sid: generateStreamId(),
-                  },
-                ],
-                fargs: [],
-              },
-              */
               {
                 kind: NodeKind.NumberLiteral,
                 sid: generateStreamId(),
