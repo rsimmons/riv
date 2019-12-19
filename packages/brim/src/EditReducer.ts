@@ -321,10 +321,8 @@ function deleteArrayElementNode(node: Node, parentLookup: Map<Node, Node>, selMo
   const sibling = selMoveLookups.prev.get(node) || selMoveLookups.next.get(node);
   const newParent = deleteArrayElementChild(parent, node);
   const newRoot = replaceNode(parent, newParent, parentLookup);
-  const newSelectedNode = sibling; // TODO: fall back on new rootward-selectable
-  if (!newSelectedNode) {
-    throw new Error('should not be possible?');
-  }
+  const newSelectedNode: Node = sibling || newParent;
+  // TODO: newParent might not be selectable? assert at least?
   if (newRoot.kind !== NodeKind.TreeFunctionDefinition) {
     throw new Error();
   }
