@@ -687,6 +687,76 @@ function attemptCommitEdit(state: State, newSelTree: SelTree): State {
   }
 }
 
+function findNextUndefinedUnder(node: Node): Node | undefined {
+  for (const child of iterChildren(node)) {
+    if (child.kind === NodeKind.UndefinedLiteral) {
+      return child;
+    } else {
+      const recur = findNextUndefinedUnder(child);
+      if (recur) {
+        return recur;
+      }
+    }
+  }
+}
+
+function attemptEditNextUndefinedOrInsert(state: State): State {
+  const editNode = (node: Node): State => {
+    const editSelTree = {
+      mainDefinition: state.stableSelTree.mainDefinition,
+      selectedNode: node,
+    };
+    return {
+      ...state,
+      editing: {
+        origSelTree: editSelTree,
+        curSelTree: editSelTree,
+        compileError: undefined,
+      },
+    };
+  };
+
+  if (state.editing) {
+    throw new Error(); // shouldn't be
+  }
+
+  const parentLookup = computeParentLookup(state.stableSelTree.mainDefinition);
+
+  const under = findNextUndefinedUnder(state.stableSelTree.selectedNode);
+  if (under) {
+    return editNode(under);
+  }
+
+  let n: Node = state.stableSelTree.selectedNode;
+  while (true) {
+    const parent = parentLookup.get(n);
+    if (!parent) {
+      return state; // reached root, do nothing
+    }
+    if ((parent.kind === NodeKind.TreeFunctionBody) || (parent.kind === NodeKind.ArrayLiteral)) {
+      return attemptInsertBeforeAfter(state, false);
+    } else {
+      const parentsChildren = [...iterChildren(parent)];
+      const nodeIdx = parentsChildren.indexOf(n);
+      if (nodeIdx < 0) {
+        throw new Error();
+      }
+      for (let i = nodeIdx+1; i < parentsChildren.length; i++) {
+        const sib = parentsChildren[i];
+        if (sib.kind === NodeKind.UndefinedLiteral) {
+          return editNode(sib);
+        }
+        const under = findNextUndefinedUnder(sib);
+        if (under) {
+          return editNode(under);
+        }
+      }
+
+      n = parent;
+    }
+  }
+}
+
 export function reducer(state: State, action: Action): State {
   console.log('action', action);
 
@@ -720,9 +790,11 @@ export function reducer(state: State, action: Action): State {
     }
   } else if (action.type === 'TOGGLE_EDIT') {
     if (state.editing) {
-      return attemptCommitEdit({
+      const stateAfterCommit = attemptCommitEdit({
         ...pushUndo(state),
       }, state.editing.curSelTree);
+
+      return attemptEditNextUndefinedOrInsert(stateAfterCommit);
     } else {
       return attemptBeginEditSelected(state);
     }
