@@ -38,6 +38,8 @@ export enum NodeKind {
   Name = 'name',
   UndefinedLiteral = 'und',
   NumberLiteral = 'num',
+  TextLiteral = 'str',
+  BooleanLiteral = 'bool',
   ArrayLiteral = 'arr',
   StreamIndirection = 'sind',
   StreamReference = 'sref',
@@ -75,6 +77,23 @@ export interface NumberLiteralNode {
   readonly val: number;
 }
 
+export interface TextLiteralNode {
+  readonly kind: NodeKind.TextLiteral;
+  readonly sid: StreamID;
+  readonly val: string;
+}
+
+export interface BooleanLiteralNode {
+  readonly kind: NodeKind.BooleanLiteral;
+  readonly sid: StreamID;
+  readonly val: boolean;
+}
+
+export type SimpleLiteralNode = UndefinedLiteralNode | NumberLiteralNode | TextLiteralNode | BooleanLiteralNode;
+export function isSimpleLiteralNode(node: Node): node is SimpleLiteralNode {
+  return (node.kind === NodeKind.UndefinedLiteral) || (node.kind === NodeKind.NumberLiteral) || (node.kind === NodeKind.TextLiteral) || (node.kind === NodeKind.BooleanLiteral);
+}
+
 export interface ArrayLiteralNode {
   readonly kind: NodeKind.ArrayLiteral;
   readonly sid: StreamID;
@@ -104,15 +123,17 @@ export interface ApplicationNode {
 }
 
 // Stream parameter definitions (on the "inside" of a function def) are _not_ expressions.
-export type StreamExpressionNode = UndefinedLiteralNode | NumberLiteralNode | ArrayLiteralNode | StreamIndirectionNode | StreamReferenceNode | ApplicationNode;
+export type StreamExpressionNode = SimpleLiteralNode | ArrayLiteralNode | StreamIndirectionNode | StreamReferenceNode | ApplicationNode;
 export function isStreamExpressionNode(node: Node): node is StreamExpressionNode {
-  return (node.kind === NodeKind.UndefinedLiteral) || (node.kind === NodeKind.NumberLiteral) || (node.kind === NodeKind.ArrayLiteral) || (node.kind === NodeKind.StreamIndirection) || (node.kind === NodeKind.StreamReference) || (node.kind === NodeKind.Application);
+  return isSimpleLiteralNode(node) || (node.kind === NodeKind.ArrayLiteral) || (node.kind === NodeKind.StreamIndirection) || (node.kind === NodeKind.StreamReference) || (node.kind === NodeKind.Application);
 }
 
 export function streamExprReturnedId(node: StreamExpressionNode): StreamID | undefined {
   switch (node.kind) {
     case NodeKind.UndefinedLiteral:
     case NodeKind.NumberLiteral:
+    case NodeKind.TextLiteral:
+    case NodeKind.BooleanLiteral:
     case NodeKind.ArrayLiteral:
     case NodeKind.StreamIndirection:
       return node.sid;

@@ -44,6 +44,8 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
       switch (node.kind) {
         case NodeKind.UndefinedLiteral:
         case NodeKind.NumberLiteral:
+        case NodeKind.TextLiteral:
+        case NodeKind.BooleanLiteral:
         case NodeKind.ArrayLiteral:
         case NodeKind.StreamIndirection:
           if (streamEnvironment.has(node.sid)) {
@@ -126,6 +128,8 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
         break;
 
       case NodeKind.NumberLiteral:
+      case NodeKind.TextLiteral:
+      case NodeKind.BooleanLiteral:
         constStreams.push({sid: node.sid, val: node.val});
         break;
 

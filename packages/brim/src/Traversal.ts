@@ -16,6 +16,8 @@ export function* iterChildren(node: Node) {
     case NodeKind.Name:
     case NodeKind.UndefinedLiteral:
     case NodeKind.NumberLiteral:
+    case NodeKind.TextLiteral:
+    case NodeKind.BooleanLiteral:
     case NodeKind.StreamReference:
     case NodeKind.FunctionReference:
       // no children
@@ -96,6 +98,8 @@ export function visitChildren<T>(node: Node, visit: (node: Node) => T | undefine
     case NodeKind.Name:
     case NodeKind.UndefinedLiteral:
     case NodeKind.NumberLiteral:
+    case NodeKind.TextLiteral:
+    case NodeKind.BooleanLiteral:
     case NodeKind.StreamReference:
     case NodeKind.FunctionReference:
       // no children
@@ -229,6 +233,8 @@ export function transformChildren(node: Node, transform: (node: Node) => Node): 
     case NodeKind.Name:
     case NodeKind.UndefinedLiteral:
     case NodeKind.NumberLiteral:
+    case NodeKind.TextLiteral:
+    case NodeKind.BooleanLiteral:
     case NodeKind.StreamReference:
     case NodeKind.FunctionReference:
       // no children to transform
@@ -456,6 +462,8 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
     case NodeKind.Name:
     case NodeKind.UndefinedLiteral:
     case NodeKind.NumberLiteral:
+    case NodeKind.TextLiteral:
+    case NodeKind.BooleanLiteral:
     case NodeKind.StreamReference:
     case NodeKind.FunctionReference:
       throw new Error('no children to replace');
@@ -537,6 +545,8 @@ export function deleteArrayElementChild(node: Node, child: Node): Node {
     case NodeKind.YieldExpression:
     case NodeKind.UndefinedLiteral:
     case NodeKind.NumberLiteral:
+    case NodeKind.TextLiteral:
+    case NodeKind.BooleanLiteral:
     case NodeKind.StreamIndirection:
     case NodeKind.StreamReference:
     case NodeKind.SignatureStreamParameter:

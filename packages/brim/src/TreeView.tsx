@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useRef, RefObject, useLayoutEffect } from 'react';
-import { Node, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, isFunctionExpressionNode, TreeFunctionBodyNode, FunctionExpressionNode, isFunctionDefinitionNode, UndefinedLiteralNode, NumberLiteralNode, StreamReferenceNode, FunctionReferenceNode } from './Tree';
+import { Node, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, isFunctionExpressionNode, TreeFunctionBodyNode, FunctionExpressionNode, isFunctionDefinitionNode, UndefinedLiteralNode, NumberLiteralNode, StreamReferenceNode, FunctionReferenceNode, TextLiteralNode, BooleanLiteralNode } from './Tree';
 import ExpressionChooser from './ExpressionChooser';
 import './TreeView.css';
 import { EnvironmentLookups, StreamDefinition } from './EditReducer';
@@ -47,6 +47,13 @@ export function formatStreamDefinition(sdef: StreamDefinition, envLookups: Envir
           case NodeKind.NumberLiteral:
             s = '(' + sdef.expr.val.toString() + ')';
             break;
+
+          case NodeKind.TextLiteral:
+            s = '("' + sdef.expr.val + '")';
+            break;
+
+          case NodeKind.BooleanLiteral:
+            s = '(' + sdef.expr.val.toString() + ')';
 
           case NodeKind.ArrayLiteral:
             s = '(array)';
@@ -202,7 +209,7 @@ function useReportSimpleAttachmentOffset(reportAttachmentOffset?: (offset: numbe
   return ref;
 }
 
-const ChildlessStreamNodeView: React.FC<{node: UndefinedLiteralNode | NumberLiteralNode, contents: React.ReactNode, boxColor: string, reportAttachmentOffset?: (offset: number) => void}> = ({node, contents, boxColor, reportAttachmentOffset}) => {
+const ChildlessStreamNodeView: React.FC<{node: UndefinedLiteralNode | NumberLiteralNode | TextLiteralNode | BooleanLiteralNode, contents: React.ReactNode, boxColor: string, reportAttachmentOffset?: (offset: number) => void}> = ({node, contents, boxColor, reportAttachmentOffset}) => {
   const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node);
   const ref = useReportSimpleAttachmentOffset(reportAttachmentOffset);
 
@@ -439,6 +446,12 @@ const StreamExpressionView: React.FC<{node: StreamExpressionNode, reportAttachme
         return <ChildlessStreamNodeView node={node} contents={<span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>} boxColor={'red'} reportAttachmentOffset={reportAttachmentOffset} />
 
       case NodeKind.NumberLiteral:
+        return <ChildlessStreamNodeView node={node} contents={node.val.toString()} boxColor="#cce8cc" reportAttachmentOffset={reportAttachmentOffset} />
+
+      case NodeKind.TextLiteral:
+        return <ChildlessStreamNodeView node={node} contents={node.val} boxColor="#cce8cc" reportAttachmentOffset={reportAttachmentOffset} />
+
+      case NodeKind.BooleanLiteral:
         return <ChildlessStreamNodeView node={node} contents={node.val.toString()} boxColor="#cce8cc" reportAttachmentOffset={reportAttachmentOffset} />
 
       case NodeKind.ArrayLiteral:

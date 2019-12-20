@@ -14,6 +14,16 @@ interface NumberChoice {
   readonly value: number;
 }
 
+interface TextChoice {
+  readonly type: 'text';
+  readonly value: string;
+}
+
+interface BooleanChoice {
+  readonly type: 'boolean';
+  readonly value: boolean;
+}
+
 interface StreamIndChoice {
   readonly type: 'streamind';
   readonly name?: string;
@@ -32,7 +42,7 @@ interface AppChoice {
   readonly retIdx: number | undefined;
 }
 
-type Choice = UndefinedChoice | StreamIndChoice | StreamRefChoice | NumberChoice | AppChoice;
+type Choice = UndefinedChoice | NumberChoice | TextChoice | BooleanChoice | StreamIndChoice | StreamRefChoice | AppChoice;
 
 interface SearchResult<T> {
   score: number;
@@ -77,7 +87,13 @@ function Choice({ choice }: ChoiceProps) {
       return <em>undefined</em>
 
     case 'number':
-      return <span>{choice.value}</span>
+      return <span>{choice.value.toString()}</span>
+
+    case 'text':
+      return <span><em>T</em> {choice.value}</span>
+
+    case 'boolean':
+      return <span><em>B</em> {choice.value.toString()}</span>
 
     case 'streamind':
       return <span><em>I</em> {choice.name}</span>
@@ -88,8 +104,11 @@ function Choice({ choice }: ChoiceProps) {
     case 'app':
       return <span><em>F</em> {choice.text}</span>
 
-    default:
+    default: {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const exhaustive: never = choice; // this will cause a type error if we haven't handled all cases
       throw new Error();
+    }
   }
 }
 
@@ -113,6 +132,10 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
 
   const [origNode] = useState(overNode);
 
+  if (!isStreamExpressionNode(origNode)) {
+    throw new Error();
+  }
+
   const [text, setText] = useState(() => {
     // Initialize text based on node
     switch (origNode.kind) {
@@ -120,6 +143,12 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
         return '';
 
       case NodeKind.NumberLiteral:
+        return origNode.val.toString();
+
+      case NodeKind.TextLiteral:
+        return origNode.val;
+
+      case NodeKind.BooleanLiteral:
         return origNode.val.toString();
 
       case NodeKind.StreamIndirection:
@@ -130,8 +159,11 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
       case NodeKind.ArrayLiteral:
         return ''; // Don't prefill with text
 
-      default:
+      default: {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const exhaustive: never = origNode; // this will cause a type error if we haven't handled all cases
         throw new Error();
+      }
     }
   });
 
@@ -217,12 +249,26 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
       });
     }
 
+    for (const bv of [true, false]) {
+      if (bv.toString().startsWith(text)) {
+        choices.push({
+          type: 'boolean',
+          value: bv,
+        });
+      }
+    }
+
     if (text.trim() !== '') {
       choices.push({
         type: 'streamind',
         name: text.trim(),
       });
     }
+
+    choices.push({
+      type: 'text',
+      value: text,
+    });
 
     if (choices.length === 0) {
       choices.push({
@@ -245,6 +291,8 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
       switch (origNode.kind) {
         case NodeKind.UndefinedLiteral:
         case NodeKind.NumberLiteral:
+        case NodeKind.TextLiteral:
+        case NodeKind.BooleanLiteral:
         case NodeKind.StreamReference:
           origStreamChildren = [];
           break;
@@ -261,8 +309,11 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
           origStreamChildren = origNode.sargs;
           break;
 
-        default:
+        default: {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const exhaustive: never = origNode; // this will cause a type error if we haven't handled all cases
           throw new Error();
+        }
       }
 
       switch (choice.type) {
@@ -276,6 +327,22 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
         case 'number':
           newNode = {
             kind: NodeKind.NumberLiteral,
+            sid: newSid,
+            val: choice.value,
+          };
+          break;
+
+        case 'text':
+          newNode = {
+            kind: NodeKind.TextLiteral,
+            sid: newSid,
+            val: choice.value,
+          };
+          break;
+
+        case 'boolean':
+          newNode = {
+            kind: NodeKind.BooleanLiteral,
             sid: newSid,
             val: choice.value,
           };
@@ -348,8 +415,11 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
           break;
         }
 
-        default:
+        default: {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const exhaustive: never = choice; // this will cause a type error if we haven't handled all cases
           throw new Error();
+        }
       }
 
       dispatch({type: 'UPDATE_EDITING_NODE', newNode});
