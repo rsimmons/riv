@@ -1,14 +1,110 @@
 import React, { createContext, useContext, useState, useRef, RefObject, useLayoutEffect } from 'react';
-import { Node, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, isFunctionExpressionNode, TreeFunctionBodyNode, FunctionExpressionNode, isFunctionDefinitionNode, UndefinedLiteralNode, NumberLiteralNode, StreamReferenceNode } from './Tree';
+import { Node, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, isFunctionExpressionNode, TreeFunctionBodyNode, FunctionExpressionNode, isFunctionDefinitionNode, UndefinedLiteralNode, NumberLiteralNode, StreamReferenceNode, FunctionReferenceNode } from './Tree';
 import ExpressionChooser from './ExpressionChooser';
 import './TreeView.css';
-import { EnvironmentLookups } from './EditReducer';
+import { EnvironmentLookups, StreamDefinition } from './EditReducer';
 
 const NORMAL_BOX_COLOR = '#d8d8d8';
 const STREAM_REFERENCE_BOX_COLOR = '#a1cdff';
 
+function getFunctionNodeAndDisplayName(funcRef: FunctionExpressionNode, envLookups: EnvironmentLookups): [FunctionDefinitionNode, string] {
+  if (funcRef.kind !== NodeKind.FunctionReference) {
+    throw new Error();
+  }
+
+  const nearestDef = envLookups.nodeToNearestTreeDef.get(funcRef);
+  if (!nearestDef) {
+    throw new Error();
+  }
+
+  const nodeFunctionEnv = envLookups.treeDefToFunctionEnv.get(nearestDef);
+  if (!nodeFunctionEnv) {
+    throw new Error();
+  }
+
+  const functionNode = nodeFunctionEnv.get(funcRef.ref);
+  if (!functionNode) {
+    throw new Error();
+  }
+
+  const displayName = functionNode.name ? functionNode.name.text : ('<function ' + funcRef.ref + '>');
+
+  return [functionNode, displayName];
+}
+
+export function formatStreamDefinition(sdef: StreamDefinition, envLookups: EnvironmentLookups): [string, React.ReactNode] {
+  if (sdef.name) {
+    return [sdef.name, <span>{sdef.name}</span>];
+  } else {
+    let s: string;
+    switch (sdef.kind) {
+      case 'expr':
+        switch (sdef.expr.kind) {
+          case NodeKind.UndefinedLiteral:
+            s = '(undefined)';
+            break;
+
+          case NodeKind.NumberLiteral:
+            s = '(' + sdef.expr.val.toString() + ')';
+            break;
+
+          case NodeKind.ArrayLiteral:
+            s = '(array)';
+            break;
+
+          case NodeKind.StreamIndirection:
+            s = '(indir)';
+            break;
+
+          case NodeKind.StreamReference:
+            throw new Error(); // not possible?
+
+          case NodeKind.Application: {
+            const [funcDef, fname] = getFunctionNodeAndDisplayName(sdef.expr.func, envLookups);
+            s = fname;
+            if ((sdef.yieldIdx !== undefined) && !((funcDef.sig.yields.length === 1) && !funcDef.sig.yields[0].name)) {
+              let yieldDisplayStr: string;
+
+              const yieldNameNode = funcDef.sig.yields[sdef.yieldIdx].name;
+              if (yieldNameNode) {
+                yieldDisplayStr = yieldNameNode.text;
+              } else {
+                yieldDisplayStr = sdef.yieldIdx.toString();
+              }
+              s += '.' + yieldDisplayStr;
+            }
+            break;
+          }
+
+          default: {
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const exhaustive: never = sdef.expr; // this will cause a type error if we haven't handled all cases
+            throw new Error();
+          }
+        }
+        break;
+
+      case 'param':
+        s = sdef.sid;
+        break;
+
+      default: {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const exhaustive: never = sdef; // this will cause a type error if we haven't handled all cases
+        throw new Error();
+      }
+    }
+    return [s, <span style={{fontStyle: 'italic'}}>{s}</span>];
+  }
+}
+
+interface MarkedNodes {
+  selected: Node;
+  referent: Node | undefined;
+}
+
 export interface TreeViewContextData {
-  selectedNode: Node;
+  markedNodes: MarkedNodes;
   editing: boolean;
   compileError: string | undefined;
   envLookups: EnvironmentLookups;
@@ -43,8 +139,6 @@ function useSelectable(node: Node | null): UseSelectableResult {
     };
   }
 
-  const selected = (ctxData.selectedNode === node);
-
   const handleClick = (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
     if ((e.target as Element).tagName !== 'INPUT') {
       e.stopPropagation();
@@ -63,8 +157,13 @@ function useSelectable(node: Node | null): UseSelectableResult {
 
   const classes: Array<string> = [];
 
+  const selected = (ctxData.markedNodes.selected === node);
+  const referent = (ctxData.markedNodes.referent === node);
   if (selected) {
     classes.push('TreeView-selected');
+  }
+  if (referent) {
+    classes.push('TreeView-referent');
   }
   if (hovered) {
     classes.push('TreeView-hovered');
@@ -133,7 +232,7 @@ const StreamReferenceView: React.FC<{node: StreamReferenceNode, reportAttachment
     throw new Error();
   }
 
-  const displayedName: string = streamDef.name || ('<stream ' + node.ref + '>');
+  const [, displayedName] = formatStreamDefinition(streamDef, ctxData.envLookups);
 
   return (
     <div ref={ref} className={selectionClasses.concat(['TreeView-simple-node', 'TreeView-common-padding']).join(' ')} {...selectionHandlers} style={{background: STREAM_REFERENCE_BOX_COLOR}}>{displayedName}</div>
@@ -358,19 +457,7 @@ const StreamExpressionView: React.FC<{node: StreamExpressionNode, reportAttachme
           throw new Error('unimplemented');
         }
 
-        const nearestDef = ctxData.envLookups.nodeToNearestTreeDef.get(node);
-        if (!nearestDef) {
-          throw new Error();
-        }
-        const nodeFunctionEnv = ctxData.envLookups.treeDefToFunctionEnv.get(nearestDef);
-        if (!nodeFunctionEnv) {
-          throw new Error();
-        }
-        const functionNode = nodeFunctionEnv.get(node.func.ref);
-        if (!functionNode) {
-          throw new Error();
-        }
-        const displayedName = functionNode.name ? functionNode.name.text : ('<function ' + node.func + '>');
+        const [functionNode, displayedName] = getFunctionNodeAndDisplayName(node.func, ctxData.envLookups);
 
         if (functionNode.sig.streamParams.length !== node.sargs.length) {
           throw new Error('stream params and args length mismatch');
@@ -414,7 +501,7 @@ const StreamExpressionView: React.FC<{node: StreamExpressionNode, reportAttachme
     }
   })();
 
-  const selected = (ctxData.selectedNode === node);
+  const selected = (ctxData.markedNodes.selected === node);
   if (selected && ctxData.editing) {
     const parent = ctxData.parentLookup.get(node);
     if (!parent) {

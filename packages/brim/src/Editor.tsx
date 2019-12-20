@@ -1,6 +1,6 @@
 import React, { useReducer, useRef, useEffect, useState, useMemo } from 'react';
 import { HotKeys, ObserveKeys } from "react-hotkeys";
-import { initialState, reducer, computeEnvironmentLookups, computeParentLookup } from './EditReducer';
+import { initialState, reducer, computeEnvironmentLookups, computeParentLookup, getReferentOfSelected } from './EditReducer';
 // import StoragePanel from './StoragePanel';
 import './Editor.css';
 import { TreeFunctionDefinitionView, TreeViewContextProvider, TreeViewContextData } from './TreeView';
@@ -110,8 +110,13 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
   const envLookups = useMemo(() => computeEnvironmentLookups(displayedSelTree.mainDefinition, state.nativeFunctions), [displayedSelTree.mainDefinition, state.nativeFunctions]);
   const parentLookup = useMemo(() => computeParentLookup(displayedSelTree.mainDefinition), [displayedSelTree.mainDefinition]);
 
+  const referentNode = getReferentOfSelected(displayedSelTree, envLookups);
+
   const treeViewCtxData: TreeViewContextData = {
-    selectedNode: displayedSelTree.selectedNode,
+    markedNodes: {
+      selected: displayedSelTree.selectedNode,
+      referent: referentNode,
+    },
     editing,
     compileError: state.editing ? state.editing.compileError : undefined,
     // clipboardTopNode: (state.clipboardStack.length > 0) ? state.derivedLookups.streamIdToNode!.get(state.clipboardStack[state.clipboardStack.length-1].streamId) : null,

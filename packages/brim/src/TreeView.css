@@ -113,6 +113,11 @@
   outline-offset: -2px;
 }
 
+.TreeView-referent {
+  outline: blue solid 2px;
+  outline-offset: -2px;
+}
+
 .TreeView-hovered {
   outline: black dashed 1px;
   outline-offset: -1px;

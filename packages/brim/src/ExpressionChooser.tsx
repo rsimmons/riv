@@ -3,6 +3,7 @@ import './ExpressionChooser.css';
 import { generateStreamId, Node, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, SignatureFunctionParameterNode, generateFunctionId, StreamID, ArrayLiteralNode, UndefinedLiteralNode, streamExprReturnedId, StreamExpressionNode, generateApplicationId } from './Tree';
 import { fuzzy_match } from './vendor/fts_fuzzy_match';
 import { EnvironmentLookups, StreamDefinition } from './EditReducer';
+import { formatStreamDefinition } from './TreeView';
 
 interface UndefinedChoice {
   readonly type: 'undefined';
@@ -21,7 +22,7 @@ interface StreamIndChoice {
 interface StreamRefChoice {
   readonly type: 'streamref';
   readonly sid: StreamID;
-  readonly desc: string;
+  readonly desc: React.ReactNode;
 }
 
 interface AppChoice {
@@ -82,7 +83,7 @@ function Choice({ choice }: ChoiceProps) {
       return <span><em>I</em> {choice.name}</span>
 
     case 'streamref':
-      return <span><em>S</em> {choice.desc} <small>(id {choice.sid})</small></span>
+      return <span><em>S</em> {choice.desc}</span>
 
     case 'app':
       return <span><em>F</em> {choice.text}</span>
@@ -167,17 +168,19 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
     const namedStreams: Array<[string, StreamDefinition]> = [];
     streamEnv.forEach((sdef, ) => {
       const selfRef = (sdef.kind === 'expr') && (sdef.expr === overNode);
-      if (sdef.name && !selfRef) {
-        namedStreams.push([sdef.name, sdef]);
+      if (!selfRef) {
+        const [plain, ] = formatStreamDefinition(sdef, envLookups);
+        namedStreams.push([plain, sdef]);
       }
     });
 
     const streamSearchResults = fuzzySearch(text, namedStreams);
     for (const result of streamSearchResults) {
+      const [, html] = formatStreamDefinition(result.data, envLookups);
       choices.push({
         type: 'streamref',
         sid: result.data.sid,
-        desc: result.name,
+        desc: html,
       });
     }
 

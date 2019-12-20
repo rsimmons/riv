@@ -157,6 +157,7 @@ interface ExprStreamDefinition {
   sid: StreamID;
   expr: StreamExpressionNode;
   name?: string;
+  yieldIdx: number | undefined;
 }
 
 interface ParamStreamDefinition {
@@ -206,7 +207,7 @@ export function computeEnvironmentLookups(mainDefinition: TreeFunctionDefinition
 
       if (isStreamExpressionNode(node)) {
         if (node.kind === NodeKind.Application) {
-          node.sids.forEach(sid => {
+          node.sids.forEach((sid, idx) => {
             if (streamEnv.has(sid)) {
               throw new Error();
             }
@@ -214,6 +215,7 @@ export function computeEnvironmentLookups(mainDefinition: TreeFunctionDefinition
               kind: 'expr',
               sid,
               expr: node,
+              yieldIdx: idx,
             });
           });
         } else if ((node.kind === NodeKind.UndefinedLiteral) || (node.kind === NodeKind.NumberLiteral) || (node.kind === NodeKind.ArrayLiteral) || (node.kind === NodeKind.StreamIndirection)) {
@@ -225,6 +227,7 @@ export function computeEnvironmentLookups(mainDefinition: TreeFunctionDefinition
             sid: node.sid,
             expr: node,
             name: ('name' in node) ? node.name : undefined,
+            yieldIdx: undefined,
           });
         }
       }
@@ -252,6 +255,37 @@ export function computeEnvironmentLookups(mainDefinition: TreeFunctionDefinition
     treeDefToStreamEnv,
     treeDefToFunctionEnv,
   };
+}
+
+export function getReferentOfSelected(selTree: SelTree, envLookups: EnvironmentLookups): Node | undefined {
+  const node = selTree.selectedNode;
+  if (node.kind === NodeKind.StreamReference) {
+    const nearestDef = envLookups.nodeToNearestTreeDef.get(node);
+    if (!nearestDef) {
+      throw new Error();
+    }
+    const nodeStreamEnv = envLookups.treeDefToStreamEnv.get(nearestDef);
+    if (!nodeStreamEnv) {
+      throw new Error();
+    }
+    const streamDef = nodeStreamEnv.get(node.ref);
+    if (!streamDef) {
+      throw new Error();
+    }
+
+    switch (streamDef.kind) {
+      case 'expr':
+        return streamDef.expr;
+
+      case 'param':
+        return undefined; // TODO: can we return something useful?
+
+      default: {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const exhaustive: never = streamDef; // this will cause a type error if we haven't handled all cases
+      }
+    }
+  }
 }
 
 function nextArrowSelectableLeft(node: Node, selMoveLookups: SelectionMovementLookups): Node | undefined {
