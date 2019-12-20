@@ -54,6 +54,7 @@ export function formatStreamDefinition(sdef: StreamDefinition, envLookups: Envir
 
           case NodeKind.BooleanLiteral:
             s = '(' + sdef.expr.val.toString() + ')';
+            break;
 
           case NodeKind.ArrayLiteral:
             s = '(array)';

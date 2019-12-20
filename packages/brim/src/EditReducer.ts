@@ -1,6 +1,6 @@
 import genuid from './uid';
 import { State, ProgramInfo, SelTree } from './State';
-import { StreamID, FunctionID, generateStreamId, generateFunctionId, NodeKind, Node, TreeFunctionDefinitionNode, FunctionDefinitionNode, isFunctionDefinitionNode, StreamExpressionNode, NativeFunctionDefinitionNode, isStreamExpressionNode, UndefinedLiteralNode, BodyExpressionNode, generateApplicationId } from './Tree';
+import { StreamID, FunctionID, generateStreamId, generateFunctionId, NodeKind, Node, TreeFunctionDefinitionNode, FunctionDefinitionNode, isFunctionDefinitionNode, StreamExpressionNode, NativeFunctionDefinitionNode, isStreamExpressionNode, UndefinedLiteralNode, BodyExpressionNode, generateApplicationId, isSimpleLiteralNode } from './Tree';
 import { CompiledDefinition } from './CompiledDefinition';
 import { compileGlobalTreeDefinition, CompilationError } from './Compiler';
 import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
@@ -218,7 +218,7 @@ export function computeEnvironmentLookups(mainDefinition: TreeFunctionDefinition
               yieldIdx: idx,
             });
           });
-        } else if ((node.kind === NodeKind.UndefinedLiteral) || (node.kind === NodeKind.NumberLiteral) || (node.kind === NodeKind.ArrayLiteral) || (node.kind === NodeKind.StreamIndirection)) {
+        } else if (isSimpleLiteralNode(node) || (node.kind === NodeKind.ArrayLiteral) || (node.kind === NodeKind.StreamIndirection)) {
           if (streamEnv.has(node.sid)) {
             throw new Error();
           }
