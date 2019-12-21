@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useRef, RefObject, useLayoutEffect } from 'react';
-import { Node, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, isFunctionExpressionNode, TreeFunctionBodyNode, FunctionExpressionNode, isFunctionDefinitionNode, UndefinedLiteralNode, NumberLiteralNode, StreamReferenceNode, FunctionReferenceNode, TextLiteralNode, BooleanLiteralNode } from './Tree';
+import { Node, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, isFunctionExpressionNode, TreeFunctionBodyNode, FunctionExpressionNode, isFunctionDefinitionNode, UndefinedLiteralNode, NumberLiteralNode, StreamReferenceNode, TextLiteralNode, BooleanLiteralNode } from './Tree';
 import ExpressionChooser from './ExpressionChooser';
 import './TreeView.css';
 import { EnvironmentLookups, StreamDefinition } from './EditReducer';
