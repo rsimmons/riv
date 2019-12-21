@@ -1,10 +1,11 @@
 import React, { useReducer, useRef, useEffect, useState, useMemo } from 'react';
 import { HotKeys, ObserveKeys } from "react-hotkeys";
 import { initialState, reducer, computeEnvironmentLookups, computeParentLookup, getReferentOfSelected } from './EditReducer';
-// import StoragePanel from './StoragePanel';
+import { StoragePanel } from './StoragePanel';
 import './Editor.css';
 import { TreeFunctionDefinitionView, TreeViewContextProvider, TreeViewContextData } from './TreeView';
-import { Node } from './Tree';
+import { Node, TreeFunctionDefinitionNode } from './Tree';
+import { ProgramInfo } from './State';
 
 const keyMap = {
   MOVE_UP: 'up',
@@ -94,15 +95,13 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
     }
   };
 
-  /*
   const handleChangeProgramName = (newName: string) => {
     dispatch({type: 'SET_PROGRAM_NAME', newName});
   };
 
-  const handleLoadProgram = (program: Program) => {
-    dispatch({type: 'LOAD_PROGRAM', program});
+  const handleLoadProgram = (info: ProgramInfo, mainDefinition: TreeFunctionDefinitionNode) => {
+    dispatch({type: 'LOAD_PROGRAM', newProgram: {info: info, mainDefinition}});
   };
-  */
 
   const displayedSelTree = state.editing ? state.editing.curSelTree : state.stableSelTree;
   const editing = !!state.editing;
@@ -134,6 +133,9 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
 
   return (
     <div className="Editor">
+      <div className="Editor-storage-panel-container Editor-panel">
+        <StoragePanel programInfo={state.programInfo} mainDefinition={state.stableSelTree.mainDefinition} onChangeName={handleChangeProgramName} onLoadProgram={handleLoadProgram} />
+      </div>
       <HotKeys keyMap={keyMap} handlers={handlers}>
         <ObserveKeys only={CATCH_IN_INPUTS}>
           <div className="Editor-workspace" onKeyDown={onKeyDown} tabIndex={0} ref={editorElem}>
@@ -143,9 +145,6 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
           </div>
         </ObserveKeys>
       </HotKeys>
-      {/* <div className="Editor-storage-panel-container Editor-panel">
-        <StoragePanel currentProgram={state.program} onChangeName={handleChangeProgramName} onLoadProgram={handleLoadProgram} />
-      </div> */}
     </div>
   );
 }

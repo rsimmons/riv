@@ -15,7 +15,7 @@ interface Action {
   char?: string;
   newNode?: Node;
   newName?: string;
-  programInfo?: ProgramInfo;
+  newProgram?: any;
 }
 
 /*
@@ -778,23 +778,27 @@ function attemptEditNextUndefinedOrInsert(state: State): State {
 export function reducer(state: State, action: Action): State {
   console.log('action', action);
 
-  /*
   if (action.type === 'LOAD_PROGRAM') {
-    if (!action.program) {
+    if (!action.newProgram) {
       throw new Error();
     }
 
     // Terminate currently running main function
-    if (!state.liveMain) {
+    if (!state.execution) {
       throw new Error();
     }
-    state.liveMain.context.terminate();
+    state.execution.context.terminate();
 
-    return initialStateFromProgram(action.program);
-  }
-  */
-
-  if (action.type === 'BEGIN_EDIT') {
+    return initialStateFromDefinition(action.newProgram.mainDefinition, action.newProgram.info as ProgramInfo);
+  } else if (action.type === 'SET_PROGRAM_NAME') {
+    return {
+      ...state,
+      programInfo: {
+        ...state.programInfo,
+        name: action.newName!,
+      },
+    };
+  } else if (action.type === 'BEGIN_EDIT') {
     if (!state.editing) {
       return attemptBeginEditSelected(state);
     }
@@ -933,7 +937,7 @@ globalNativeFunctions.forEach(([id, , , jsFunc]) => {
   nativeFunctionEnvironment.set(id, jsFunc);
 });
 
-function initialStateFromDefinition(mainDefinition: TreeFunctionDefinitionNode): State {
+function initialStateFromDefinition(mainDefinition: TreeFunctionDefinitionNode, programInfo: ProgramInfo): State {
   const nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode> = globalNativeFunctions.map(([fid, desc, signature, ]) => ({
     kind: NodeKind.NativeFunctionDefinition,
     fid,
@@ -946,10 +950,7 @@ function initialStateFromDefinition(mainDefinition: TreeFunctionDefinitionNode):
   const compiledDefinition = compileSelTree(initSelTree, nativeFunctions);
 
   return updateExecution({
-    programInfo: {
-      id: genuid(),
-      name: 'my program',
-    },
+    programInfo,
     stableSelTree: initSelTree,
     editing: null,
     nativeFunctions,
@@ -1049,4 +1050,4 @@ const INITIAL_MAIN: TreeFunctionDefinitionNode = {
   }
 };
 
-export const initialState: State = initialStateFromDefinition(INITIAL_MAIN);
+export const initialState: State = initialStateFromDefinition(INITIAL_MAIN, {id: genuid(), name: 'my program'});

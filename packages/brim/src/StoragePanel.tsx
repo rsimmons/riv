@@ -1,28 +1,42 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import genuid from './uid';
+import { ProgramInfo } from './State';
+import { TreeFunctionDefinitionNode } from './Tree';
 import './StoragePanel.css';
 
-export default function StoragePanel({ currentProgram, onChangeName, onLoadProgram }) {
+interface Program {
+  info: ProgramInfo;
+  mainDefinition: TreeFunctionDefinitionNode;
+}
+
+export const StoragePanel: React.FC<{programInfo: ProgramInfo, mainDefinition: TreeFunctionDefinitionNode, onChangeName: (name: string) => void, onLoadProgram: (info: ProgramInfo, mainDefinition: TreeFunctionDefinitionNode) => void}> = ({ programInfo, mainDefinition, onChangeName, onLoadProgram }) => {
   const ls = window.localStorage;
   const KEY_PREFIX = 'rivprog:';
 
   const [selectedProgramId, setSelectedProgramId] = useState();
-  const [savedPrograms, setSavedPrograms] = useState([]);
+  const [savedPrograms, setSavedPrograms] = useState<ReadonlyArray<Program>>([]);
 
-  const refreshSavedPrograms = useCallback((setProgramId) => {
+  const refreshSavedPrograms = useCallback((setProgramId: string | undefined = undefined) => {
     let newProgramId = setProgramId === undefined ? selectedProgramId : setProgramId;
 
-    const sp = [];
+    const sp: Array<Program> = [];
     for (let i = 0; i < ls.length; i++) {
       const k = ls.key(i);
+      if (k === null) {
+        throw new Error();
+      }
       if (k.startsWith(KEY_PREFIX)) {
-        const obj = JSON.parse(ls.getItem(k));
+        const json = ls.getItem(k);
+        if (json === null) {
+          throw new Error();
+        }
+        const obj = JSON.parse(json);
         sp.push(obj);
       }
     }
     setSavedPrograms(sp);
 
-    const savedProgramIds = sp.map(prog => prog.programId);
+    const savedProgramIds = sp.map(prog => prog.info.id);
     if (!savedProgramIds.includes(newProgramId)) {
       newProgramId = undefined;
     }
@@ -34,36 +48,40 @@ export default function StoragePanel({ currentProgram, onChangeName, onLoadProgr
     refreshSavedPrograms();
   }, [refreshSavedPrograms]);
 
-  const handleChangeName = (e) => {
+  const handleChangeName = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (onChangeName) {
       onChangeName(e.target.value);
     }
   };
 
   const handleSave = () => {
-    const k = KEY_PREFIX + currentProgram.programId;
-    const json = JSON.stringify(currentProgram);
+    const k = KEY_PREFIX + programInfo.id;
+    const prog = {
+      info: programInfo,
+      mainDefinition,
+    };
+    const json = JSON.stringify(prog);
     ls.setItem(k, json);
-    refreshSavedPrograms(currentProgram.programId);
+    refreshSavedPrograms(prog.info.id);
   };
 
   const handleClone = () => {
-    onLoadProgram({
-      ...currentProgram,
-      id: genuid(),
-    });
+    onLoadProgram({...programInfo, id: genuid()}, mainDefinition);
   };
 
-  const selectRef = useRef();
-  const handleSetProgramId = (e) => {
+  const selectRef = useRef<HTMLSelectElement>(null);
+  const handleSetProgramId = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedProgramId(e.target.value);
   };
 
   const handleLoad = () => {
     if (selectRef.current && selectRef.current.value) {
-      const k = KEY_PREFIX + selectRef.current.value;
-      const obj = JSON.parse(ls.getItem(k));
-      onLoadProgram(obj);
+      const progId = selectRef.current.value;
+      const hits = savedPrograms.filter(prog => prog.info.id === progId);
+      if (hits.length !== 1) {
+        throw new Error();
+      }
+      onLoadProgram(hits[0].info, hits[0].mainDefinition);
     }
   };
 
@@ -80,8 +98,8 @@ export default function StoragePanel({ currentProgram, onChangeName, onLoadProgr
       <h2>Storage</h2>
       <div>
         <span>Current Program:</span>{' '}
-        <label>UID: <span>{currentProgram.programId}</span></label>{' '}
-        <label>Name: <input value={currentProgram.name} onChange={handleChangeName} /></label>{' '}
+        <label>UID: <span>{programInfo.id}</span></label>{' '}
+        <label>Name: <input value={programInfo.name} onChange={handleChangeName} /></label>{' '}
         <button onClick={handleSave}>Save</button>{' '}
         <button onClick={handleClone}>Clone</button>{' '}
         <button disabled>Import</button>{' '}
@@ -90,7 +108,7 @@ export default function StoragePanel({ currentProgram, onChangeName, onLoadProgr
       <div>
         <span>Saved Programs:</span>{' '}
         <select ref={selectRef} value={selectedProgramId} onChange={handleSetProgramId}>{savedPrograms.map((prog) => (
-          <option key={prog.programId} value={prog.programId}>{prog.name} &lt;{prog.programId}&gt;</option>
+          <option key={prog.info.id} value={prog.info.id}>{prog.info.name} &lt;{prog.info.id}&gt;</option>
         ))}
         </select>{' '}
         <button onClick={handleLoad} disabled={savedPrograms.length === 0}>Load</button>{' '}
