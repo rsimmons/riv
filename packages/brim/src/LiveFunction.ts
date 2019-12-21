@@ -91,17 +91,20 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerS
       context._setStreamFunc(appFunc);
 
       let retval: any;
+      let error: boolean;
       try {
         retval = context.update(...sargVals, ...fargVals);
+        error = false;
       } catch (e) {
-        console.log('application error');
+        console.log('application error', e);
+        error = true;
       }
 
       if (sids.length === 1) {
-        streamEnv.set(sids[0], retval);
+        streamEnv.set(sids[0], error ? undefined : retval);
       } else if (sids.length > 1) {
         sids.forEach((sid, idx) => {
-          streamEnv.set(sid, retval[idx]);
+          streamEnv.set(sid, error ? undefined : retval[idx]);
         });
       }
     }
