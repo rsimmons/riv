@@ -23,18 +23,26 @@ function cloneNode(vnode) {
  * Note that element is only read upon init
  */
 export function renderDOMIntoElement(vnode, containerElement) {
-  const savedContainerElement = useVar(containerElement);
+  const savedContainerElement = useVar();
   const previousVnode = useVar();
+
+  useInitialize(() => {
+    return () => { // cleanup
+      if (savedContainerElement.current) {
+        savedContainerElement.current.innerHTML = ''; // I think we want to do this
+      }
+    };
+  });
+
+  if (!containerElement || !vnode) {
+    return;
+  }
+
+  savedContainerElement.current = containerElement;
 
   // It's important that we clone the incoming vnode, because snabbdom will mutate it when we
   // pass it to patch.
   const clonedVnode = cloneNode(vnode);
-
-  useInitialize(() => {
-    return () => { // cleanup
-      savedContainerElement.current.innerHTML = ''; // I think we want to do this
-    };
-  });
 
   if (previousVnode.current) {
     patch(previousVnode.current, clonedVnode);
@@ -50,12 +58,15 @@ export function renderDOMIntoElement(vnode, containerElement) {
   previousVnode.current = clonedVnode;
 }
 
-/**
- * Note that selector is only read upon init
- */
+// selector may change, but once a valid one is passed, further changes will be ignored
 export function renderDOMIntoSelector(vnode, containerSelector) {
-  const containerElement = useVar(() => document.querySelector(containerSelector)); // cache
-  renderDOMIntoElement(vnode, containerElement.current);
+  let containerElement;
+  try {
+    containerElement = document.querySelector(containerSelector);
+  } catch (e) {
+    // ignore
+  }
+  renderDOMIntoElement(vnode, containerElement);
 }
 
 export function renderDOMAppendedToBody(vnode) {
