@@ -415,7 +415,7 @@ const AppishNodeView: React.FC<AppishNodeProps> = ({node, name, topBarExtraClass
                 </div>
               </div>
               <div>{functionArgs.map((farg, idx) => (
-                <div key={idx} className="TreeView-common-padding" style={{paddingBottom: '0.2em'}}>
+                <div key={idx} className="TreeView-common-padding">
                   {farg.name}
                   <FunctionExpressionView node={farg.node} />
                 </div>
