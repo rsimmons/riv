@@ -645,21 +645,7 @@ function compileSelTree(selTree: SelTree, nativeFunctions: ReadonlyArray<NativeF
     globalFunctionEnvironment.set(nf.fid, nf);
   }
 
-  let compiledDefinition: CompiledDefinition;
-  try {
-    compiledDefinition = compileGlobalTreeDefinition(selTree.mainDefinition, globalFunctionEnvironment);
-  } catch (e) {
-    if (e instanceof CompilationError) {
-      console.log('COMPILATION ERROR', e.message);
-      throw e;
-    } else {
-      throw e;
-    }
-  }
-
-  console.log('compiled definition', compiledDefinition);
-
-  return compiledDefinition;
+  return compileGlobalTreeDefinition(selTree.mainDefinition, globalFunctionEnvironment);
 }
 
 function updateExecution(state: State, newCompiledDefinition: CompiledDefinition): State {
