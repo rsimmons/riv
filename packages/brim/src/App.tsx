@@ -6,7 +6,7 @@ const App: React.FC = () => {
   return (
     <div className="App">
       <Editor autoFocus={true} />
-      <div>
+      {/* <div>
         <h2>Notes</h2>
         <ul>
           <li>If you don't see a green selection/cursor box, focus the editor.</li>
@@ -23,7 +23,8 @@ const App: React.FC = () => {
           <li>Delete will delete expressions, array items, etc.</li>
           <li>Typing [ when editing an expression will create an array literal.</li>
         </ul>
-      </div>
+      </div> */}
+      <div id="output"></div>
     </div>
   );
 }

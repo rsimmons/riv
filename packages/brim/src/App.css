@@ -2,3 +2,7 @@
   margin: 0 auto;
   max-width: 800px;
 }
+
+.App #output {
+  margin-top: 1em;
+}
