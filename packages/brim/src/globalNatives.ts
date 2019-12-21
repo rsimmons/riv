@@ -1,5 +1,7 @@
 import { SignatureNode, NodeKind } from './Tree';
+import { useCallbackReducer } from 'riv-runtime';
 const { showString, animationTime, mouseDown, changeCount, streamMap, audioDriver, random, mouseClickEvts, redCircle, mousePosition, latestValue } = require('riv-demo-lib');
+const { h, renderDOMIntoSelector } = require('riv-snabbdom');
 
 interface Vec2d {
   x: number;
@@ -64,6 +66,59 @@ const nativeFunctions: Array<[string, string, SignatureNode, Function]> = [
   ['vec2sub', 'subtract 2d vectors', simpleSig(['_a', '_b'], true), (a: Vec2d, b: Vec2d) => ({x: a.x-b.x, y: a.y-b.y})],
   ['vec2len', 'length of 2d vector', simpleSig(['_v'], true), vec2dlen],
   ['vec2sqgrid', 'square grid of 2d vectors', simpleSig(['count', 'size'], true), vec2sqgrid],
+
+  // misc
+  ['text2num', 'text to number', {
+    kind: NodeKind.Signature,
+    streamParams: [
+      {
+        kind: NodeKind.SignatureStreamParameter,
+        name: {kind: NodeKind.Name, text: 'text'},
+      },
+    ],
+    funcParams: [],
+    yields: [
+      {
+        kind: NodeKind.SignatureYield,
+        name: {kind: NodeKind.Name, text: 'number'},
+      },
+    ],
+  }, (text: string) => Number(text)],
+
+  // snabbdom
+  ['snabbdom.renderDOMIntoSelector', 'render elem', simpleSig(['elem', 'selector'], false), renderDOMIntoSelector],
+  ['snabbdom.text', 'text', simpleSig(['text'], true), (text: string) => h('span', {}, text)],
+  ['snabbdom.div', 'div', simpleSig(['children'], true), (children: ReadonlyArray<any>) => h('div', {}, children)],
+  ['snabbdom.input', 'input', {
+    kind: NodeKind.Signature,
+    streamParams: [
+      {
+        kind: NodeKind.SignatureStreamParameter,
+        name: {kind: NodeKind.Name, text: 'prefill'},
+      },
+    ],
+    funcParams: [],
+    yields: [
+      {
+        kind: NodeKind.SignatureYield,
+        name: {kind: NodeKind.Name, text: 'elem'},
+      },
+      {
+        kind: NodeKind.SignatureYield,
+        name: {kind: NodeKind.Name, text: 'text'},
+      },
+    ],
+  }, (prefill: string): any => {
+    const safePrefill = (typeof prefill === 'string') ? prefill : '';
+    const [text, inputHandler] = useCallbackReducer<string, any>((_, e) => {
+      const newText = e.target.value;
+      return newText;
+    }, safePrefill);
+    return [
+      h('input', {on: {input: inputHandler}, attrs: {value: text}}), // elem
+      text // text
+    ];
+  }],
 
   // multiple yields
   ['trig', 'trig', {
