@@ -197,19 +197,20 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
       throw new Error();
     }
 
-    const namedStreams: Array<[string, StreamDefinition]> = [];
+    const envStreams: Array<[string, StreamDefinition]> = [];
     streamEnv.forEach((sdef, ) => {
       const selfRef = (sdef.kind === 'expr') && (sdef.expr === overNode);
       if (!selfRef) {
         const [plain, ] = formatStreamDefinition(sdef, envLookups);
-        namedStreams.push([plain, sdef]);
+        envStreams.push([plain, sdef]);
       }
     });
 
-    const streamSearchResults = fuzzySearch(text, namedStreams);
+    const streamSearchResults = fuzzySearch(text, envStreams);
+    const anonStreamChoices: Array<Choice> = [];
     for (const result of streamSearchResults) {
       const [, html] = formatStreamDefinition(result.data, envLookups);
-      choices.push({
+      (result.data.name ? choices : anonStreamChoices).push({
         type: 'streamref',
         sid: result.data.sid,
         desc: html,
@@ -258,17 +259,19 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
       }
     }
 
+    choices.push(...anonStreamChoices);
+
+    choices.push({
+      type: 'text',
+      value: text,
+    });
+
     if (text.trim() !== '') {
       choices.push({
         type: 'streamind',
         name: text.trim(),
       });
     }
-
-    choices.push({
-      type: 'text',
-      value: text,
-    });
 
     if (choices.length === 0) {
       choices.push({
