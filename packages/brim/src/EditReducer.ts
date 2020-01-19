@@ -207,18 +207,19 @@ export function computeEnvironmentLookups(mainDefinition: TreeFunctionDefinition
 
       if (isStreamExpressionNode(node)) {
         if (node.kind === NodeKind.Application) {
-          node.sids.forEach((sid, idx) => {
-            if (streamEnv.has(sid)) {
+          node.outs.forEach((out, idx) => {
+            if (streamEnv.has(out.sid)) {
               throw new Error();
             }
-            streamEnv.set(sid, {
+            streamEnv.set(out.sid, {
               kind: 'expr',
-              sid,
+              sid: out.sid,
               expr: node,
+              name: out.name ? out.name.text : undefined,
               yieldIdx: idx,
             });
           });
-        } else if (isSimpleLiteralNode(node) || (node.kind === NodeKind.ArrayLiteral) || (node.kind === NodeKind.StreamIndirection)) {
+        } else if (isSimpleLiteralNode(node)) {
           if (streamEnv.has(node.sid)) {
             throw new Error();
           }
@@ -226,7 +227,6 @@ export function computeEnvironmentLookups(mainDefinition: TreeFunctionDefinition
             kind: 'expr',
             sid: node.sid,
             expr: node,
-            name: ('name' in node) ? node.name : undefined,
             yieldIdx: undefined,
           });
         }
@@ -374,7 +374,7 @@ function deleteNodeSubtree(node: Node, parentLookup: Map<Node, Node>, selMoveLoo
   }
 
   if (isStreamExpressionNode(node)) {
-    if ((parent.kind === NodeKind.Application) || (parent.kind === NodeKind.StreamIndirection) || (parent.kind === NodeKind.YieldExpression)) {
+    if ((parent.kind === NodeKind.Application) || (parent.kind === NodeKind.YieldExpression)) {
       const newNode: UndefinedLiteralNode = {
         kind: NodeKind.UndefinedLiteral,
         sid: generateStreamId(),
@@ -387,7 +387,7 @@ function deleteNodeSubtree(node: Node, parentLookup: Map<Node, Node>, selMoveLoo
         mainDefinition: newRoot,
         selectedNode: newNode,
       };
-    } else if ((parent.kind === NodeKind.ArrayLiteral) || (parent.kind === NodeKind.TreeFunctionBody)) {
+    } else if (parent.kind === NodeKind.TreeFunctionBody) {
       return deleteArrayElementNode(node, parentLookup, selMoveLookups);
     } else {
       throw new Error();
@@ -449,15 +449,6 @@ export function computeSelectionMovementLookups(root: Node): SelectionMovementLo
 
   const visit = (node: Node): void => {
     switch (node.kind) {
-      case NodeKind.ArrayLiteral:
-        setForArr(node.elems, node);
-        break;
-
-      case NodeKind.StreamIndirection:
-        leafward.set(node, node.expr);
-        rootward.set(node.expr, node);
-        break;
-
       case NodeKind.Application: {
         setForArr(([] as ReadonlyArray<Node>).concat(node.sargs, node.fargs), node);
         break;
@@ -521,33 +512,7 @@ function attemptInsertBeforeAfter(state: State, before: boolean): State {
       return state;
     }
 
-    if (parent.kind === NodeKind.ArrayLiteral) {
-      const idx = parent.elems.indexOf(n as StreamExpressionNode);
-      const newElem: UndefinedLiteralNode = {
-        kind: NodeKind.UndefinedLiteral,
-        sid: generateStreamId(),
-      };
-      const newArrNode = {
-        ...parent,
-        elems: arrInsertBeforeAfter(parent.elems, idx, before, newElem),
-      };
-      const newMain = replaceNode(parent, newArrNode, parentLookup);
-      if (newMain.kind !== NodeKind.TreeFunctionDefinition) {
-        throw new Error();
-      }
-      const origSelTree = {
-        mainDefinition: newMain,
-        selectedNode: newElem,
-      };
-      return {
-        ...state,
-        editing: {
-          origSelTree,
-          curSelTree: origSelTree,
-          compileError: undefined, // TODO: assumed, not sure if guaranteed safe
-        },
-      };
-    } else if (parent.kind === NodeKind.TreeFunctionBody) {
+    if (parent.kind === NodeKind.TreeFunctionBody) {
       const idx = parent.exprs.indexOf(n as BodyExpressionNode);
       const newElem: UndefinedLiteralNode = {
         kind: NodeKind.UndefinedLiteral,
@@ -751,7 +716,7 @@ function attemptEditNextUndefinedOrInsert(state: State): State {
     if (!parent) {
       return state; // reached root, do nothing
     }
-    if ((parent.kind === NodeKind.TreeFunctionBody) || (parent.kind === NodeKind.ArrayLiteral)) {
+    if (parent.kind === NodeKind.TreeFunctionBody) {
       return attemptInsertBeforeAfter(state, false);
     } else {
       const parentsChildren = [...iterChildren(parent)];
@@ -933,16 +898,17 @@ export function reducer(state: State, action: Action): State {
 const nativeFunctionEnvironment: Environment<FunctionID, Function> = new Environment();
 nativeFunctionEnvironment.set('id', (x: any) => x);
 nativeFunctionEnvironment.set('Array_of', Array.of);
-globalNativeFunctions.forEach(([id, , , jsFunc]) => {
+globalNativeFunctions.forEach(([id, , , , jsFunc]) => {
   nativeFunctionEnvironment.set(id, jsFunc);
 });
 
 function initialStateFromDefinition(mainDefinition: TreeFunctionDefinitionNode, programInfo: ProgramInfo): State {
-  const nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode> = globalNativeFunctions.map(([fid, desc, signature, ]) => ({
+  const nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode> = globalNativeFunctions.map(([fid, desc, signature, format, ]) => ({
     kind: NodeKind.NativeFunctionDefinition,
     fid,
     name: { kind: NodeKind.Name, text: desc },
     sig: signature,
+    format,
   }));
 
   const initSelTree = {mainDefinition, selectedNode: mainDefinition};
@@ -971,33 +937,39 @@ const INITIAL_MAIN: TreeFunctionDefinitionNode = {
     funcParams: [],
     yields: [],
   },
+  format: '',
   spids: [],
   fpids: [],
   body: {
     kind: NodeKind.TreeFunctionBody,
     exprs: [
       {
-        kind: NodeKind.StreamIndirection,
-        sid: mdId,
-        name: 'md',
-        expr: {
-          kind: NodeKind.Application,
-          aid: generateApplicationId(),
-          sids: [generateStreamId()],
-          reti: 0,
-          func: {
-            kind: NodeKind.FunctionReference,
-            ref: 'mouseDown',
-          },
-          sargs: [],
-          fargs: [],
+        kind: NodeKind.Application,
+        aid: generateApplicationId(),
+        outs: [{sid: mdId, name: {kind: NodeKind.Name, text: 'md'}}],
+        func: {
+          kind: NodeKind.FunctionReference,
+          ref: 'bind',
         },
+        sargs: [
+          {
+            kind: NodeKind.Application,
+            aid: generateApplicationId(),
+            outs: [{sid: generateStreamId(), name: null}],
+            func: {
+              kind: NodeKind.FunctionReference,
+              ref: 'mouseDown',
+            },
+            sargs: [],
+            fargs: [],
+          },
+        ],
+        fargs: [],
       },
       {
         kind: NodeKind.Application,
         aid: generateApplicationId(),
-        sids: [],
-        reti: 0,
+        outs: [],
         func: {
           kind: NodeKind.FunctionReference,
           ref: 'showString',
@@ -1006,8 +978,7 @@ const INITIAL_MAIN: TreeFunctionDefinitionNode = {
           {
             kind: NodeKind.Application,
             aid: generateApplicationId(),
-            sids: [generateStreamId()],
-            reti: 0,
+            outs: [{sid: generateStreamId(), name: null}],
             func: {
               kind: NodeKind.FunctionReference,
               ref: 'ifte',
@@ -1020,11 +991,10 @@ const INITIAL_MAIN: TreeFunctionDefinitionNode = {
               {
                 kind: NodeKind.Application,
                 aid: generateApplicationId(),
-                sids: [generateStreamId(), generateStreamId(), generateStreamId()],
-                reti: 1,
+                outs: [{sid: generateStreamId(), name: null}],
                 func: {
                   kind: NodeKind.FunctionReference,
-                  ref: 'trig',
+                  ref: 'cos',
                 },
                 sargs: [
                   {

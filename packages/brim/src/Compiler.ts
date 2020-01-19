@@ -46,8 +46,6 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
         case NodeKind.NumberLiteral:
         case NodeKind.TextLiteral:
         case NodeKind.BooleanLiteral:
-        case NodeKind.ArrayLiteral:
-        case NodeKind.StreamIndirection:
           if (streamEnvironment.has(node.sid)) {
             throw new Error('must be unique');
           }
@@ -60,12 +58,12 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
           break;
 
         case NodeKind.Application:
-          node.sids.forEach(sid => {
-            if (streamEnvironment.has(sid)) {
+          node.outs.forEach(out => {
+            if (streamEnvironment.has(out.sid)) {
               throw new Error('must be unique');
             }
-            streamEnvironment.set(sid, node);
-            localStreamIds.add(sid);
+            streamEnvironment.set(out.sid, node);
+            localStreamIds.add(out.sid);
           });
           break;
 
@@ -131,49 +129,6 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
       case NodeKind.TextLiteral:
       case NodeKind.BooleanLiteral:
         constStreams.push({sid: node.sid, val: node.val});
-        break;
-
-      case NodeKind.ArrayLiteral: {
-        const elemStreamIds: Array<StreamID> = [];
-
-        temporaryMarked.add(node);
-        for (const elem of node.elems) {
-          traverseStreamExpr(elem);
-          const elemRetSid = streamExprReturnedId(elem);
-          if (!elemRetSid) {
-            throw new Error();
-          }
-          elemStreamIds.push(elemRetSid);
-        }
-        temporaryMarked.delete(node);
-
-        apps.push({
-          sids: [node.sid],
-          appId: node.sid, // NOTE: this is a hack, but safe
-          funcId: 'Array_of',
-          sargIds: elemStreamIds,
-          fargIds: [],
-        });
-        break;
-      }
-
-      case NodeKind.StreamIndirection:
-        temporaryMarked.add(node);
-        traverseStreamExpr(node.expr);
-        temporaryMarked.delete(node);
-
-        const exprRetSid = streamExprReturnedId(node.expr);
-        if (!exprRetSid) {
-          throw new Error();
-        }
-
-        apps.push({
-          sids: [node.sid],
-          appId: node.sid, // NOTE: this is a hack, but safe
-          funcId: 'id',
-          sargIds: [exprRetSid],
-          fargIds: [],
-        });
         break;
 
       case NodeKind.StreamReference:
@@ -259,7 +214,7 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
         temporaryMarked.delete(node);
 
         apps.push({
-          sids: node.sids,
+          sids: node.outs.map(out => out.sid),
           appId: node.aid,
           funcId: functionExprId(node.func),
           sargIds: streamArgIds,

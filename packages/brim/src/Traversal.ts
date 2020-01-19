@@ -1,5 +1,5 @@
 // import { Path, pathIsPrefix } from './State';
-import { NodeKind, Node, SignatureNode, NameNode, StreamExpressionNode, isStreamExpressionNode, BodyExpressionNode, isBodyExpressionNode, TreeFunctionBodyNode, FunctionExpressionNode, isFunctionExpressionNode } from './Tree';
+import { NodeKind, Node, SignatureNode, NameNode, StreamExpressionNode, isStreamExpressionNode, BodyExpressionNode, isBodyExpressionNode, TreeFunctionBodyNode, FunctionExpressionNode, isFunctionExpressionNode, ApplicationOut } from './Tree';
 
 export function firstChild(node: Node): Node | undefined {
   const res = iterChildren(node).next();
@@ -23,10 +23,6 @@ export function* iterChildren(node: Node) {
       // no children
       break;
 
-    case NodeKind.StreamIndirection:
-      yield node.expr;
-      break;
-
     case NodeKind.SignatureStreamParameter:
     case NodeKind.SignatureFunctionParameter:
     case NodeKind.SignatureYield:
@@ -35,12 +31,13 @@ export function* iterChildren(node: Node) {
       }
       break;
 
-    case NodeKind.ArrayLiteral:
-      yield* node.elems;
-      break;
-
     case NodeKind.Application:
       yield node.func;
+      for (const out of node.outs) {
+        if (out.name) {
+          yield out.name;
+        }
+      }
       yield* node.sargs;
       yield* node.fargs;
       break;
@@ -90,6 +87,17 @@ function visitArray<T>(nodeArr: ReadonlyArray<Node>, visit: (node: Node) => T | 
   }
 }
 
+function visitOuts<T>(outs: ReadonlyArray<ApplicationOut>, visit: (node: Node) => T | undefined): T | undefined {
+  for (const out of outs) {
+    if (out.name) {
+      const result = visit(out.name);
+      if (result) {
+        return result;
+      }
+    }
+  }
+}
+
 /**
  * Note that this aborts if the visit function returns a truthy value.
  */
@@ -105,19 +113,13 @@ export function visitChildren<T>(node: Node, visit: (node: Node) => T | undefine
       // no children
       return;
 
-    case NodeKind.StreamIndirection:
-      return visit(node.expr);
-
     case NodeKind.SignatureStreamParameter:
     case NodeKind.SignatureFunctionParameter:
     case NodeKind.SignatureYield:
       return (node.name && visit(node.name));
 
-    case NodeKind.ArrayLiteral:
-      return visitArray(node.elems, visit);
-
     case NodeKind.Application:
-      return visit(node.func) || visitArray(node.sargs, visit) || visitArray(node.fargs, visit);
+      return visit(node.func) || visitOuts(node.outs, visit) || visitArray(node.sargs, visit) || visitArray(node.fargs, visit);
 
     case NodeKind.Signature:
       return visitArray(node.streamParams, visit) || visitArray(node.funcParams, visit) || visitArray(node.yields, visit);
@@ -150,6 +152,28 @@ export function transformChildren(node: Node, transform: (node: Node) => Node): 
       throw new Error();
     }
     return tn;
+  };
+
+  const xOuts = (outs: ReadonlyArray<ApplicationOut>): ReadonlyArray<ApplicationOut> => {
+    let changed = false;
+    const newOuts = outs.map(out => {
+      if (out.name) {
+        const newName = transform(out.name);
+        if (newName.kind !== NodeKind.Name) {
+          throw new Error();
+        }
+        if (newName !== out.name) {
+          changed = true;
+        }
+        return {
+          ...out,
+          name: newName,
+        };
+      } else {
+        return out;
+      }
+    });
+    return changed ? newOuts : outs;
   };
 
   const xStreamExpr = (n: StreamExpressionNode): StreamExpressionNode => {
@@ -240,18 +264,6 @@ export function transformChildren(node: Node, transform: (node: Node) => Node): 
       // no children to transform
       return node;
 
-    case NodeKind.StreamIndirection: {
-      const newExpr = xStreamExpr(node.expr);
-      if (newExpr === node.expr) {
-        return node;
-      } else {
-        return {
-          ...node,
-          expr: newExpr,
-        };
-      }
-    }
-
     case NodeKind.SignatureStreamParameter:
     case NodeKind.SignatureFunctionParameter:
     case NodeKind.SignatureYield: {
@@ -266,28 +278,18 @@ export function transformChildren(node: Node, transform: (node: Node) => Node): 
       }
     }
 
-    case NodeKind.ArrayLiteral: {
-      const newElems = xStreamExprArr(node.elems);
-      if (newElems === node.elems) {
-        return node;
-      } else {
-        return {
-          ...node,
-          elems: newElems,
-        };
-      }
-    }
-
     case NodeKind.Application: {
       const newFunc = xFuncExpr(node.func);
+      const newOuts = xOuts(node.outs);
       const newSargs = xStreamExprArr(node.sargs);
       const newFargs = xFuncExprArr(node.fargs);
-      if ((newFunc === node.func) && (newSargs === node.sargs) && (newFargs === node.fargs)) {
+      if ((newFunc === node.func) && (newOuts === node.outs) && (newSargs === node.sargs) && (newFargs === node.fargs)) {
         return node;
       } else {
         return {
           ...node,
           func: newFunc,
+          outs: newOuts,
           sargs: newSargs,
           fargs: newFargs,
         };
@@ -361,10 +363,7 @@ export function transformChildren(node: Node, transform: (node: Node) => Node): 
 }
 
 export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
-  const replaceName = (n: NameNode | undefined): NameNode | undefined => {
-    if (!n) {
-      return n;
-    }
+  const replaceName = (n: NameNode): NameNode => {
     if (n === oldChild) {
       if (newChild.kind !== NodeKind.Name) {
         throw new Error();
@@ -458,6 +457,22 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
     });
   };
 
+  const replaceOuts = (outs: ReadonlyArray<ApplicationOut>): ReadonlyArray<ApplicationOut> => {
+    return outs.map((out: ApplicationOut) => {
+      if (out.name === oldChild) {
+        if (newChild.kind !== NodeKind.Name) {
+          throw new Error();
+        }
+        return {
+          ...out,
+          name: newChild,
+        };
+      } else {
+        return out;
+      }
+    });
+  };
+
   switch (node.kind) {
     case NodeKind.Name:
     case NodeKind.UndefinedLiteral:
@@ -468,12 +483,6 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
     case NodeKind.FunctionReference:
       throw new Error('no children to replace');
 
-    case NodeKind.StreamIndirection:
-      return {
-        ...node,
-        expr: replaceStreamExpr(node.expr),
-      };
-
     case NodeKind.SignatureStreamParameter:
     case NodeKind.SignatureFunctionParameter:
     case NodeKind.SignatureYield:
@@ -482,16 +491,11 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
         name: replaceName(node.name),
       };
 
-    case NodeKind.ArrayLiteral:
-      return {
-        ...node,
-        elems: replaceStreamExprArr(node.elems),
-      };
-
     case NodeKind.Application:
       return {
         ...node,
         func: replaceFunctionExpression(node.func),
+        outs: replaceOuts(node.outs),
         sargs: replaceStreamExprArr(node.sargs),
         fargs: replaceFuncExprArr(node.fargs),
       };
@@ -547,7 +551,6 @@ export function deleteArrayElementChild(node: Node, child: Node): Node {
     case NodeKind.NumberLiteral:
     case NodeKind.TextLiteral:
     case NodeKind.BooleanLiteral:
-    case NodeKind.StreamIndirection:
     case NodeKind.StreamReference:
     case NodeKind.SignatureStreamParameter:
     case NodeKind.SignatureFunctionParameter:
@@ -555,12 +558,6 @@ export function deleteArrayElementChild(node: Node, child: Node): Node {
     case NodeKind.FunctionReference:
     case NodeKind.TreeFunctionDefinition:
       throw new Error('no array-children');
-
-    case NodeKind.ArrayLiteral:
-      return {
-        ...node,
-        elems: filterOut(node.elems),
-      };
 
     case NodeKind.Application:
       return {

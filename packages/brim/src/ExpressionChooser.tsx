@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './ExpressionChooser.css';
-import { generateStreamId, Node, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, SignatureFunctionParameterNode, generateFunctionId, StreamID, ArrayLiteralNode, UndefinedLiteralNode, streamExprReturnedId, StreamExpressionNode, generateApplicationId } from './Tree';
+import { generateStreamId, Node, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, SignatureFunctionParameterNode, generateFunctionId, StreamID, UndefinedLiteralNode, streamExprReturnedId, StreamExpressionNode, generateApplicationId, ApplicationOut } from './Tree';
 import { fuzzy_match } from './vendor/fts_fuzzy_match';
 import { EnvironmentLookups, StreamDefinition } from './EditReducer';
 import { formatStreamDefinition } from './TreeView';
@@ -24,9 +24,9 @@ interface BooleanChoice {
   readonly value: boolean;
 }
 
-interface StreamIndChoice {
-  readonly type: 'streamind';
-  readonly name?: string;
+interface BindChoice {
+  readonly type: 'bind';
+  readonly name: string;
 }
 
 interface StreamRefChoice {
@@ -42,7 +42,7 @@ interface AppChoice {
   readonly retIdx: number | undefined;
 }
 
-type Choice = UndefinedChoice | NumberChoice | TextChoice | BooleanChoice | StreamIndChoice | StreamRefChoice | AppChoice;
+type Choice = UndefinedChoice | NumberChoice | TextChoice | BooleanChoice | BindChoice | StreamRefChoice | AppChoice;
 
 interface SearchResult<T> {
   score: number;
@@ -95,7 +95,7 @@ function Choice({ choice }: ChoiceProps) {
     case 'boolean':
       return <span><em>B</em> {choice.value.toString()}</span>
 
-    case 'streamind':
+    case 'bind':
       return <span><em>I</em> {choice.name}</span>
 
     case 'streamref':
@@ -151,12 +151,8 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
       case NodeKind.BooleanLiteral:
         return origNode.val.toString();
 
-      case NodeKind.StreamIndirection:
-        return origNode.name || '';
-
       case NodeKind.StreamReference:
       case NodeKind.Application:
-      case NodeKind.ArrayLiteral:
         return ''; // Don't prefill with text
 
       default: {
@@ -268,7 +264,7 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
 
     if (text.trim() !== '') {
       choices.push({
-        type: 'streamind',
+        type: 'bind',
         name: text.trim(),
       });
     }
@@ -298,14 +294,6 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
         case NodeKind.BooleanLiteral:
         case NodeKind.StreamReference:
           origStreamChildren = [];
-          break;
-
-        case NodeKind.StreamIndirection:
-          origStreamChildren = [origNode.expr];
-          break;
-
-        case NodeKind.ArrayLiteral:
-          origStreamChildren = origNode.elems;
           break;
 
         case NodeKind.Application:
@@ -351,15 +339,20 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
           };
           break;
 
-        case 'streamind':
+        case 'bind':
           newNode = {
-            kind: NodeKind.StreamIndirection,
-            sid: newSid,
-            name: choice.name,
-            expr: (origStreamChildren.length > 0) ? origStreamChildren[0] : {
+            kind: NodeKind.Application,
+            aid: generateApplicationId(),
+            outs: [{sid: newSid, name: {kind: NodeKind.Name, text: choice.name}}],
+            func: {
+              kind: NodeKind.FunctionReference,
+              ref: 'bind',
+            },
+            sargs: (origStreamChildren.length > 0) ? [origStreamChildren[0]] : [{
               kind: NodeKind.UndefinedLiteral,
               sid: generateStreamId(),
-            },
+            }],
+            fargs: [],
           };
           break;
 
@@ -371,10 +364,16 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
           break;
 
         case 'app': {
-          const sids = choice.funcDefNode.sig.yields.map(() => generateStreamId());
-          if (choice.retIdx !== undefined) {
-            sids[choice.retIdx] = newSid;
-          }
+          const outs: ReadonlyArray<ApplicationOut> = choice.funcDefNode.sig.yields.map((_, idx) => {
+            const returned = (idx === 0); // TODO: don't hardcode return index to 0
+            return {
+              sid: returned ? newSid : generateStreamId(),
+              name: returned ? null : {
+                kind: NodeKind.Name,
+                text: '',
+              },
+            };
+          });
 
           const sargs: ReadonlyArray<StreamExpressionNode> = choice.funcDefNode.sig.streamParams.map((_, idx) => (
             (idx < origStreamChildren.length) ? origStreamChildren[idx] : {
@@ -386,8 +385,7 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
           const n: ApplicationNode = {
             kind: NodeKind.Application,
             aid: generateApplicationId(),
-            sids,
-            reti: choice.retIdx,
+            outs,
             func: {
               kind: NodeKind.FunctionReference,
               ref: choice.funcDefNode.fid,
@@ -397,7 +395,9 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
               return {
                 kind: NodeKind.TreeFunctionDefinition,
                 fid: generateFunctionId(),
+                name: {kind: NodeKind.Name, text: param.name.text},
                 sig: param.sig,
+                format: '',
                 spids: param.sig.streamParams.map(() => generateStreamId()),
                 fpids: param.sig.funcParams.map(() => generateFunctionId()),
                 body: {
@@ -456,6 +456,7 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
 
     if (newText === '[') {
       // This is a special case, we bypass the normal dropdown/choice stuff
+      /*
       const initElemNode: UndefinedLiteralNode = {
         kind: NodeKind.UndefinedLiteral,
         sid: generateStreamId(),
@@ -469,6 +470,7 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
       dispatch({type: 'TOGGLE_EDIT'});
       dispatch({type: 'SET_SELECTED_NODE', newNode: initElemNode});
       dispatch({type: 'TOGGLE_EDIT'});
+      */
     } else {
       setText(newText);
       setDropdownState(recomputeDropdownChoices(newText));
@@ -479,11 +481,13 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
     switch (e.key) {
       case 'ArrowUp':
         e.preventDefault(); // we don't want the default behavior of moving the cursor
+        e.stopPropagation();
         adjustDropdownIndex(-1);
         break;
 
       case 'ArrowDown':
         e.preventDefault(); // we don't want the default behavior of moving the cursor
+        e.stopPropagation();
         adjustDropdownIndex(1);
         break;
 

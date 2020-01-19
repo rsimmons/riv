@@ -1,10 +1,10 @@
-import React, { createContext, useContext, useState, useRef, RefObject, useLayoutEffect } from 'react';
-import { Node, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, isFunctionExpressionNode, TreeFunctionBodyNode, FunctionExpressionNode, isFunctionDefinitionNode, UndefinedLiteralNode, NumberLiteralNode, StreamReferenceNode, TextLiteralNode, BooleanLiteralNode } from './Tree';
+import React, { createContext, useContext, useState, useRef, useLayoutEffect } from 'react';
+import { Node, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, isFunctionExpressionNode, TreeFunctionBodyNode, FunctionExpressionNode, isFunctionDefinitionNode, StreamReferenceNode, NameNode, ApplicationNode } from './Tree';
 import ExpressionChooser from './ExpressionChooser';
 import './TreeView.css';
 import { EnvironmentLookups, StreamDefinition } from './EditReducer';
 
-const NORMAL_BOX_COLOR = '#d8d8d8';
+const BOUND_NAME_BOX_COLOR = '#d1e6ff';
 const STREAM_REFERENCE_BOX_COLOR = '#a1cdff';
 
 function getFunctionNodeAndDisplayName(funcRef: FunctionExpressionNode, envLookups: EnvironmentLookups): [FunctionDefinitionNode, string] {
@@ -54,14 +54,6 @@ export function formatStreamDefinition(sdef: StreamDefinition, envLookups: Envir
 
           case NodeKind.BooleanLiteral:
             s = '(' + sdef.expr.val.toString() + ')';
-            break;
-
-          case NodeKind.ArrayLiteral:
-            s = '(array)';
-            break;
-
-          case NodeKind.StreamIndirection:
-            s = '(indir)';
             break;
 
           case NodeKind.StreamReference:
@@ -119,6 +111,7 @@ export interface TreeViewContextData {
   parentLookup: Map<Node, Node>;
   dispatch: (action: any) => void; // TODO: tighten up type
   onSelectNode: (node: Node) => void;
+  focusSelected: boolean;
 };
 const TreeViewContext = createContext<TreeViewContextData | null>(null);
 export const TreeViewContextProvider = TreeViewContext.Provider;
@@ -126,25 +119,19 @@ export const TreeViewContextProvider = TreeViewContext.Provider;
 interface UseSelectableResult {
   classes: ReadonlyArray<string>;
   handlers: {
-    onClick?: (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => void,
-    onMouseOver?: (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => void,
-    onMouseOut?: (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => void,
+    onClick: (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => void,
+    onMouseOver: (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => void,
+    onMouseOut: (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => void,
+    tabIndex: number,
   };
 }
 
-function useSelectable(node: Node | null): UseSelectableResult {
+function useSelectable(node: Node, ref: React.RefObject<HTMLDivElement>): UseSelectableResult {
   const [hovered, setHovered] = useState(false);
 
   const ctxData = useContext(TreeViewContext);
   if (!ctxData) {
     throw new Error();
-  }
-
-  if (!node) {
-    return {
-      classes: [],
-      handlers: {},
-    };
   }
 
   const handleClick = (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
@@ -178,54 +165,228 @@ function useSelectable(node: Node | null): UseSelectableResult {
   }
   // TODO: handle clipboard-top, clipboard-rest?
 
+  useLayoutEffect(() => {
+    if (ctxData.focusSelected && selected && ref.current) {
+      ref.current.focus();
+    }
+  });
+
   return {
     classes,
     handlers: {
       onClick: handleClick,
       onMouseOver: handleMouseOver,
       onMouseOut: handleMouseOut,
+      tabIndex: 0,
     }
   };
 }
 
-const CXN_COLOR = '#999';
-const CXN_LENGTH = '0.35em';
-
-// Used by "simple" stream nodes that just need to report their attachment offset as their vertical midpoint
-// TODO: Really, children should be reporting their attachment offset AND their height? I think the way it is now,
-// there could be a bug where a child's attachment offset stays the same but its height changes, and this isn't accounted for.
-function useReportSimpleAttachmentOffset(reportAttachmentOffset?: (offset: number) => void): RefObject<HTMLDivElement> {
+const SimpleNodeView: React.FC<{treeNode: Node, content: React.ReactNode, bgColor: string}> = ({treeNode, content, bgColor}) => {
   const ref = useRef<HTMLDivElement>(null);
-
-  useLayoutEffect(() => {
-    if (reportAttachmentOffset) {
-      if (!ref.current) {
-        throw new Error();
-      }
-      const rect = ref.current.getBoundingClientRect();
-      reportAttachmentOffset(0.5*(rect.bottom - rect.top));
-    }
-  });
-
-  return ref;
-}
-
-const ChildlessStreamNodeView: React.FC<{node: UndefinedLiteralNode | NumberLiteralNode | TextLiteralNode | BooleanLiteralNode, contents: React.ReactNode, boxColor: string, reportAttachmentOffset?: (offset: number) => void}> = ({node, contents, boxColor, reportAttachmentOffset}) => {
-  const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node);
-  const ref = useReportSimpleAttachmentOffset(reportAttachmentOffset);
+  const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(treeNode, ref);
 
   return (
-    <div ref={ref} className={selectionClasses.concat(['TreeView-simple-node', 'TreeView-common-padding']).join(' ')} {...selectionHandlers} style={{background: boxColor}}>{contents}</div>
+    <div ref={ref} className={selectionClasses.concat(['TreeView-node']).join(' ')} {...selectionHandlers} style={{background: bgColor}} data-singleline="1">{content}</div>
   );
 };
 
-const StreamReferenceView: React.FC<{node: StreamReferenceNode, reportAttachmentOffset?: (offset: number) => void}> = ({node, reportAttachmentOffset}) => {
+interface RowLayoutNode {
+  reactNode: React.ReactNode;
+  treeNode?: Node; // we just use its identity for selection. may be undefined if not selectable
+}
+
+interface RowLayoutRow {
+  indent: boolean;
+  items: ReadonlyArray<string | RowLayoutNode>;
+}
+
+type RowLayout = ReadonlyArray<RowLayoutRow>;
+
+const RowView: React.FC<{node: Node, layout: RowLayout}> = ({node, layout}) => {
+  const ref = useRef<HTMLDivElement>(null);
+  const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node, ref);
+
   const ctxData = useContext(TreeViewContext);
   if (!ctxData) {
     throw new Error();
   }
-  const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node);
-  const ref = useReportSimpleAttachmentOffset(reportAttachmentOffset);
+
+  interface SelectionRecord {
+    ref: React.RefObject<HTMLElement>,
+    treeNode: Node,
+  }
+
+  const selectionRows: Array<ReadonlyArray<SelectionRecord>> = [];
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.getModifierState('Alt') ||
+      e.getModifierState('Control') ||
+      e.getModifierState('Meta') ||
+      e.getModifierState('Shift')) {
+      return;
+    }
+    if ((e.key === 'ArrowRight') && (ref.current === e.target)) {
+      if (selectionRows.length > 0) {
+        e.stopPropagation();
+        ctxData.dispatch({
+          type: 'SET_SELECTED_NODE',
+          newNode: selectionRows[0][0].treeNode,
+        });
+      }
+    } else if ((e.key === 'ArrowLeft') || (e.key === 'ArrowRight') || (e.key === 'ArrowUp') || (e.key === 'ArrowDown')) {
+      let located = false;
+      selectionRows.forEach((row, rowIdx) => {
+        row.forEach((item, itemIdx) => {
+          if (item.ref.current && item.ref.current.contains(e.target as HTMLElement)) {
+            // The event came from this item, with itemIdx within rowIdx
+
+            // Sanity check: there should be only one matching child
+            if (located) {
+              throw new Error();
+            }
+            located = true;
+
+            if (e.key === 'ArrowLeft') {
+              e.stopPropagation();
+              if (itemIdx === 0) {
+                ctxData.dispatch({
+                  type: 'SET_SELECTED_NODE',
+                  newNode: node,
+                });
+              } else {
+                const newItemIdx = itemIdx - 1;
+                ctxData.dispatch({
+                  type: 'SET_SELECTED_NODE',
+                  newNode: selectionRows[rowIdx][newItemIdx].treeNode,
+                });
+              }
+            } else if (e.key === 'ArrowRight') {
+              if (itemIdx < (row.length - 1)) {
+                e.stopPropagation();
+                const newItemIdx = itemIdx + 1;
+                ctxData.dispatch({
+                  type: 'SET_SELECTED_NODE',
+                  newNode: selectionRows[rowIdx][newItemIdx].treeNode,
+                });
+              }
+            } else if ((e.key === 'ArrowUp') && (rowIdx === 0)) {
+              e.stopPropagation();
+              ctxData.dispatch({
+                type: 'SET_SELECTED_NODE',
+                newNode: node,
+              });
+            } else if ((e.key === 'ArrowDown') && (rowIdx === (selectionRows.length - 1))) {
+              // Ignore, maybe ancestor will handle
+            } else if ((e.key === 'ArrowUp') || (e.key === 'ArrowDown')) {
+              const newRowIdx = rowIdx + ((e.key === 'ArrowDown') ? 1 : -1);
+              e.stopPropagation();
+              ctxData.dispatch({
+                type: 'SET_SELECTED_NODE',
+                newNode: selectionRows[newRowIdx][0].treeNode,
+              });
+            }
+          }
+        });
+      });
+    }
+  };
+
+  return (
+    <div ref={ref} className={selectionClasses.concat(['TreeView-row-view TreeView-node']).join(' ')} {...selectionHandlers} onKeyDown={onKeyDown}>
+      {layout.map(row => {
+        const selectionRow: Array<SelectionRecord> = [];
+        const itemElems: Array<React.ReactNode> = [];
+
+        for (const item of row.items) {
+          if (typeof item === 'string') {
+            itemElems.push(
+              <div>{item}</div>
+            );
+          } else {
+            const ref: React.RefObject<HTMLDivElement> = React.createRef();
+
+            if (item.treeNode) {
+              selectionRow.push({
+                ref,
+                treeNode: item.treeNode,
+              });
+            }
+
+            itemElems.push(
+              <div ref={ref}>{item.reactNode}</div>
+            );
+          }
+        }
+
+        if (selectionRow.length > 0) {
+          selectionRows.push(selectionRow);
+        }
+
+        const classes = ['TreeView-row-view-row'];
+        if (row.indent) {
+          classes.push('TreeView-row-view-row-indented');
+        }
+
+        return (
+          <div className={classes.join(' ')}>{itemElems}</div>
+        );
+      })}
+    </div>
+  );
+}
+
+interface LabeledNode {
+  label?: string;
+  treeNode: Node;
+  reactNode: React.ReactNode;
+}
+
+const AutoWrapRowView: React.FC<{node: Node, labeledNodes: ReadonlyArray<LabeledNode>, begin?: string, end?: string}> = ({node, labeledNodes, begin, end}) => {
+  const layout: Array<RowLayoutRow> = [];
+
+  if (begin) {
+    layout.push({
+      indent: false,
+      items: [begin],
+    });
+  }
+
+  for (const labeledNode of labeledNodes) {
+    if (labeledNode.label) {
+      layout.push({
+        indent: false,
+        items: [labeledNode.label],
+      });
+    }
+    layout.push({
+      indent: true,
+      items: [{
+        treeNode: labeledNode.treeNode,
+        reactNode: labeledNode.reactNode,
+      }],
+    });
+  }
+
+  if (end) {
+    layout.push({
+      indent: false,
+      items: [end],
+    });
+  }
+
+  return <RowView node={node} layout={layout} />
+};
+
+const NameView: React.FC<{node: NameNode }> = ({node}) => {
+  return <SimpleNodeView treeNode={node} content={node.text} bgColor={BOUND_NAME_BOX_COLOR} />
+};
+
+const StreamReferenceView: React.FC<{node: StreamReferenceNode}> = ({node}) => {
+  const ctxData = useContext(TreeViewContext);
+  if (!ctxData) {
+    throw new Error();
+  }
 
   const nearestDef = ctxData.envLookups.nodeToNearestTreeDef.get(node);
   if (!nearestDef) {
@@ -242,200 +403,81 @@ const StreamReferenceView: React.FC<{node: StreamReferenceNode, reportAttachment
 
   const [, displayedName] = formatStreamDefinition(streamDef, ctxData.envLookups);
 
-  return (
-    <div ref={ref} className={selectionClasses.concat(['TreeView-simple-node', 'TreeView-common-padding']).join(' ')} {...selectionHandlers} style={{background: STREAM_REFERENCE_BOX_COLOR}}>{displayedName}</div>
-  );
+  return <SimpleNodeView treeNode={node} content={displayedName} bgColor={STREAM_REFERENCE_BOX_COLOR} />
 };
 
-interface AppishNodeChild<T> {
-  key: string | number | undefined;
-  name: string | undefined;
-  node: T;
-}
-
-interface AppishNodeProps {
-  node: Node | null;
-  name: React.ReactNode;
-  topBarExtraClasses: ReadonlyArray<string>;
-  streamArgs: ReadonlyArray<AppishNodeChild<StreamExpressionNode>>;
-  functionArgs: ReadonlyArray<AppishNodeChild<FunctionDefinitionNode>>;
-  yields: ReadonlyArray<string | undefined>;
-  retIdx: number | undefined; // which yield is connected to parent
-  reportAttachmentOffset?: (offset: number) => void;
-}
-
-const AppishNodeView: React.FC<AppishNodeProps> = ({node, name, topBarExtraClasses, streamArgs, functionArgs, yields, retIdx, reportAttachmentOffset}) => {
-  let streamLabels: ReadonlyArray<string | undefined>;
-  let streamChildAtBar: boolean;
-  if ((streamArgs.length === 1) && (streamArgs[0].name === undefined)) {
-    streamChildAtBar = true;
-    streamLabels = [];
-  } else {
-    streamChildAtBar = false;
-    streamLabels = streamArgs.map(({name}) => name);
+const ApplicationView: React.FC<{node: ApplicationNode}> = ({node}) => {
+  const ctxData = useContext(TreeViewContext);
+  if (!ctxData) {
+    throw new Error();
   }
 
-  let yieldLabels: ReadonlyArray<string | undefined>;
-  let yieldAtBar: boolean;
-  if ((yields.length === 1) && (yields[0] === undefined)) {
-    yieldAtBar = true;
-    yieldLabels = [];
-  } else {
-    yieldAtBar = false;
-    yieldLabels = yields;
+  if (node.func.kind !== NodeKind.FunctionReference) {
+    throw new Error('unimplemented');
   }
 
-  const rootRef = useRef<HTMLDivElement>(null);
-  const nameBarRef = useRef<HTMLDivElement>(null);
-  const yieldLabelsRef = useRef<HTMLDivElement>(null);
-  const streamLabelsRef = useRef<HTMLDivElement>(null);
-  const streamCxnsRef = useRef<HTMLDivElement>(null);
-  const streamChildrenRef = useRef<HTMLDivElement>(null);
+  const [functionNode, displayName] = getFunctionNodeAndDisplayName(node.func, ctxData.envLookups);
 
-  const [reportedStreamChildAttachmentOffsets, setReportedStreamChildAttachmentOffsets] = useState<Array<number>>([]);
+  if (functionNode.sig.streamParams.length !== node.sargs.length) {
+    throw new Error('stream params and args length mismatch');
+  }
+  if (functionNode.sig.funcParams.length !== node.fargs.length) {
+    throw new Error('function params and args length mismatch');
+  }
 
-  useLayoutEffect(() => {
-    const getHeight = (n: any) => {
-      if (!(n instanceof HTMLElement)) {
-        throw new Error();
-      }
-      const rect = n.getBoundingClientRect();
-      return rect.bottom - rect.top;
-    };
-
-    const setTopMargin = (cn: ChildNode, px: number) => {
-      if (!(cn instanceof HTMLElement)) {
-        throw new Error();
-      }
-      cn.style.marginTop = (px + 'px');
-    };
-
-    const childrenToArr = (elem: HTMLDivElement) => [...elem.childNodes].map(cn => {
-      if (!(cn instanceof HTMLElement)) {
-        throw new Error();
-      }
-      return cn;
-    });
-
-    if (!rootRef.current || !nameBarRef.current || !streamChildrenRef.current || !streamCxnsRef.current) {
+  if (node.func.ref === 'bind') {
+    // special case rendering of bind for now
+    const name = node.outs[0].name;
+    if (!name) {
       throw new Error();
     }
-    const streamCxnElems = childrenToArr(streamCxnsRef.current);
-    const streamChildElems = childrenToArr(streamChildrenRef.current);
-
-    const nameBarHeight = getHeight(nameBarRef.current);
-    const nameBarAttachmentOffset = 0.5*nameBarHeight;
-
-    const streamChildrenHeights = streamChildElems.map(elem => getHeight(elem));
-    const streamChildAttachmentOffsets = streamChildrenHeights.map((_, idx) => reportedStreamChildAttachmentOffsets[idx] || 0);
-
-    const streamChildAtBarMinAttachmentOffset = streamChildAtBar ? streamChildAttachmentOffsets[0] : 0;
-    const nameBarSpacing = Math.max(streamChildAtBarMinAttachmentOffset - nameBarAttachmentOffset, 0);
-
-    setTopMargin(nameBarRef.current, nameBarSpacing);
-
-    if (reportAttachmentOffset && (retIdx !== undefined)) {
-      if (yieldAtBar) {
-        reportAttachmentOffset(nameBarSpacing + nameBarAttachmentOffset);
-      } else if (yieldLabels.length > 0) {
-        if (!yieldLabelsRef.current) {
-          throw new Error();
+    const layout: RowLayout = [{
+      indent: false,
+      items: [
+        {
+          treeNode: name,
+          reactNode: <NameView node={name} />,
+        },
+        '=',
+        {
+          treeNode: node.sargs[0],
+          reactNode: <StreamExpressionView node={node.sargs[0]} />,
         }
-        const yieldLabelElems = childrenToArr(yieldLabelsRef.current);
-        const returnedLabel = yieldLabelElems[retIdx];
-        const returnedLabelRect = returnedLabel.getBoundingClientRect();
+      ],
+    }];
+    return <RowView node={node} layout={layout} />
+  } else {
+    const showName = (n: NameNode | undefined | null) => n && !n.text.startsWith('_');
 
-        reportAttachmentOffset(0.5*(returnedLabelRect.top + returnedLabelRect.bottom) - rootRef.current.getBoundingClientRect().top);
-      }
-    }
+    const useNameAsFirstLabel = (functionNode.sig.streamParams.length > 0) && !showName(functionNode.sig.streamParams[0].name);
 
-    const SPACING = 5;
+    const labeledNodes: Array<LabeledNode> = [];
 
-    if (streamChildAtBar) {
-      setTopMargin(streamChildElems[0], nameBarSpacing + nameBarAttachmentOffset - streamChildAttachmentOffsets[0]);
-      streamCxnElems[0].style.top = (nameBarSpacing + nameBarAttachmentOffset) + 'px';
-    } else if (streamArgs.length > 0) {
-      if (!streamLabelsRef.current) {
-        throw new Error();
-      }
-      const streamLabelElems = childrenToArr(streamLabelsRef.current);
+    node.sargs.forEach((sarg, idx) => {
+      const pname = functionNode.sig.streamParams[idx].name;
 
-      let leftY = nameBarSpacing + nameBarHeight;
-      let rightY = 0;
-
-      streamChildrenHeights.forEach((streamChildHeight, idx) => {
-        const streamLabelHeight = getHeight(streamLabelElems[idx]);
-
-        const spacing = (idx > 0) ? SPACING : 0;
-        const diff = (rightY + streamChildAttachmentOffsets[idx]) - (leftY + 0.5*streamLabelHeight);
-        if (diff > 0) {
-          setTopMargin(streamLabelElems[idx], diff+spacing);
-          setTopMargin(streamChildElems[idx], spacing);
-          leftY += streamLabelHeight + diff + spacing;
-          rightY += streamChildHeight + spacing;
-        } else {
-          setTopMargin(streamLabelElems[idx], spacing);
-          setTopMargin(streamChildElems[idx], -diff + spacing);
-          leftY += streamLabelHeight + spacing;
-          rightY += streamChildHeight - diff + spacing;
-        }
-        streamCxnElems[idx].style.top = (leftY - 0.5*streamLabelHeight) + 'px';
+      labeledNodes.push({
+        label: (useNameAsFirstLabel && (idx === 0)) ? displayName : (showName(pname) ? pname!.text : undefined),
+        treeNode: sarg,
+        reactNode: <StreamExpressionView node={sarg} />,
       });
-    }
-  });
-
-  const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node);
-
-  const handleReportAttachmentOffset = (offset: number, idx: number): void => {
-    setReportedStreamChildAttachmentOffsets(st => {
-      if (st[idx] === offset) {
-        return st;
-      }
-      const newSt = [...st];
-      newSt[idx] = offset;
-      return newSt;
     });
-  };
 
-  return (
-    <div ref={rootRef} className="TreeView-appish-node">
-      <div>
-        <div className={selectionClasses.join(' ')} {...selectionHandlers}>
-          <div className={topBarExtraClasses.concat(['TreeView-appish-top-bar', 'TreeView-common-padding']).join(' ')} ref={nameBarRef}>{name}</div>
-          {((streamLabels.length > 0) || (yieldLabels.length > 0) || (functionArgs.length > 0)) &&
-            <div className="TreeView-appish-body">
-              <div className="TreeView-appish-body-stream-area">
-                <div ref={yieldLabelsRef}>{yieldLabels.map((ylabel, idx) => (
-                  <div key={idx} className="TreeView-common-padding">{ylabel}</div>
-                ))}</div>
-                <div style={{textAlign: 'right', flex: '1'}} ref={streamLabelsRef}>
-                  {streamLabels.map((slabel, idx) => (
-                    <div key={idx} className="TreeView-common-padding">{slabel || <span>&nbsp;</span>}</div>
-                  ))}
-                </div>
-              </div>
-              <div>{functionArgs.map((farg, idx) => (
-                <div key={idx} className="TreeView-common-padding">
-                  {farg.name}
-                  <FunctionExpressionView node={farg.node} />
-                </div>
-              ))}
-              </div>
-            </div>
-          }
-        </div>
-      </div>
-      <div ref={streamCxnsRef} style={{position: 'relative', width: CXN_LENGTH}}>{streamArgs.map((_, idx) => (
-        <div key={idx} style={{width: CXN_LENGTH, height: '1px', background: CXN_COLOR, position: 'absolute'}} />
-      ))}</div>
-      <div className="TreeView-appish-node-stream-children" ref={streamChildrenRef}>{streamArgs.map(({node}, idx) => (
-        <StreamExpressionView key={idx} node={node} reportAttachmentOffset={offset => { handleReportAttachmentOffset(offset, idx); }} />
-      ))}</div>
-    </div>
-  );
+    node.fargs.forEach((farg, idx) => {
+      const pname = functionNode.sig.funcParams[idx].name;
+
+      labeledNodes.push({
+        // label: showName(pname) ? pname!.text : undefined,
+        treeNode: farg,
+        reactNode: <FunctionExpressionView node={farg} />,
+      });
+    });
+
+    return <AutoWrapRowView node={node} labeledNodes={labeledNodes} begin={useNameAsFirstLabel ? undefined : displayName} />
+  }
 };
 
-const StreamExpressionView: React.FC<{node: StreamExpressionNode, reportAttachmentOffset?: (offset: number) => void}> = ({ node, reportAttachmentOffset }) => {
+const StreamExpressionView: React.FC<{node: StreamExpressionNode}> = ({ node }) => {
   const ctxData = useContext(TreeViewContext);
   if (!ctxData) {
     throw new Error();
@@ -444,68 +486,22 @@ const StreamExpressionView: React.FC<{node: StreamExpressionNode, reportAttachme
   const nodeView: JSX.Element = (() => {
     switch (node.kind) {
       case NodeKind.UndefinedLiteral:
-        return <ChildlessStreamNodeView node={node} contents={<span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>} boxColor={'red'} reportAttachmentOffset={reportAttachmentOffset} />
+        return <SimpleNodeView treeNode={node} content={<span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>} bgColor={'red'} />
 
       case NodeKind.NumberLiteral:
-        return <ChildlessStreamNodeView node={node} contents={node.val.toString()} boxColor="#cce8cc" reportAttachmentOffset={reportAttachmentOffset} />
+        return <SimpleNodeView treeNode={node} content={node.val.toString()} bgColor="#cce8cc" />
 
       case NodeKind.TextLiteral:
-        return <ChildlessStreamNodeView node={node} contents={node.val} boxColor="#cce8cc" reportAttachmentOffset={reportAttachmentOffset} />
+        return <SimpleNodeView treeNode={node} content={node.val} bgColor="#cce8cc" />
 
       case NodeKind.BooleanLiteral:
-        return <ChildlessStreamNodeView node={node} contents={node.val.toString()} boxColor="#cce8cc" reportAttachmentOffset={reportAttachmentOffset} />
-
-      case NodeKind.ArrayLiteral:
-        return <AppishNodeView node={node} name="[ ]" topBarExtraClasses={['TreeView-application-top-bar']} streamArgs={node.elems.map((elem, idx) => ({key: idx, name: idx.toString(), node: elem}))} functionArgs={[]} yields={[undefined]} retIdx={0} reportAttachmentOffset={reportAttachmentOffset} />
-
-      case NodeKind.StreamIndirection: {
-        const displayedName = node.name || <span>&nbsp;&nbsp;&nbsp;</span>;
-        return <AppishNodeView node={node} name={displayedName} topBarExtraClasses={['TreeView-stream-indirection-bar']} streamArgs={[{key: 0, name: undefined, node: node.expr}]} functionArgs={[]} yields={[undefined]} retIdx={0} reportAttachmentOffset={reportAttachmentOffset} />
-      }
+        return <SimpleNodeView treeNode={node} content={node.val.toString()} bgColor="#cce8cc" />
 
       case NodeKind.StreamReference:
-        return <StreamReferenceView node={node} reportAttachmentOffset={reportAttachmentOffset} />
+        return <StreamReferenceView node={node} />
 
-      case NodeKind.Application: {
-        if (node.func.kind !== NodeKind.FunctionReference) {
-          throw new Error('unimplemented');
-        }
-
-        const [functionNode, displayedName] = getFunctionNodeAndDisplayName(node.func, ctxData.envLookups);
-
-        if (functionNode.sig.streamParams.length !== node.sargs.length) {
-          throw new Error('stream params and args length mismatch');
-        }
-        if (functionNode.sig.funcParams.length !== node.fargs.length) {
-          throw new Error('function params and args length mismatch');
-        }
-
-        const streamChildrenViews: Array<AppishNodeChild<StreamExpressionNode>> = functionNode.sig.streamParams.map((param, idx) => {
-          const displayName = (param.name && !param.name.text.startsWith('_')) ? param.name.text : undefined;
-          return {
-            key: idx,
-            name: displayName,
-            node: node.sargs[idx],
-          };
-        });
-
-        const functionChildrenViews: Array<AppishNodeChild<FunctionDefinitionNode>> = functionNode.sig.funcParams.map((param, idx) => {
-          const farg = node.fargs[idx];
-          if (farg.kind !== NodeKind.TreeFunctionDefinition) {
-            throw new Error('not yet supported');
-          }
-          const displayName = (param.name && param.name.text) || undefined;
-          return {
-            key: idx,
-            name: displayName,
-            node: farg,
-          };
-        });
-
-        const yields: ReadonlyArray<string | undefined> = functionNode.sig.yields.map(sigYieldNode => (sigYieldNode.name && sigYieldNode.name.text) || undefined);
-
-        return <AppishNodeView node={node} name={displayedName} topBarExtraClasses={['TreeView-application-top-bar']} streamArgs={streamChildrenViews} functionArgs={functionChildrenViews} yields={yields} retIdx={node.reti} reportAttachmentOffset={reportAttachmentOffset} />
-      }
+      case NodeKind.Application:
+        return <ApplicationView node={node} />
 
       default: {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -540,11 +536,15 @@ const BodyExpressionView: React.FC<{node: BodyExpressionNode}> = ({node}) => {
   } else if (isFunctionExpressionNode(node)) {
     throw new Error('unimplemented');
   } else if (node.kind === NodeKind.YieldExpression) {
-    return (
-      <div style={{marginLeft: '-0.5em'}}>
-        <AppishNodeView node={node} name={'yield ' + node.idx} topBarExtraClasses={['TreeView-yield-bar']} streamArgs={[{key: 0, name: undefined, node: node.expr}]} functionArgs={[]} yields={[undefined]} retIdx={0} />
-      </div>
-    );
+    const labeledNodes: Array<LabeledNode> = [
+      {
+        label: 'yield', // TODO: if there are multiple yields, clarify which
+        treeNode: node.expr,
+        reactNode: <StreamExpressionView node={node.expr} />,
+      },
+    ];
+
+    return <AutoWrapRowView node={node} labeledNodes={labeledNodes} />
   } else {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const exhaustive: never = node; // this will cause a type error if we haven't handled all cases
@@ -553,26 +553,72 @@ const BodyExpressionView: React.FC<{node: BodyExpressionNode}> = ({node}) => {
 };
 
 const TreeFunctionBodyView: React.FC<{node: TreeFunctionBodyNode}> = ({ node }) => {
-  const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node);
-
-  return (
-    <div className={selectionClasses.concat(['TreeView-udf-node-expressions']).join(' ')} {...selectionHandlers}>{node.exprs.map(expr => (
-      <BodyExpressionView node={expr} />
-    ))}</div>
-  );
+  const layout: RowLayout = node.exprs.map(expr => ({indent: false, items: [{
+    treeNode: expr,
+    reactNode: <BodyExpressionView node={expr} />,
+  }]}));
+  return <RowView node={node} layout={layout} />
 }
 
 export const TreeFunctionDefinitionView: React.FC<{node: TreeFunctionDefinitionNode}> = ({ node }) => {
-  const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node);
+  const nameItem: RowLayoutNode = node.name ?
+    {
+      treeNode: node.name,
+      reactNode: <NameView node={node.name} />,
+    }
+    :
+    {
+      reactNode: <div>ƒ</div>
+    };
 
-  return (
-    <div className={selectionClasses.concat(['TreeView-udf-node']).join(' ')} {...selectionHandlers} style={{backgroundColor: NORMAL_BOX_COLOR}}>
-      {node.name && <div className="TreeView-name-bar TreeView-common-padding">{node.name.text}</div>}
-      <div className="TreeView-udf-node-main-container">
-        <TreeFunctionBodyView node={node.body} />
-      </div>
-    </div>
-  );
+  let layout: Array<RowLayoutRow>;
+
+  if ((node.sig.streamParams.length === 0) && (node.sig.funcParams.length === 0)) {
+    layout = [
+      {indent: false, items: [
+        'define',
+        nameItem,
+        'as',
+      ]},
+    ];
+  } else {
+    // Some parameters
+    layout = [];
+
+    layout.push({indent: false, items: [
+      'define',
+      nameItem,
+      'given',
+    ]});
+
+    node.sig.streamParams.forEach(sparam => {
+      layout.push({
+        indent: true,
+        items: [{
+          treeNode: sparam.name,
+          reactNode: <NameView node={sparam.name} />,
+        }],
+      });
+    });
+
+    layout.push({indent: false, items: [
+      'as',
+    ]});
+  }
+
+  for (const bodyExpr of node.body.exprs) {
+    layout.push({
+      indent: true,
+      items: [
+        {
+          treeNode: bodyExpr,
+          reactNode: <BodyExpressionView node={bodyExpr} />,
+        },
+      ],
+    });
+  }
+
+  return <RowView node={node} layout={layout} />
 };
 
 const FunctionDefinitionView: React.FC<{node: FunctionDefinitionNode}> = ({ node }) => {

@@ -1,4 +1,4 @@
-import React, { useReducer, useRef, useEffect, useState, useMemo } from 'react';
+import React, { useReducer, useRef, useEffect, useMemo } from 'react';
 import { HotKeys, ObserveKeys } from "react-hotkeys";
 import { initialState, reducer, computeEnvironmentLookups, computeParentLookup, getReferentOfSelected } from './EditReducer';
 import { StoragePanel } from './StoragePanel';
@@ -8,11 +8,6 @@ import { Node, TreeFunctionDefinitionNode } from './Tree';
 import { ProgramInfo } from './State';
 
 const keyMap = {
-  MOVE_UP: 'up',
-  MOVE_DOWN: 'down',
-  MOVE_LEFT: 'left',
-  MOVE_RIGHT: 'right',
-
   TOGGLE_EDIT: 'enter',
   ABORT_EDIT: 'escape',
 
@@ -54,26 +49,10 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
 
   const editorElem = useRef<HTMLDivElement>(null);
 
-  // Do auto-focus if prop is set
-  const [constAutoFocus] = useState(autoFocus);
+  const firstRender = useRef(true);
   useEffect(() => {
-    if (constAutoFocus) {
-      // Focus editor after initial render
-      if (editorElem.current) {
-        editorElem.current.focus();
-      }
-    }
-  }, [constAutoFocus]);
-
-  // Restore focus to editor elem if input box just went away.
-  // NOTE: This is hacky, but don't know better way to handle.
-  const previouslyEditingSelected = useRef<boolean>(false);
-  useEffect(() => {
-    if (previouslyEditingSelected.current && !state.editing && editorElem.current) {
-      editorElem.current.focus();
-    }
-    previouslyEditingSelected.current = !!state.editing;
-  });
+    firstRender.current = false;
+  }, []);
 
   // TODO: memoize generation of this
   const handlers: {[key: string]: (keyEvent?: KeyboardEvent | undefined) => void} = {};
@@ -129,6 +108,7 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
         newNode: node,
       });
     },
+    focusSelected: !editing && (autoFocus || !firstRender.current),
   };
 
   return (
