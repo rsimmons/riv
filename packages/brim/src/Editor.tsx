@@ -3,7 +3,7 @@ import { HotKeys, ObserveKeys } from "react-hotkeys";
 import { initialState, reducer, computeEnvironmentLookups, computeParentLookup, getReferentOfSelected } from './EditReducer';
 import { StoragePanel } from './StoragePanel';
 import './Editor.css';
-import { TreeFunctionDefinitionView, TreeViewContextData } from './TreeView';
+import { TreeFunctionDefinitionView, TreeViewContext } from './TreeView';
 import { Node, TreeFunctionDefinitionNode } from './Tree';
 import { ProgramInfo } from './State';
 
@@ -90,7 +90,7 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
 
   const referentNode = getReferentOfSelected(displayedSelTree, envLookups);
 
-  const treeViewCtxData: TreeViewContextData = {
+  const treeViewCtxData: TreeViewContext = {
     markedNodes: {
       selected: displayedSelTree.selectedNode,
       referent: referentNode,
@@ -119,7 +119,7 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
       <HotKeys keyMap={keyMap} handlers={handlers}>
         <ObserveKeys only={CATCH_IN_INPUTS}>
           <div className="Editor-workspace" onKeyDown={onKeyDown} tabIndex={0} ref={editorElem}>
-            <TreeFunctionDefinitionView node={displayedSelTree.mainDefinition} ctxData={treeViewCtxData} />
+            <TreeFunctionDefinitionView node={displayedSelTree.mainDefinition} ctx={treeViewCtxData} />
           </div>
         </ObserveKeys>
       </HotKeys>
