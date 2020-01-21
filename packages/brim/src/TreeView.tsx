@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useRef, useLayoutEffect } from 'react';
-import { Node, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, isFunctionExpressionNode, TreeFunctionBodyNode, FunctionExpressionNode, isFunctionDefinitionNode, StreamReferenceNode, NameNode, ApplicationNode } from './Tree';
+import React, { useState, useRef, useLayoutEffect } from 'react';
+import { Node, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, isFunctionExpressionNode, FunctionExpressionNode, isFunctionDefinitionNode, StreamReferenceNode, NameNode, ApplicationNode } from './Tree';
 import ExpressionChooser from './ExpressionChooser';
 import './TreeView.css';
 import { EnvironmentLookups, StreamDefinition } from './EditReducer';
@@ -113,8 +113,6 @@ export interface TreeViewContextData {
   onSelectNode: (node: Node) => void;
   focusSelected: boolean;
 };
-const TreeViewContext = createContext<TreeViewContextData | null>(null);
-export const TreeViewContextProvider = TreeViewContext.Provider;
 
 interface UseSelectableResult {
   classes: ReadonlyArray<string>;
@@ -126,13 +124,8 @@ interface UseSelectableResult {
   };
 }
 
-function useSelectable(node: Node, ref: React.RefObject<HTMLDivElement>): UseSelectableResult {
+function useSelectable(node: Node, ref: React.RefObject<HTMLDivElement>, ctxData: TreeViewContextData): UseSelectableResult {
   const [hovered, setHovered] = useState(false);
-
-  const ctxData = useContext(TreeViewContext);
-  if (!ctxData) {
-    throw new Error();
-  }
 
   const handleClick = (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
     if ((e.target as Element).tagName !== 'INPUT') {
@@ -182,17 +175,27 @@ function useSelectable(node: Node, ref: React.RefObject<HTMLDivElement>): UseSel
   };
 }
 
-const SimpleNodeView: React.FC<{treeNode: Node, content: React.ReactNode, bgColor: string}> = ({treeNode, content, bgColor}) => {
-  const ref = useRef<HTMLDivElement>(null);
-  const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(treeNode, ref);
 
-  return (
-    <div ref={ref} className={selectionClasses.concat(['TreeView-node']).join(' ')} {...selectionHandlers} style={{background: bgColor}} data-singleline="1">{content}</div>
-  );
+interface SizedReactNode {
+  singleLineWidth: number | undefined; // if undefined, that means it's multi-line. width only matters if single-line
+  Node: React.FC<{}>; // a function-component that takes no props (they are "pre-bound" via a closure)
+}
+
+const simpleNodeView = ({treeNode, content, bgColor, ctxData}: {treeNode: Node, content: string, bgColor: string, ctxData: TreeViewContextData}): SizedReactNode => {
+  return {
+    singleLineWidth: content.length,
+    Node: () => {
+      const ref = useRef<HTMLDivElement>(null);
+      const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(treeNode, ref, ctxData);
+      return (
+        <div ref={ref} className={selectionClasses.concat(['TreeView-node']).join(' ')} {...selectionHandlers} style={{background: bgColor}}>{content}</div>
+      );
+    },
+  };
 };
 
 interface RowLayoutNode {
-  reactNode: React.ReactNode;
+  sizedReactNode: SizedReactNode;
   treeNode?: Node; // we just use its identity for selection. may be undefined if not selectable
 }
 
@@ -203,191 +206,246 @@ interface RowLayoutRow {
 
 type RowLayout = ReadonlyArray<RowLayoutRow>;
 
-const RowView: React.FC<{node: Node, layout: RowLayout}> = ({node, layout}) => {
-  const ref = useRef<HTMLDivElement>(null);
-  const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node, ref);
-
-  const ctxData = useContext(TreeViewContext);
-  if (!ctxData) {
-    throw new Error();
-  }
-
-  interface SelectionRecord {
-    ref: React.RefObject<HTMLElement>,
-    treeNode: Node,
-  }
-
-  const selectionRows: Array<ReadonlyArray<SelectionRecord>> = [];
-
-  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.getModifierState('Alt') ||
-      e.getModifierState('Control') ||
-      e.getModifierState('Meta') ||
-      e.getModifierState('Shift')) {
-      return;
+const rowView = ({node, layout, ctxData}: {node: Node, layout: RowLayout, ctxData: TreeViewContextData}): SizedReactNode => {
+  // Determine size
+  let singleLineWidth: number | undefined = undefined;
+  if (layout.length === 1) {
+    if (layout[0].indent) {
+      throw new Error(); // I don't think this makes sense to be indented with one row?
     }
-    if ((e.key === 'ArrowRight') && (ref.current === e.target)) {
-      if (selectionRows.length > 0) {
-        e.stopPropagation();
-        ctxData.dispatch({
-          type: 'SET_SELECTED_NODE',
-          newNode: selectionRows[0][0].treeNode,
-        });
+
+    singleLineWidth = 0;
+    for (const item of layout[0].items) {
+      if (typeof item === 'string') {
+        if (singleLineWidth !== undefined) {
+          singleLineWidth += item.length;
+        }
+      } else {
+        if (item.sizedReactNode.singleLineWidth === undefined) {
+          singleLineWidth = undefined;
+        } else {
+          if (singleLineWidth !== undefined) {
+            singleLineWidth += item.sizedReactNode.singleLineWidth;
+          }
+        }
       }
-    } else if ((e.key === 'ArrowLeft') || (e.key === 'ArrowRight') || (e.key === 'ArrowUp') || (e.key === 'ArrowDown')) {
-      let located = false;
-      selectionRows.forEach((row, rowIdx) => {
-        row.forEach((item, itemIdx) => {
-          if (item.ref.current && item.ref.current.contains(e.target as HTMLElement)) {
-            // The event came from this item, with itemIdx within rowIdx
-
-            // Sanity check: there should be only one matching child
-            if (located) {
-              throw new Error();
-            }
-            located = true;
-
-            if (e.key === 'ArrowLeft') {
-              e.stopPropagation();
-              if (itemIdx === 0) {
-                ctxData.dispatch({
-                  type: 'SET_SELECTED_NODE',
-                  newNode: node,
-                });
-              } else {
-                const newItemIdx = itemIdx - 1;
-                ctxData.dispatch({
-                  type: 'SET_SELECTED_NODE',
-                  newNode: selectionRows[rowIdx][newItemIdx].treeNode,
-                });
-              }
-            } else if (e.key === 'ArrowRight') {
-              if (itemIdx < (row.length - 1)) {
-                e.stopPropagation();
-                const newItemIdx = itemIdx + 1;
-                ctxData.dispatch({
-                  type: 'SET_SELECTED_NODE',
-                  newNode: selectionRows[rowIdx][newItemIdx].treeNode,
-                });
-              }
-            } else if ((e.key === 'ArrowUp') && (rowIdx === 0)) {
-              e.stopPropagation();
-              ctxData.dispatch({
-                type: 'SET_SELECTED_NODE',
-                newNode: node,
-              });
-            } else if ((e.key === 'ArrowDown') && (rowIdx === (selectionRows.length - 1))) {
-              // Ignore, maybe ancestor will handle
-            } else if ((e.key === 'ArrowUp') || (e.key === 'ArrowDown')) {
-              const newRowIdx = rowIdx + ((e.key === 'ArrowDown') ? 1 : -1);
-              e.stopPropagation();
-              ctxData.dispatch({
-                type: 'SET_SELECTED_NODE',
-                newNode: selectionRows[newRowIdx][0].treeNode,
-              });
-            }
-          }
-        });
-      });
     }
-  };
+  }
 
-  return (
-    <div ref={ref} className={selectionClasses.concat(['TreeView-row-view TreeView-node']).join(' ')} {...selectionHandlers} onKeyDown={onKeyDown}>
-      {layout.map(row => {
-        const selectionRow: Array<SelectionRecord> = [];
-        const itemElems: Array<React.ReactNode> = [];
+  return {
+    singleLineWidth,
+    Node: () => {
+      const ref = useRef<HTMLDivElement>(null);
+      const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node, ref, ctxData);
 
-        for (const item of row.items) {
-          if (typeof item === 'string') {
-            itemElems.push(
-              <div>{item}</div>
-            );
-          } else {
-            const ref: React.RefObject<HTMLDivElement> = React.createRef();
+      interface SelectionRecord {
+        ref: React.RefObject<HTMLElement>,
+        treeNode: Node,
+      }
 
-            if (item.treeNode) {
-              selectionRow.push({
-                ref,
-                treeNode: item.treeNode,
-              });
+      const selectionRows: Array<ReadonlyArray<SelectionRecord>> = [];
+
+      const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+        if (e.getModifierState('Alt') ||
+          e.getModifierState('Control') ||
+          e.getModifierState('Meta') ||
+          e.getModifierState('Shift')) {
+          return;
+        }
+        if ((e.key === 'ArrowRight') && (ref.current === e.target)) {
+          if (selectionRows.length > 0) {
+            e.stopPropagation();
+            ctxData.dispatch({
+              type: 'SET_SELECTED_NODE',
+              newNode: selectionRows[0][0].treeNode,
+            });
+          }
+        } else if ((e.key === 'ArrowLeft') || (e.key === 'ArrowRight') || (e.key === 'ArrowUp') || (e.key === 'ArrowDown')) {
+          let located = false;
+          selectionRows.forEach((row, rowIdx) => {
+            row.forEach((item, itemIdx) => {
+              if (item.ref.current && item.ref.current.contains(e.target as HTMLElement)) {
+                // The event came from this item, with itemIdx within rowIdx
+
+                // Sanity check: there should be only one matching child
+                if (located) {
+                  throw new Error();
+                }
+                located = true;
+
+                if (e.key === 'ArrowLeft') {
+                  e.stopPropagation();
+                  if (itemIdx === 0) {
+                    ctxData.dispatch({
+                      type: 'SET_SELECTED_NODE',
+                      newNode: node,
+                    });
+                  } else {
+                    const newItemIdx = itemIdx - 1;
+                    ctxData.dispatch({
+                      type: 'SET_SELECTED_NODE',
+                      newNode: selectionRows[rowIdx][newItemIdx].treeNode,
+                    });
+                  }
+                } else if (e.key === 'ArrowRight') {
+                  if (itemIdx < (row.length - 1)) {
+                    e.stopPropagation();
+                    const newItemIdx = itemIdx + 1;
+                    ctxData.dispatch({
+                      type: 'SET_SELECTED_NODE',
+                      newNode: selectionRows[rowIdx][newItemIdx].treeNode,
+                    });
+                  }
+                } else if ((e.key === 'ArrowUp') && (rowIdx === 0)) {
+                  e.stopPropagation();
+                  ctxData.dispatch({
+                    type: 'SET_SELECTED_NODE',
+                    newNode: node,
+                  });
+                } else if ((e.key === 'ArrowDown') && (rowIdx === (selectionRows.length - 1))) {
+                  // Ignore, maybe ancestor will handle
+                } else if ((e.key === 'ArrowUp') || (e.key === 'ArrowDown')) {
+                  const newRowIdx = rowIdx + ((e.key === 'ArrowDown') ? 1 : -1);
+                  e.stopPropagation();
+                  ctxData.dispatch({
+                    type: 'SET_SELECTED_NODE',
+                    newNode: selectionRows[newRowIdx][0].treeNode,
+                  });
+                }
+              }
+            });
+          });
+        }
+      };
+
+      return (
+        <div ref={ref} className={selectionClasses.concat(['TreeView-row-view TreeView-node']).join(' ')} {...selectionHandlers} onKeyDown={onKeyDown}>
+          {layout.map(row => {
+            const selectionRow: Array<SelectionRecord> = [];
+            const itemElems: Array<React.ReactNode> = [];
+
+            for (const item of row.items) {
+              if (typeof item === 'string') {
+                itemElems.push(
+                  <div>{item}</div>
+                );
+              } else {
+                const ref: React.RefObject<HTMLDivElement> = React.createRef();
+
+                if (item.treeNode) {
+                  selectionRow.push({
+                    ref,
+                    treeNode: item.treeNode,
+                  });
+                }
+
+                const Node = item.sizedReactNode.Node;
+
+                itemElems.push(
+                  <div ref={ref}><Node /></div>
+                );
+              }
             }
 
-            itemElems.push(
-              <div ref={ref}>{item.reactNode}</div>
+            if (selectionRow.length > 0) {
+              selectionRows.push(selectionRow);
+            }
+
+            const classes = ['TreeView-row-view-row'];
+            if (row.indent) {
+              classes.push('TreeView-row-view-row-indented');
+            }
+
+            return (
+              <div className={classes.join(' ')}>{itemElems}</div>
             );
-          }
-        }
-
-        if (selectionRow.length > 0) {
-          selectionRows.push(selectionRow);
-        }
-
-        const classes = ['TreeView-row-view-row'];
-        if (row.indent) {
-          classes.push('TreeView-row-view-row-indented');
-        }
-
-        return (
-          <div className={classes.join(' ')}>{itemElems}</div>
-        );
-      })}
-    </div>
-  );
+          })}
+        </div>
+      );
+    },
+  };
 }
 
 interface LabeledNode {
   label?: string;
   treeNode: Node;
-  reactNode: React.ReactNode;
+  sizedReactNode: SizedReactNode;
 }
 
-const AutoWrapRowView: React.FC<{node: Node, labeledNodes: ReadonlyArray<LabeledNode>, begin?: string, end?: string}> = ({node, labeledNodes, begin, end}) => {
-  const layout: Array<RowLayoutRow> = [];
+const autoWrapRowView = ({node, labeledNodes, begin, end, ctxData}: {node: Node, labeledNodes: ReadonlyArray<LabeledNode>, begin?: string, end?: string, ctxData: TreeViewContextData}): SizedReactNode => {
+  const totalWidth = labeledNodes.reduce<number | undefined>((acc, ln) => ((ln.sizedReactNode.singleLineWidth === undefined) || (acc === undefined)) ? undefined : ln.sizedReactNode.singleLineWidth + acc, 0);
+  const MAX_WIDTH = 30;
 
-  if (begin) {
-    layout.push({
-      indent: false,
-      items: [begin],
-    });
-  }
+  let layout: Array<RowLayoutRow>;
+  if ((totalWidth !== undefined) && (totalWidth < MAX_WIDTH)) {
+    // Single-line layout
+    const items: Array<string | RowLayoutNode> = [];
 
-  for (const labeledNode of labeledNodes) {
-    if (labeledNode.label) {
-      layout.push({
-        indent: false,
-        items: [labeledNode.label],
+    if (begin) {
+      items.push(begin);
+    }
+
+    for (const labeledNode of labeledNodes) {
+      if (labeledNode.label) {
+        items.push(labeledNode.label);
+      }
+      items.push({
+        treeNode: labeledNode.treeNode,
+        sizedReactNode: labeledNode.sizedReactNode,
       });
     }
-    layout.push({
-      indent: true,
-      items: [{
-        treeNode: labeledNode.treeNode,
-        reactNode: labeledNode.reactNode,
-      }],
-    });
-  }
 
-  if (end) {
-    layout.push({
+    if (end) {
+      items.push(end)
+    }
+
+    layout = [{
       indent: false,
-      items: [end],
-    });
-  }
+      items,
+    }];
+  } else {
+    // Multi-line layout
+    layout = [];
 
-  return <RowView node={node} layout={layout} />
+    if (begin) {
+      layout.push({
+        indent: false,
+        items: [begin],
+      });
+    }
+
+    for (const labeledNode of labeledNodes) {
+      if (labeledNode.label) {
+        layout.push({
+          indent: false,
+          items: [labeledNode.label],
+        });
+      }
+      layout.push({
+        indent: true,
+        items: [{
+          treeNode: labeledNode.treeNode,
+          sizedReactNode: labeledNode.sizedReactNode,
+        }],
+      });
+    }
+
+    if (end) {
+      layout.push({
+        indent: false,
+        items: [end],
+      });
+    }
+  };
+
+  return rowView({node, layout, ctxData});
 };
 
-const NameView: React.FC<{node: NameNode }> = ({node}) => {
-  return <SimpleNodeView treeNode={node} content={node.text} bgColor={BOUND_NAME_BOX_COLOR} />
+const nameView = ({node, ctxData}: {node: NameNode, ctxData: TreeViewContextData}): SizedReactNode => {
+  return simpleNodeView({treeNode: node, content: node.text, bgColor: BOUND_NAME_BOX_COLOR, ctxData});
 };
 
-const StreamReferenceView: React.FC<{node: StreamReferenceNode}> = ({node}) => {
-  const ctxData = useContext(TreeViewContext);
-  if (!ctxData) {
-    throw new Error();
-  }
-
+const streamReferenceView = ({node, ctxData}: {node: StreamReferenceNode, ctxData: TreeViewContextData}): SizedReactNode => {
   const nearestDef = ctxData.envLookups.nodeToNearestTreeDef.get(node);
   if (!nearestDef) {
     throw new Error();
@@ -401,17 +459,12 @@ const StreamReferenceView: React.FC<{node: StreamReferenceNode}> = ({node}) => {
     throw new Error();
   }
 
-  const [, displayedName] = formatStreamDefinition(streamDef, ctxData.envLookups);
+  const [displayedName, ] = formatStreamDefinition(streamDef, ctxData.envLookups);
 
-  return <SimpleNodeView treeNode={node} content={displayedName} bgColor={STREAM_REFERENCE_BOX_COLOR} />
+  return simpleNodeView({treeNode: node, content: displayedName, bgColor: STREAM_REFERENCE_BOX_COLOR, ctxData});
 };
 
-const ApplicationView: React.FC<{node: ApplicationNode}> = ({node}) => {
-  const ctxData = useContext(TreeViewContext);
-  if (!ctxData) {
-    throw new Error();
-  }
-
+const applicationView = ({node, ctxData}: {node: ApplicationNode, ctxData: TreeViewContextData}): SizedReactNode => {
   if (node.func.kind !== NodeKind.FunctionReference) {
     throw new Error('unimplemented');
   }
@@ -436,16 +489,16 @@ const ApplicationView: React.FC<{node: ApplicationNode}> = ({node}) => {
       items: [
         {
           treeNode: name,
-          reactNode: <NameView node={name} />,
+          sizedReactNode: nameView({node: name, ctxData}),
         },
         '=',
         {
           treeNode: node.sargs[0],
-          reactNode: <StreamExpressionView node={node.sargs[0]} />,
+          sizedReactNode: streamExpressionView({node: node.sargs[0], ctxData}),
         }
       ],
     }];
-    return <RowView node={node} layout={layout} />
+    return rowView({node, layout, ctxData});
   } else {
     const showName = (n: NameNode | undefined | null) => n && !n.text.startsWith('_');
 
@@ -459,49 +512,42 @@ const ApplicationView: React.FC<{node: ApplicationNode}> = ({node}) => {
       labeledNodes.push({
         label: (useNameAsFirstLabel && (idx === 0)) ? displayName : (showName(pname) ? pname!.text : undefined),
         treeNode: sarg,
-        reactNode: <StreamExpressionView node={sarg} />,
+        sizedReactNode: streamExpressionView({node: sarg, ctxData}),
       });
     });
 
     node.fargs.forEach((farg, idx) => {
-      const pname = functionNode.sig.funcParams[idx].name;
-
       labeledNodes.push({
         // label: showName(pname) ? pname!.text : undefined,
         treeNode: farg,
-        reactNode: <FunctionExpressionView node={farg} />,
+        sizedReactNode: functionExpressionView({node: farg, ctxData}),
       });
     });
 
-    return <AutoWrapRowView node={node} labeledNodes={labeledNodes} begin={useNameAsFirstLabel ? undefined : displayName} />
+    return autoWrapRowView({node, labeledNodes, begin: (useNameAsFirstLabel ? undefined : displayName), ctxData});
   }
 };
 
-const StreamExpressionView: React.FC<{node: StreamExpressionNode}> = ({ node }) => {
-  const ctxData = useContext(TreeViewContext);
-  if (!ctxData) {
-    throw new Error();
-  }
-
-  const nodeView: JSX.Element = (() => {
+const streamExpressionView = ({node, ctxData}: {node: StreamExpressionNode, ctxData: TreeViewContextData}): SizedReactNode => {
+  const nodeView: SizedReactNode = (() => {
     switch (node.kind) {
       case NodeKind.UndefinedLiteral:
-        return <SimpleNodeView treeNode={node} content={<span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>} bgColor={'red'} />
+        return simpleNodeView({treeNode: node, content: '\xa0\xa0\xa0\xa0\xa0\xa0', bgColor: 'red', ctxData});
 
       case NodeKind.NumberLiteral:
-        return <SimpleNodeView treeNode={node} content={node.val.toString()} bgColor="#cce8cc" />
+        return simpleNodeView({treeNode: node, content: node.val.toString(), bgColor: '#cce8cc', ctxData});
 
       case NodeKind.TextLiteral:
-        return <SimpleNodeView treeNode={node} content={node.val} bgColor="#cce8cc" />
+        return simpleNodeView({treeNode: node, content: node.val, bgColor: '#cce8cc', ctxData});
 
       case NodeKind.BooleanLiteral:
-        return <SimpleNodeView treeNode={node} content={node.val.toString()} bgColor="#cce8cc" />
+        return simpleNodeView({treeNode: node, content: node.val.toString(), bgColor: '#cce8cc', ctxData});
 
       case NodeKind.StreamReference:
-        return <StreamReferenceView node={node} />
+        return streamReferenceView({node, ctxData});
 
       case NodeKind.Application:
-        return <ApplicationView node={node} />
+        return applicationView({node, ctxData});
 
       default: {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -519,20 +565,25 @@ const StreamExpressionView: React.FC<{node: StreamExpressionNode}> = ({ node }) 
     }
     const atRoot = parent.kind === NodeKind.TreeFunctionBody;
 
-    return (
-      <div style={{position: 'relative'}}>
-        {nodeView}
-        <div style={{position: 'absolute', top: 0}}><ExpressionChooser overNode={node} atRoot={atRoot} envLookups={ctxData.envLookups} dispatch={ctxData.dispatch} compileError={ctxData.compileError} /></div>
-      </div>
-    );
+    const {singleLineWidth, Node} = nodeView;
+
+    return {
+      Node: () => (
+        <div style={{position: 'relative'}}>
+          <Node />>
+          <div style={{position: 'absolute', top: 0}}><ExpressionChooser overNode={node} atRoot={atRoot} envLookups={ctxData.envLookups} dispatch={ctxData.dispatch} compileError={ctxData.compileError} /></div>
+        </div>
+      ),
+      singleLineWidth,
+    };
   } else {
     return nodeView;
   }
 }
 
-const BodyExpressionView: React.FC<{node: BodyExpressionNode}> = ({node}) => {
+const bodyExpressionView = ({node, ctxData}: {node: BodyExpressionNode, ctxData: TreeViewContextData}): SizedReactNode => {
   if (isStreamExpressionNode(node)) {
-    return <StreamExpressionView node={node} />
+    return streamExpressionView({node, ctxData});
   } else if (isFunctionExpressionNode(node)) {
     throw new Error('unimplemented');
   } else if (node.kind === NodeKind.YieldExpression) {
@@ -540,11 +591,11 @@ const BodyExpressionView: React.FC<{node: BodyExpressionNode}> = ({node}) => {
       {
         label: 'yield', // TODO: if there are multiple yields, clarify which
         treeNode: node.expr,
-        reactNode: <StreamExpressionView node={node.expr} />,
+        sizedReactNode: streamExpressionView({node: node.expr, ctxData}),
       },
     ];
 
-    return <AutoWrapRowView node={node} labeledNodes={labeledNodes} />
+    return autoWrapRowView({node, labeledNodes, ctxData});
   } else {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const exhaustive: never = node; // this will cause a type error if we haven't handled all cases
@@ -552,24 +603,14 @@ const BodyExpressionView: React.FC<{node: BodyExpressionNode}> = ({node}) => {
   }
 };
 
-const TreeFunctionBodyView: React.FC<{node: TreeFunctionBodyNode}> = ({ node }) => {
-  const layout: RowLayout = node.exprs.map(expr => ({indent: false, items: [{
-    treeNode: expr,
-    reactNode: <BodyExpressionView node={expr} />,
-  }]}));
-  return <RowView node={node} layout={layout} />
-}
-
-export const TreeFunctionDefinitionView: React.FC<{node: TreeFunctionDefinitionNode}> = ({ node }) => {
-  const nameItem: RowLayoutNode = node.name ?
+const treeFunctionDefinitionView = ({node, ctxData}: {node: TreeFunctionDefinitionNode, ctxData: TreeViewContextData}): SizedReactNode => {
+  const nameItem: RowLayoutNode | string = node.name ?
     {
       treeNode: node.name,
-      reactNode: <NameView node={node.name} />,
+      sizedReactNode: nameView({node: node.name, ctxData}),
     }
     :
-    {
-      reactNode: <div>ƒ</div>
-    };
+    'ƒ';
 
   let layout: Array<RowLayoutRow>;
 
@@ -596,7 +637,7 @@ export const TreeFunctionDefinitionView: React.FC<{node: TreeFunctionDefinitionN
         indent: true,
         items: [{
           treeNode: sparam.name,
-          reactNode: <NameView node={sparam.name} />,
+          sizedReactNode: nameView({node: sparam.name, ctxData}),
         }],
       });
     });
@@ -612,18 +653,18 @@ export const TreeFunctionDefinitionView: React.FC<{node: TreeFunctionDefinitionN
       items: [
         {
           treeNode: bodyExpr,
-          reactNode: <BodyExpressionView node={bodyExpr} />,
+          sizedReactNode: bodyExpressionView({node: bodyExpr, ctxData}),
         },
       ],
     });
   }
 
-  return <RowView node={node} layout={layout} />
+  return rowView({node, layout, ctxData});
 };
 
-const FunctionDefinitionView: React.FC<{node: FunctionDefinitionNode}> = ({ node }) => {
+const functionDefinitionView = ({node, ctxData}: {node: FunctionDefinitionNode, ctxData: TreeViewContextData}): SizedReactNode => {
   if (node.kind === NodeKind.TreeFunctionDefinition) {
-    return <TreeFunctionDefinitionView node={node} />
+    return treeFunctionDefinitionView({node, ctxData});
   } else if (node.kind === NodeKind.NativeFunctionDefinition) {
     throw new Error('unimplemented');
   } else {
@@ -633,14 +674,19 @@ const FunctionDefinitionView: React.FC<{node: FunctionDefinitionNode}> = ({ node
   }
 };
 
-const FunctionExpressionView: React.FC<{node: FunctionExpressionNode}> = ({ node }) => {
+const functionExpressionView = ({node, ctxData}: {node: FunctionExpressionNode, ctxData: TreeViewContextData}): SizedReactNode => {
   if (node.kind === NodeKind.FunctionReference) {
     throw new Error('unimplemented');
   } else if (isFunctionDefinitionNode(node)) {
-    return <FunctionDefinitionView node={node} />
+    return functionDefinitionView({node, ctxData});
   } else {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const exhaustive: never = node; // this will cause a type error if we haven't handled all cases
     throw new Error('unreachable');
   }
 };
+
+export const TreeFunctionDefinitionView: React.FC<{node: TreeFunctionDefinitionNode, ctxData: TreeViewContextData}> = ({ node, ctxData }) => {
+  const {Node} = treeFunctionDefinitionView({node, ctxData});
+  return <Node />
+}

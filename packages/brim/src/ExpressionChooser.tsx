@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './ExpressionChooser.css';
-import { generateStreamId, Node, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, SignatureFunctionParameterNode, generateFunctionId, StreamID, UndefinedLiteralNode, streamExprReturnedId, StreamExpressionNode, generateApplicationId, ApplicationOut } from './Tree';
+import { generateStreamId, Node, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, SignatureFunctionParameterNode, generateFunctionId, StreamID, streamExprReturnedId, StreamExpressionNode, generateApplicationId, ApplicationOut } from './Tree';
 import { fuzzy_match } from './vendor/fts_fuzzy_match';
 import { EnvironmentLookups, StreamDefinition } from './EditReducer';
 import { formatStreamDefinition } from './TreeView';
