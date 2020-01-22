@@ -196,14 +196,14 @@ const sizedSimpleNodeView = ({treeNode, content, bgColor, ctx}: {treeNode: Node,
   };
 };
 
-interface RowLayoutNode {
+interface TreeAndSizedNodes {
   sizedReactNode: SizedReactNode;
   treeNode?: Node; // we just use its identity for selection. may be undefined if not selectable
 }
 
 interface RowLayoutRow {
   indent: boolean;
-  items: ReadonlyArray<string | RowLayoutNode>;
+  items: ReadonlyArray<string | TreeAndSizedNodes>;
 }
 
 type RowLayout = ReadonlyArray<RowLayoutRow>;
@@ -368,80 +368,81 @@ const sizedRowView = ({node, layout, ctx}: {node: Node, layout: RowLayout, ctx: 
   };
 }
 
-interface LabeledNode {
-  label?: string;
-  treeNode: Node;
-  sizedReactNode: SizedReactNode;
-}
+const sizedTemplateView = ({node, template, nodeMap, ctx}: {node: Node, template: string, nodeMap: Map<string, TreeAndSizedNodes>, ctx: TreeViewContext}): SizedReactNode => {
+  const MAX_WIDTH = 30;
 
-const sizedAutoWrapRowView = ({node, labeledNodes, begin, end, ctx}: {node: Node, labeledNodes: ReadonlyArray<LabeledNode>, begin?: string, end?: string, ctx: TreeViewContext}): SizedReactNode => {
-  const totalWidth = labeledNodes.reduce<number | undefined>((acc, ln) => ((ln.sizedReactNode.singleLineWidth === undefined) || (acc === undefined)) ? undefined : ln.sizedReactNode.singleLineWidth + acc, 0);
-  const MAX_WIDTH = 25;
+  const createLayout = (trySingleLine: boolean): [RowLayout, number | undefined] => {
+    const splits = template.split(/(\$[a-z][0-9]+|\|)/).map(s => s.trim()).filter(s => s);
 
-  let layout: Array<RowLayoutRow>;
-  if ((totalWidth !== undefined) && (totalWidth < MAX_WIDTH)) {
-    // Single-line layout
-    const items: Array<string | RowLayoutNode> = [];
+    const layout: Array<RowLayoutRow> = [];
+    let accumItems: Array<string | TreeAndSizedNodes> = [];
+    let totalWidth: number | undefined = 0; // this gets set to undefined if we determine that result is not single-line
 
-    if (begin) {
-      items.push(begin);
-    }
-
-    for (const labeledNode of labeledNodes) {
-      if (labeledNode.label) {
-        items.push(labeledNode.label);
-      }
-      items.push({
-        treeNode: labeledNode.treeNode,
-        sizedReactNode: labeledNode.sizedReactNode,
-      });
-    }
-
-    if (end) {
-      items.push(end)
-    }
-
-    layout = [{
-      indent: false,
-      items,
-    }];
-  } else {
-    // Multi-line layout
-    layout = [];
-
-    if (begin) {
-      layout.push({
-        indent: false,
-        items: [begin],
-      });
-    }
-
-    for (const labeledNode of labeledNodes) {
-      if (labeledNode.label) {
+    const emitAccumItems = () => {
+      if (accumItems.length > 0) {
         layout.push({
           indent: false,
-          items: [labeledNode.label],
+          items: accumItems,
         });
       }
-      layout.push({
-        indent: true,
-        items: [{
-          treeNode: labeledNode.treeNode,
-          sizedReactNode: labeledNode.sizedReactNode,
-        }],
-      });
-    }
+      accumItems = [];
+    };
 
-    if (end) {
-      layout.push({
-        indent: false,
-        items: [end],
-      });
-    }
-  };
+    for (const split of splits) {
+      if (split.startsWith('$')) {
+        const key = split.substr(1);
+        const nodes = nodeMap.get(key);
+        if (!nodes) {
+          throw new Error();
+        }
 
-  return sizedRowView({node, layout, ctx});
-};
+        if (nodes.sizedReactNode.singleLineWidth !== undefined) {
+          // single-line node
+          // TODO: if !trySingleLine, need to check if this will make the row too long
+          accumItems.push(nodes);
+          if (totalWidth !== undefined) {
+            totalWidth += nodes.sizedReactNode.singleLineWidth;
+          }
+        } else {
+          // not single-line node
+          emitAccumItems();
+          layout.push({
+            indent: true,
+            items: [nodes],
+          });
+          totalWidth = undefined;
+        }
+      } else if (split === '|') {
+        if (!trySingleLine) {
+          emitAccumItems();
+          totalWidth = undefined;
+        }
+      } else {
+        accumItems.push(split);
+        if (totalWidth !== undefined) {
+          totalWidth += split.length;
+        }
+      }
+    }
+    emitAccumItems();
+
+    return [layout, totalWidth];
+  }
+
+  const [singleLayout, singleLineWidth] = createLayout(true);
+  if ((singleLineWidth !== undefined) && (singleLineWidth <= MAX_WIDTH)) {
+    return {
+      singleLineWidth,
+      reactNode: <RowView node={node} layout={singleLayout} ctx={ctx} />,
+    };
+  } else {
+    const [multiLayout, ] = createLayout(false);
+    return {
+      singleLineWidth: undefined,
+      reactNode: <RowView node={node} layout={multiLayout} ctx={ctx} />,
+    };
+  }
+}
 
 const sizedNameView = ({node, ctx}: {node: NameNode, ctx: TreeViewContext}): SizedReactNode => {
   return sizedSimpleNodeView({treeNode: node, content: node.text, bgColor: BOUND_NAME_BOX_COLOR, ctx});
@@ -480,54 +481,35 @@ const sizedApplicationView = ({node, ctx}: {node: ApplicationNode, ctx: TreeView
     throw new Error('function params and args length mismatch');
   }
 
-  if (node.func.ref === 'bind') {
-    // special case rendering of bind for now
-    const name = node.outs[0].name;
-    if (!name) {
-      throw new Error();
+  const nodeMap: Map<string, TreeAndSizedNodes> = new Map();
+
+  node.sargs.forEach((sarg, idx) => {
+    nodeMap.set('s' + idx, {
+      treeNode: sarg,
+      sizedReactNode: sizedStreamExpressionView({node: sarg, ctx}),
+    });
+  });
+  node.fargs.forEach((farg, idx) => {
+    nodeMap.set('f' + idx, {
+      treeNode: farg,
+      sizedReactNode: sizedFunctionExpressionView({node: farg, ctx}),
+    });
+  });
+  node.outs.forEach((out, idx) => {
+    if (out.name) {
+      nodeMap.set('o' + idx, {
+        treeNode: out.name,
+        sizedReactNode: sizedNameView({node: out.name, ctx}),
+      });
     }
-    const layout: RowLayout = [{
-      indent: false,
-      items: [
-        {
-          treeNode: name,
-          sizedReactNode: sizedNameView({node: name, ctx}),
-        },
-        '=',
-        {
-          treeNode: node.sargs[0],
-          sizedReactNode: sizedStreamExpressionView({node: node.sargs[0], ctx}),
-        }
-      ],
-    }];
-    return sizedRowView({node, layout, ctx});
-  } else {
-    const showName = (n: NameNode | undefined | null) => n && !n.text.startsWith('_');
+  });
 
-    const useNameAsFirstLabel = (functionNode.sig.streamParams.length > 0) && !showName(functionNode.sig.streamParams[0].name);
-
-    const labeledNodes: Array<LabeledNode> = [];
-
-    node.sargs.forEach((sarg, idx) => {
-      const pname = functionNode.sig.streamParams[idx].name;
-
-      labeledNodes.push({
-        label: (useNameAsFirstLabel && (idx === 0)) ? displayName : (showName(pname) ? pname!.text : undefined),
-        treeNode: sarg,
-        sizedReactNode: sizedStreamExpressionView({node: sarg, ctx}),
-      });
-    });
-
-    node.fargs.forEach((farg, idx) => {
-      labeledNodes.push({
-        // label: showName(pname) ? pname!.text : undefined,
-        treeNode: farg,
-        sizedReactNode: sizedFunctionExpressionView({node: farg, ctx}),
-      });
-    });
-
-    return sizedAutoWrapRowView({node, labeledNodes, begin: (useNameAsFirstLabel ? undefined : displayName), ctx});
-  }
+  return sizedTemplateView({
+    node,
+    template: functionNode.format || ('need format for ' + functionNode.fid),
+    nodeMap,
+    ctx,
+  });
 };
 
 const sizedStreamExpressionView = ({node, ctx}: {node: StreamExpressionNode, ctx: TreeViewContext}): SizedReactNode => {
@@ -573,7 +555,7 @@ const sizedStreamExpressionView = ({node, ctx}: {node: StreamExpressionNode, ctx
       reactNode: (
         <div style={{position: 'relative'}}>
           {reactNode}
-          <div style={{position: 'absolute', top: 0}}>
+          <div style={{position: 'absolute', top: 28}}>
             <ExpressionChooser overNode={node} atRoot={atRoot} envLookups={ctx.envLookups} dispatch={ctx.dispatch} compileError={ctx.compileError} />
           </div>
         </div>
@@ -591,15 +573,15 @@ const sizedBodyExpressionView = ({node, ctx}: {node: BodyExpressionNode, ctx: Tr
   } else if (isFunctionExpressionNode(node)) {
     throw new Error('unimplemented');
   } else if (node.kind === NodeKind.YieldExpression) {
-    const labeledNodes: Array<LabeledNode> = [
-      {
-        label: 'yield', // TODO: if there are multiple yields, clarify which
+    return sizedTemplateView({
+      node,
+      template: 'yield $s0', // TODO: if there are multiple yields, clarify which
+      nodeMap: new Map([['s0', {
         treeNode: node.expr,
         sizedReactNode: sizedStreamExpressionView({node: node.expr, ctx}),
-      },
-    ];
-
-    return sizedAutoWrapRowView({node, labeledNodes, ctx});
+      }]]),
+      ctx,
+    });
   } else {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const exhaustive: never = node; // this will cause a type error if we haven't handled all cases
@@ -608,13 +590,10 @@ const sizedBodyExpressionView = ({node, ctx}: {node: BodyExpressionNode, ctx: Tr
 };
 
 const sizedTreeFunctionDefinitionView = ({node, ctx}: {node: TreeFunctionDefinitionNode, ctx: TreeViewContext}): SizedReactNode => {
-  const nameItem: RowLayoutNode | string = node.name ?
-    {
-      treeNode: node.name,
-      sizedReactNode: sizedNameView({node: node.name, ctx}),
-    }
-    :
-    'ƒ';
+  const nameItem: TreeAndSizedNodes = {
+    treeNode: node.name,
+    sizedReactNode: sizedNameView({node: node.name, ctx}),
+  };
 
   let layout: Array<RowLayoutRow>;
 

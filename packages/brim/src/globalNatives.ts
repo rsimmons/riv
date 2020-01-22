@@ -39,7 +39,7 @@ function simpleSig(pnames: Array<string>, yields: boolean): SignatureNode {
 const nativeFunctions: Array<[string, string, SignatureNode, string, Function]> = [
   // simple
   ['bind', 'bind', simpleSig(['_v'], true), '$o0 = $s0', (v: any) => v],
-  ['ifte', 'if', simpleSig(['_cond', 'then', 'else'], true), '', (cond: any, _then: any, _else: any) => (cond ? _then : _else)],
+  ['ifte', 'if', simpleSig(['_cond', 'then', 'else'], true), 'if $s0 | then $s1 | else $s2', (cond: any, _then: any, _else: any) => (cond ? _then : _else)],
 
   // events
   ['changeCount', 'change count', simpleSig(['_stream'], true), '', changeCount],
@@ -48,18 +48,19 @@ const nativeFunctions: Array<[string, string, SignatureNode, string, Function]> 
   // math
   ['add', 'add', simpleSig(['_a', '_b'], true), '', (a: number, b: number) => a + b],
   ['sub', 'subtract', simpleSig(['_a', '_b'], true), '', (a: number, b: number) => a - b],
-  ['mult', 'multiply', simpleSig(['_a', '_b'], true), '', (a: number, b: number) => a * b],
+  ['mult', 'multiply', simpleSig(['_a', '_b'], true), '$s0 * $s1', (a: number, b: number) => a * b],
   ['div', 'divide', simpleSig(['_a', '_b'], true), '', (a: number, b: number) => a / b],
-  ['cos', 'cosine', simpleSig(['_v'], true), '', Math.cos],
+  ['cos', 'cosine', simpleSig(['_v'], true), 'cosine of $s0 radians', Math.cos],
+  ['sqr', 'squared', simpleSig(['_v'], true), '$s0 squared', (v: number) => v*v],
 
   // dom/browser
-  ['showString', 'show value', simpleSig(['_v'], false), '', showString],
+  ['showString', 'show value', simpleSig(['_v'], false), 'show value $s0', showString],
   ['animationTime', 'animation time', simpleSig([], true), '', animationTime],
-  ['mouseDown', 'is mouse down', simpleSig([], true), '', mouseDown],
+  ['mouseDown', 'is mouse down', simpleSig([], true), 'mouse button is down', mouseDown],
   ['mousePosition', 'mouse position', simpleSig([], true), '', mousePosition],
   ['mouseClickEvts', 'mouse click', simpleSig([], true), '', mouseClickEvts],
   ['redCircle', 'draw red circle', simpleSig(['position', 'radius'], false), '', redCircle],
-  ['random', 'random', simpleSig(['repick'], true), '', random],
+  ['random', 'random', simpleSig(['repick'], true), 'random from 0 to 1, | repick on $s0', random],
 
   // vec2
   ['vec2zero', 'zero 2d vector', simpleSig([], true), '', () => ({x: 0, y: 0})],
@@ -220,7 +221,7 @@ const nativeFunctions: Array<[string, string, SignatureNode, string, Function]> 
       },
     ],
     yields: [],
-  }, '', audioDriver],
+  }, 'play generated audio $f0', audioDriver],
 ];
 
 export default nativeFunctions;
