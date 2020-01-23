@@ -1,6 +1,6 @@
 import genuid from './uid';
 import { State, ProgramInfo, SelTree } from './State';
-import { StreamID, FunctionID, generateStreamId, generateFunctionId, NodeKind, Node, TreeFunctionDefinitionNode, FunctionDefinitionNode, isFunctionDefinitionNode, StreamExpressionNode, NativeFunctionDefinitionNode, isStreamExpressionNode, UndefinedLiteralNode, BodyExpressionNode, generateApplicationId, isSimpleLiteralNode } from './Tree';
+import { StreamID, FunctionID, generateStreamId, generateFunctionId, NodeKind, Node, TreeFunctionDefinitionNode, FunctionDefinitionNode, isFunctionDefinitionNode, StreamExpressionNode, NativeFunctionDefinitionNode, isStreamExpressionNode, UndefinedLiteralNode, BodyExpressionNode, generateApplicationId, isSimpleLiteralNode, NameNode, StreamParameterNode } from './Tree';
 import { CompiledDefinition } from './CompiledDefinition';
 import { compileGlobalTreeDefinition, CompilationError } from './Compiler';
 import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
@@ -155,15 +155,17 @@ function firstUndefinedNode(node: Node, after: Path | undefined = undefined): [N
 interface ExprStreamDefinition {
   kind: 'expr';
   sid: StreamID;
+  name: NameNode;
+
   expr: StreamExpressionNode;
-  name?: string;
-  yieldIdx: number | undefined;
 }
 
 interface ParamStreamDefinition {
   kind: 'param';
   sid: StreamID;
-  name?: string;
+  name: NameNode;
+
+  param: StreamParameterNode;
 }
 
 export type StreamDefinition = ExprStreamDefinition | ParamStreamDefinition;
@@ -186,14 +188,16 @@ export function computeEnvironmentLookups(mainDefinition: TreeFunctionDefinition
     treeDefToStreamEnv.set(def, streamEnv);
     treeDefToFunctionEnv.set(def, functionEnv);
 
-    def.sparams.forEach(({sid, name}, idx) => {
+    def.sparams.forEach((sparam, idx) => {
+      const {sid, name} = sparam;
       if (streamEnv.has(sid)) {
         throw new Error();
       }
       streamEnv.set(sid, {
         kind: 'param',
         sid,
-        name: name.text,
+        name,
+        param: sparam,
       });
     });
 
@@ -210,23 +214,14 @@ export function computeEnvironmentLookups(mainDefinition: TreeFunctionDefinition
             if (streamEnv.has(out.sid)) {
               throw new Error();
             }
-            streamEnv.set(out.sid, {
-              kind: 'expr',
-              sid: out.sid,
-              expr: node,
-              name: out.name ? out.name.text : undefined,
-              yieldIdx: idx,
-            });
-          });
-        } else if (isSimpleLiteralNode(node)) {
-          if (streamEnv.has(node.sid)) {
-            throw new Error();
-          }
-          streamEnv.set(node.sid, {
-            kind: 'expr',
-            sid: node.sid,
-            expr: node,
-            yieldIdx: undefined,
+            if (out.name) {
+              streamEnv.set(out.sid, {
+                kind: 'expr',
+                sid: out.sid,
+                name: out.name,
+                expr: node,
+              });
+            }
           });
         }
       }

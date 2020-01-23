@@ -30,61 +30,6 @@ function getFunctionNodeFromRef(funcRef: FunctionExpressionNode, envLookups: Env
   return functionNode;
 }
 
-export function formatStreamDefinition(sdef: StreamDefinition, envLookups: EnvironmentLookups): [string, React.ReactNode] {
-  if (sdef.name) {
-    return [sdef.name, <span>{sdef.name}</span>];
-  } else {
-    let s: string;
-    switch (sdef.kind) {
-      case 'expr':
-        switch (sdef.expr.kind) {
-          case NodeKind.UndefinedLiteral:
-            s = '(undefined)';
-            break;
-
-          case NodeKind.NumberLiteral:
-            s = '(' + sdef.expr.val.toString() + ')';
-            break;
-
-          case NodeKind.TextLiteral:
-            s = '("' + sdef.expr.val + '")';
-            break;
-
-          case NodeKind.BooleanLiteral:
-            s = '(' + sdef.expr.val.toString() + ')';
-            break;
-
-          case NodeKind.StreamReference:
-            throw new Error(); // not possible?
-
-          case NodeKind.Application: {
-            const funcDef = getFunctionNodeFromRef(sdef.expr.func, envLookups);
-            s = funcDef.format;
-            break;
-          }
-
-          default: {
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            const exhaustive: never = sdef.expr; // this will cause a type error if we haven't handled all cases
-            throw new Error();
-          }
-        }
-        break;
-
-      case 'param':
-        s = sdef.sid;
-        break;
-
-      default: {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const exhaustive: never = sdef; // this will cause a type error if we haven't handled all cases
-        throw new Error();
-      }
-    }
-    return [s, <span style={{fontStyle: 'italic'}}>{s}</span>];
-  }
-}
-
 interface MarkedNodes {
   selected: Node;
   referent: Node | undefined;
@@ -449,9 +394,7 @@ const sizedStreamReferenceView = ({node, ctx}: {node: StreamReferenceNode, ctx: 
     throw new Error();
   }
 
-  const [displayedName, ] = formatStreamDefinition(streamDef, ctx.envLookups);
-
-  return sizedSimpleNodeView({treeNode: node, content: displayedName, bgColor: STREAM_REFERENCE_BOX_COLOR, ctx});
+  return sizedSimpleNodeView({treeNode: node, content: streamDef.name.text || '\xa0\xa0\xa0\xa0\xa0\xa0', bgColor: STREAM_REFERENCE_BOX_COLOR, ctx});
 };
 
 const sizedApplicationView = ({node, ctx}: {node: ApplicationNode, ctx: TreeViewContext}): SizedReactNode => {
