@@ -642,7 +642,13 @@ const sizedTreeFunctionDefinitionView = ({node, ctx}: {node: TreeFunctionDefinit
     });
   }
 
-  return sizedRowView({node, layout, ctx});
+  const {singleLineWidth, reactNode} = sizedRowView({node, layout, ctx});
+  return {
+    singleLineWidth,
+    reactNode: (
+      <div className="TreeView-tree-function-definition-inner">{reactNode}</div>
+    ),
+  };
 };
 
 const sizedFunctionDefinitionView = ({node, ctx}: {node: FunctionDefinitionNode, ctx: TreeViewContext}): SizedReactNode => {
