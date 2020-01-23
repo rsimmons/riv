@@ -27,90 +27,72 @@ function vec2sqgrid(count: number, size: number) {
   return vecs;
 }
 
-function simpleSig(pnames: Array<string>, yields: boolean): SignatureNode {
+function simpleSig(ptypes: Array<string>, yields: boolean): SignatureNode {
   return {
     kind: NodeKind.Signature,
-    streamParams: pnames.map(pn => ({kind: NodeKind.SignatureStreamParameter, name: { kind: NodeKind.Name, text: pn }})),
+    streamParams: ptypes.map(pn => ({kind: NodeKind.SignatureStreamParameter})),
     funcParams: [],
-    yields: yields ? [{kind: NodeKind.SignatureYield, name: {kind: NodeKind.Name, text: '?'}}] : [],
+    yields: yields ? [{kind: NodeKind.SignatureYield}] : [],
   }
 }
 
-const nativeFunctions: Array<[string, string, SignatureNode, string, Function]> = [
+const nativeFunctions: Array<[string, string, SignatureNode, Function]> = [
   // simple
-  ['bind', 'bind', simpleSig(['_v'], true), '$o0 = $s0', (v: any) => v],
-  ['ifte', 'if', simpleSig(['_cond', 'then', 'else'], true), 'if $s0 | then $s1 | else $s2', (cond: any, _then: any, _else: any) => (cond ? _then : _else)],
+  ['bind', '$o0 = $s0', simpleSig([''], true), (v: any) => v],
+  ['ifte', 'if $s0 | then $s1 | else $s2', simpleSig(['_cond', 'then', 'else'], true), (cond: any, _then: any, _else: any) => (cond ? _then : _else)],
 
   // events
-  ['changeCount', 'change count', simpleSig(['_stream'], true), '', changeCount],
-  ['latestValue', 'latest event value', simpleSig(['event stream', 'initial value'], true), '', latestValue],
+  ['changeCount', '', simpleSig(['_stream'], true), changeCount],
+  ['latestValue', '', simpleSig(['event stream', 'initial value'], true), latestValue],
 
   // math
-  ['add', 'add', simpleSig(['_a', '_b'], true), '', (a: number, b: number) => a + b],
-  ['sub', 'subtract', simpleSig(['_a', '_b'], true), '', (a: number, b: number) => a - b],
-  ['mult', 'multiply', simpleSig(['_a', '_b'], true), '$s0 * $s1', (a: number, b: number) => a * b],
-  ['div', 'divide', simpleSig(['_a', '_b'], true), '', (a: number, b: number) => a / b],
-  ['cos', 'cosine', simpleSig(['_v'], true), 'cosine of $s0 radians', Math.cos],
-  ['sqr', 'squared', simpleSig(['_v'], true), '$s0 squared', (v: number) => v*v],
+  ['add', '$s0 + $s1', simpleSig(['', ''], true), (a: number, b: number) => a + b],
+  ['sub', '$s0 - $s1', simpleSig(['', ''], true), (a: number, b: number) => a - b],
+  ['mult', '$s0 * $s1', simpleSig(['', ''], true), (a: number, b: number) => a * b],
+  ['div', '$s0 / $s1', simpleSig(['', ''], true), (a: number, b: number) => a / b],
+  ['cos', 'cosine of $s0 radians', simpleSig([''], true), Math.cos],
+  ['sqr', '$s0 squared', simpleSig([''], true), (v: number) => v*v],
 
   // dom/browser
-  ['showString', 'show value', simpleSig(['_v'], false), 'show value $s0', showString],
-  ['animationTime', 'animation time', simpleSig([], true), '', animationTime],
-  ['mouseDown', 'is mouse down', simpleSig([], true), 'mouse button is down', mouseDown],
-  ['mousePosition', 'mouse position', simpleSig([], true), '', mousePosition],
-  ['mouseClickEvts', 'mouse click', simpleSig([], true), '', mouseClickEvts],
-  ['redCircle', 'draw red circle', simpleSig(['position', 'radius'], false), '', redCircle],
-  ['random', 'random', simpleSig(['repick'], true), 'random from 0 to 1, | repick on $s0', random],
+  ['showString', 'show value $s0', simpleSig([''], false), showString],
+  ['animationTime', 'animation time', simpleSig([], true), animationTime],
+  ['mouseDown', 'mouse button is down', simpleSig([], true), mouseDown],
+  ['mousePosition', 'mouse position', simpleSig([], true), mousePosition],
+  ['mouseClickEvts', 'mouse clicks', simpleSig([], true), mouseClickEvts],
+  ['redCircle', 'draw red circle at $s0 radius $s1', simpleSig(['position', 'radius'], false), redCircle],
+  ['random', 'random from 0 to 1, | repick on $s0', simpleSig(['repick'], true), random],
 
   // vec2
-  ['vec2zero', 'zero 2d vector', simpleSig([], true), '', () => ({x: 0, y: 0})],
-  ['vec2add', 'add 2d vectors', simpleSig(['_a', '_b'], true), '', (a: Vec2d, b: Vec2d) => ({x: a.x+b.x, y: a.y+b.y})],
-  ['vec2sub', 'subtract 2d vectors', simpleSig(['_a', '_b'], true), '', (a: Vec2d, b: Vec2d) => ({x: a.x-b.x, y: a.y-b.y})],
-  ['vec2len', 'length of 2d vector', simpleSig(['_v'], true), '', vec2dlen],
-  ['vec2sqgrid', 'square grid of 2d vectors', simpleSig(['count', 'size'], true), '', vec2sqgrid],
+  ['vec2zero', 'zero 2d vector', simpleSig([], true), () => ({x: 0, y: 0})],
+  ['vec2add', 'add 2d vectors $s0 and $s1', simpleSig(['', ''], true), (a: Vec2d, b: Vec2d) => ({x: a.x+b.x, y: a.y+b.y})],
+  ['vec2sub', 'subtract 2d vectors $s0 and $s1', simpleSig(['', ''], true), (a: Vec2d, b: Vec2d) => ({x: a.x-b.x, y: a.y-b.y})],
+  ['vec2len', 'length of 2d vector $s0', simpleSig([''], true), vec2dlen],
+  ['vec2sqgrid', 'square grid of 2d vectors, $s0 per side, $s1 long', simpleSig(['', ''], true), vec2sqgrid],
 
   // misc
-  ['text2num', 'text to number', {
-    kind: NodeKind.Signature,
-    streamParams: [
-      {
-        kind: NodeKind.SignatureStreamParameter,
-        name: {kind: NodeKind.Name, text: 'text'},
-      },
-    ],
-    funcParams: [],
-    yields: [
-      {
-        kind: NodeKind.SignatureYield,
-        name: {kind: NodeKind.Name, text: 'number'},
-      },
-    ],
-  }, '', (text: string) => Number(text)],
+  ['text2num', 'text $s0 as a number', simpleSig([''], true), (text: string) => Number(text)],
 
   // snabbdom
-  ['snabbdom.renderDOMIntoSelector', 'render HTML', simpleSig(['_elem', 'into selector'], false), '', renderDOMIntoSelector],
-  ['snabbdom.text', 'text', simpleSig(['text'], true), '', (text: string) => h('span', {}, text)],
-  ['snabbdom.div', 'div', simpleSig(['children'], true), '', (children: ReadonlyArray<any>) => h('div', {}, children)],
-  ['snabbdom.input', 'input', {
+  ['snabbdom.renderDOMIntoSelector', 'render HTML $s0 into selector $s1', simpleSig(['', ''], false), renderDOMIntoSelector],
+  ['snabbdom.span', '<span> $s0 </span>', simpleSig([''], true), (text: string) => h('span', {}, text)],
+  ['snabbdom.div', '<div> $s0 </div>', simpleSig([''], true), (children: ReadonlyArray<any>) => h('div', {}, children)],
+  ['snabbdom.input', '<input prefill= $s0 text→ $o1 />', {
     kind: NodeKind.Signature,
     streamParams: [
       {
         kind: NodeKind.SignatureStreamParameter,
-        name: {kind: NodeKind.Name, text: 'prefill'},
       },
     ],
     funcParams: [],
     yields: [
       {
         kind: NodeKind.SignatureYield,
-        name: {kind: NodeKind.Name, text: 'elem'},
       },
       {
         kind: NodeKind.SignatureYield,
-        name: {kind: NodeKind.Name, text: 'text'},
       },
     ],
-  }, '', (prefill: string): any => {
+  }, (prefill: string): any => {
     const safePrefill = (typeof prefill === 'string') ? prefill : '';
     const [text, inputHandler] = useCallbackReducer<string, any>((_, e) => {
       const newText = e.target.value;
@@ -122,106 +104,80 @@ const nativeFunctions: Array<[string, string, SignatureNode, string, Function]> 
     ];
   }],
 
-  // multiple yields
-  ['trig', 'trig', {
-    kind: NodeKind.Signature,
-    streamParams: [
-      {
-        kind: NodeKind.SignatureStreamParameter,
-        name: {kind: NodeKind.Name, text: 'radians'},
-      },
-    ],
-    funcParams: [],
-    yields: [
-      {
-        kind: NodeKind.SignatureYield,
-        name: {kind: NodeKind.Name, text: 'sin'},
-      },
-      {
-        kind: NodeKind.SignatureYield,
-        name: {kind: NodeKind.Name, text: 'cos'},
-      },
-      {
-        kind: NodeKind.SignatureYield,
-        name: {kind: NodeKind.Name, text: 'tan'},
-      },
-    ],
-  }, '', (v: number) => [Math.sin(v), Math.cos(v), Math.tan(v)]],
-
   // higher-order
-  ['streamMap', 'map', {
+  ['streamMap', 'map over $s0 with $f0', {
     kind: NodeKind.Signature,
     streamParams: [
       {
         kind: NodeKind.SignatureStreamParameter,
-        name: {kind: NodeKind.Name, text: 'array'},
       },
     ],
     funcParams: [
       {
         kind: NodeKind.SignatureFunctionParameter,
-        name: {kind: NodeKind.Name, text: 'xform one value'},
         sig: {
           kind: NodeKind.Signature,
           streamParams: [
             {
               kind: NodeKind.SignatureStreamParameter,
-              name: {kind: NodeKind.Name, text: 'value'},
             }
           ],
           funcParams: [],
           yields: [
             {
               kind: NodeKind.SignatureYield,
-              name: {kind: NodeKind.Name, text: '?'},
             }
           ],
+        },
+        templateNames: {
+          streamParams: ['elem'],
+          funcParams: [],
+          yields: ['new elem'],
         },
       },
     ],
     yields: [
       {
         kind: NodeKind.SignatureYield,
-        name: {kind: NodeKind.Name, text: '?'},
       },
     ],
-  }, '', (arr: Array<any>, f: (v: any) => any) => streamMap(f, arr)],
+  }, (arr: Array<any>, f: (v: any) => any) => streamMap(f, arr)],
 
-  ['audioDriver', 'play computed audio', {
+  ['audioDriver', 'play audio, computing each sample as $f0', {
     kind: NodeKind.Signature,
     streamParams: [],
     funcParams: [
       {
         kind: NodeKind.SignatureFunctionParameter,
-        name: {kind: NodeKind.Name, text: 'compute one sample'},
         sig: {
           kind: NodeKind.Signature,
           streamParams: [
             {
               kind: NodeKind.SignatureStreamParameter,
-              name: {kind: NodeKind.Name, text: 'audio time'},
             },
             {
               kind: NodeKind.SignatureStreamParameter,
-              name: {kind: NodeKind.Name, text: 'next frame'},
             },
             {
               kind: NodeKind.SignatureStreamParameter,
-              name: {kind: NodeKind.Name, text: 'sample rate'},
             },
           ],
           funcParams: [],
           yields: [
             {
               kind: NodeKind.SignatureYield,
-              name: {kind: NodeKind.Name, text: '?'},
             }
           ],
+        },
+        templateNames: {
+          streamParams: ['audio time', 'next frame', 'sample rate'],
+          funcParams: [],
+          yields: ['sample'],
         },
       },
     ],
     yields: [],
-  }, 'play generated audio $f0', audioDriver],
+  }, audioDriver],
 ];
 
 export default nativeFunctions;

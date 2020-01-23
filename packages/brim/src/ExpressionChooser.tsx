@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './ExpressionChooser.css';
-import { generateStreamId, Node, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, SignatureFunctionParameterNode, generateFunctionId, StreamID, streamExprReturnedId, StreamExpressionNode, generateApplicationId, ApplicationOut } from './Tree';
+import { generateStreamId, Node, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, SignatureFunctionParameterNode, generateFunctionId, StreamID, StreamExpressionNode, generateApplicationId, ApplicationOut, FunctionExpressionNode } from './Tree';
+import { streamExprReturnedId, functionReturnedIndex } from './TreeUtil';
 import { fuzzy_match } from './vendor/fts_fuzzy_match';
 import { EnvironmentLookups, StreamDefinition } from './EditReducer';
 import { formatStreamDefinition } from './TreeView';
@@ -39,7 +40,6 @@ interface AppChoice {
   readonly type: 'app';
   readonly text: string;
   readonly funcDefNode: FunctionDefinitionNode;
-  readonly retIdx: number | undefined;
 }
 
 type Choice = UndefinedChoice | NumberChoice | TextChoice | BooleanChoice | BindChoice | StreamRefChoice | AppChoice;
@@ -213,36 +213,27 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
       });
     }
 
-    const namedFunctions: Array<[string, [FunctionDefinitionNode, number | undefined]]> = [];
+    const namedFunctions: Array<[string, FunctionDefinitionNode]> = [];
     functionEnv.forEach((defNode, ) => {
-      if (defNode.name) {
-        const defName = defNode.name.text;
-        const yields = defNode.sig.yields;
+      if (defNode.format) {
+        const defName = defNode.format;
         if (atRoot) {
-          namedFunctions.push([defName, [defNode, undefined]]);
+          namedFunctions.push([defName, defNode]);
         } else {
-          if (yields.length > 0) {
-            yields.forEach((y, idx) => {
-              let yieldExt: string;
-              if (!y.name && (yields.length === 1)) {
-                yieldExt = '';
-              } else {
-                yieldExt = '.' + (y.name ? y.name.text : idx.toString());
-              }
-              namedFunctions.push([defName + yieldExt, [defNode, idx]]);
-            });
+          const retIdx = functionReturnedIndex(defNode);
+          if (retIdx !== undefined) {
+            namedFunctions.push([defName, defNode]);
           }
         }
       }
     });
     const functionSearchResults = fuzzySearch(text, namedFunctions);
     for (const result of functionSearchResults) {
-      const [funcDefNode, retIdx] = result.data;
+      const funcDefNode = result.data;
       choices.push({
         type: 'app',
         text: result.name,
         funcDefNode,
-        retIdx,
       });
     }
 
@@ -364,11 +355,13 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
           break;
 
         case 'app': {
+          const retIdx = functionReturnedIndex(choice.funcDefNode);
+
           const outs: ReadonlyArray<ApplicationOut> = choice.funcDefNode.sig.yields.map((_, idx) => {
-            const returned = (idx === 0); // TODO: don't hardcode return index to 0
+            const thisYieldReturned = (idx === retIdx);
             return {
-              sid: returned ? newSid : generateStreamId(),
-              name: returned ? null : {
+              sid: thisYieldReturned ? newSid : generateStreamId(),
+              name: thisYieldReturned ? null : {
                 kind: NodeKind.Name,
                 text: '',
               },
@@ -382,6 +375,37 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
             }
           ));
 
+          const fargs: ReadonlyArray<FunctionExpressionNode> = choice.funcDefNode.sig.funcParams.map((param: SignatureFunctionParameterNode) => {
+            return {
+              kind: NodeKind.TreeFunctionDefinition,
+              fid: generateFunctionId(),
+              sig: param.sig,
+              format: '',
+              sparams: param.templateNames.streamParams.map(name => ({
+                kind: NodeKind.StreamParameter,
+                sid: generateStreamId(),
+                name: { kind: NodeKind.Name, text: name },
+              })),
+              fparams: param.templateNames.funcParams.map(name => ({
+                kind: NodeKind.FunctionParameter,
+                fid: generateFunctionId(),
+                name: { kind: NodeKind.Name, text: name },
+              })),
+              body: {
+                kind: NodeKind.TreeFunctionBody,
+                exprs: param.templateNames.yields.map((name, idx) => ({
+                  kind: NodeKind.YieldExpression,
+                  idx,
+                  name: { kind: NodeKind.Name, text: name },
+                  expr: {
+                    kind: NodeKind.UndefinedLiteral,
+                    sid: generateStreamId(),
+                  },
+                })),
+              },
+            }
+          });
+
           const n: ApplicationNode = {
             kind: NodeKind.Application,
             aid: generateApplicationId(),
@@ -391,28 +415,7 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
               ref: choice.funcDefNode.fid,
             },
             sargs,
-            fargs: choice.funcDefNode.sig.funcParams.map((param: SignatureFunctionParameterNode) => {
-              return {
-                kind: NodeKind.TreeFunctionDefinition,
-                fid: generateFunctionId(),
-                name: {kind: NodeKind.Name, text: param.name.text},
-                sig: param.sig,
-                format: '',
-                spids: param.sig.streamParams.map(() => generateStreamId()),
-                fpids: param.sig.funcParams.map(() => generateFunctionId()),
-                body: {
-                  kind: NodeKind.TreeFunctionBody,
-                  exprs: param.sig.yields.map((y, idx) => ({
-                    kind: NodeKind.YieldExpression,
-                    idx,
-                    expr: {
-                      kind: NodeKind.UndefinedLiteral,
-                      sid: generateStreamId(),
-                    },
-                  })),
-                },
-              }
-            }),
+            fargs,
           };
           newNode = n;
           break;

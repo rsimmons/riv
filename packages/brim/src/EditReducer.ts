@@ -186,15 +186,14 @@ export function computeEnvironmentLookups(mainDefinition: TreeFunctionDefinition
     treeDefToStreamEnv.set(def, streamEnv);
     treeDefToFunctionEnv.set(def, functionEnv);
 
-    def.sig.streamParams.forEach((sparam, idx) => {
-      const sid = def.spids[idx];
+    def.sparams.forEach(({sid, name}, idx) => {
       if (streamEnv.has(sid)) {
         throw new Error();
       }
       streamEnv.set(sid, {
         kind: 'param',
         sid,
-        name: sparam.name && sparam.name.text,
+        name: name.text,
       });
     });
 
@@ -898,15 +897,14 @@ export function reducer(state: State, action: Action): State {
 const nativeFunctionEnvironment: Environment<FunctionID, Function> = new Environment();
 nativeFunctionEnvironment.set('id', (x: any) => x);
 nativeFunctionEnvironment.set('Array_of', Array.of);
-globalNativeFunctions.forEach(([id, , , , jsFunc]) => {
+globalNativeFunctions.forEach(([id, , , jsFunc]) => {
   nativeFunctionEnvironment.set(id, jsFunc);
 });
 
 function initialStateFromDefinition(mainDefinition: TreeFunctionDefinitionNode, programInfo: ProgramInfo): State {
-  const nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode> = globalNativeFunctions.map(([fid, desc, signature, format, ]) => ({
+  const nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode> = globalNativeFunctions.map(([fid, format, signature, ]) => ({
     kind: NodeKind.NativeFunctionDefinition,
     fid,
-    name: { kind: NodeKind.Name, text: desc },
     sig: signature,
     format,
   }));
@@ -930,7 +928,6 @@ const mdId = generateStreamId();
 const INITIAL_MAIN: TreeFunctionDefinitionNode = {
   kind: NodeKind.TreeFunctionDefinition,
   fid: generateFunctionId(),
-  name: {kind: NodeKind.Name, text: 'main'},
   sig: {
     kind: NodeKind.Signature,
     streamParams: [],
@@ -938,8 +935,8 @@ const INITIAL_MAIN: TreeFunctionDefinitionNode = {
     yields: [],
   },
   format: '',
-  spids: [],
-  fpids: [],
+  sparams: [],
+  fparams: [],
   body: {
     kind: NodeKind.TreeFunctionBody,
     exprs: [

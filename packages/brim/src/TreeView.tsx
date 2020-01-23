@@ -7,7 +7,7 @@ import { EnvironmentLookups, StreamDefinition } from './EditReducer';
 const BOUND_NAME_BOX_COLOR = '#d1e6ff';
 const STREAM_REFERENCE_BOX_COLOR = '#a1cdff';
 
-function getFunctionNodeAndDisplayName(funcRef: FunctionExpressionNode, envLookups: EnvironmentLookups): [FunctionDefinitionNode, string] {
+function getFunctionNodeFromRef(funcRef: FunctionExpressionNode, envLookups: EnvironmentLookups): FunctionDefinitionNode {
   if (funcRef.kind !== NodeKind.FunctionReference) {
     throw new Error();
   }
@@ -27,9 +27,7 @@ function getFunctionNodeAndDisplayName(funcRef: FunctionExpressionNode, envLooku
     throw new Error();
   }
 
-  const displayName = functionNode.name ? functionNode.name.text : ('<function ' + funcRef.ref + '>');
-
-  return [functionNode, displayName];
+  return functionNode;
 }
 
 export function formatStreamDefinition(sdef: StreamDefinition, envLookups: EnvironmentLookups): [string, React.ReactNode] {
@@ -60,19 +58,8 @@ export function formatStreamDefinition(sdef: StreamDefinition, envLookups: Envir
             throw new Error(); // not possible?
 
           case NodeKind.Application: {
-            const [funcDef, fname] = getFunctionNodeAndDisplayName(sdef.expr.func, envLookups);
-            s = fname;
-            if ((sdef.yieldIdx !== undefined) && !((funcDef.sig.yields.length === 1) && !funcDef.sig.yields[0].name)) {
-              let yieldDisplayStr: string;
-
-              const yieldNameNode = funcDef.sig.yields[sdef.yieldIdx].name;
-              if (yieldNameNode) {
-                yieldDisplayStr = yieldNameNode.text;
-              } else {
-                yieldDisplayStr = sdef.yieldIdx.toString();
-              }
-              s += '.' + yieldDisplayStr;
-            }
+            const funcDef = getFunctionNodeFromRef(sdef.expr.func, envLookups);
+            s = funcDef.format;
             break;
           }
 
@@ -372,7 +359,7 @@ const sizedTemplateView = ({node, template, nodeMap, ctx}: {node: Node, template
   const MAX_WIDTH = 30;
 
   const createLayout = (trySingleLine: boolean): [RowLayout, number | undefined] => {
-    const splits = template.split(/(\$[a-z][0-9]+|\|)/).map(s => s.trim()).filter(s => s);
+    const splits = template.split(/(\$[a-z0-9]+|\|)/).map(s => s.trim()).filter(s => s);
 
     const layout: Array<RowLayoutRow> = [];
     let accumItems: Array<string | TreeAndSizedNodes> = [];
@@ -445,7 +432,7 @@ const sizedTemplateView = ({node, template, nodeMap, ctx}: {node: Node, template
 }
 
 const sizedNameView = ({node, ctx}: {node: NameNode, ctx: TreeViewContext}): SizedReactNode => {
-  return sizedSimpleNodeView({treeNode: node, content: node.text, bgColor: BOUND_NAME_BOX_COLOR, ctx});
+  return sizedSimpleNodeView({treeNode: node, content: node.text || '\xa0\xa0\xa0\xa0\xa0\xa0', bgColor: BOUND_NAME_BOX_COLOR, ctx});
 };
 
 const sizedStreamReferenceView = ({node, ctx}: {node: StreamReferenceNode, ctx: TreeViewContext}): SizedReactNode => {
@@ -472,14 +459,7 @@ const sizedApplicationView = ({node, ctx}: {node: ApplicationNode, ctx: TreeView
     throw new Error('unimplemented');
   }
 
-  const [functionNode, displayName] = getFunctionNodeAndDisplayName(node.func, ctx.envLookups);
-
-  if (functionNode.sig.streamParams.length !== node.sargs.length) {
-    throw new Error('stream params and args length mismatch');
-  }
-  if (functionNode.sig.funcParams.length !== node.fargs.length) {
-    throw new Error('function params and args length mismatch');
-  }
+  const functionNode = getFunctionNodeFromRef(node.func, ctx.envLookups);
 
   const nodeMap: Map<string, TreeAndSizedNodes> = new Map();
 
@@ -575,11 +555,17 @@ const sizedBodyExpressionView = ({node, ctx}: {node: BodyExpressionNode, ctx: Tr
   } else if (node.kind === NodeKind.YieldExpression) {
     return sizedTemplateView({
       node,
-      template: 'yield $s0', // TODO: if there are multiple yields, clarify which
-      nodeMap: new Map([['s0', {
-        treeNode: node.expr,
-        sizedReactNode: sizedStreamExpressionView({node: node.expr, ctx}),
-      }]]),
+      template: '$name ← $expr',
+      nodeMap: new Map([
+        ['name', {
+          treeNode: node.name,
+          sizedReactNode: sizedNameView({node: node.name, ctx}),
+        }],
+        ['expr', {
+          treeNode: node.expr,
+          sizedReactNode: sizedStreamExpressionView({node: node.expr, ctx}),
+        }],
+      ]),
       ctx,
     });
   } else {
@@ -590,32 +576,15 @@ const sizedBodyExpressionView = ({node, ctx}: {node: BodyExpressionNode, ctx: Tr
 };
 
 const sizedTreeFunctionDefinitionView = ({node, ctx}: {node: TreeFunctionDefinitionNode, ctx: TreeViewContext}): SizedReactNode => {
-  const nameItem: TreeAndSizedNodes = {
-    treeNode: node.name,
-    sizedReactNode: sizedNameView({node: node.name, ctx}),
-  };
+  const layout: Array<RowLayoutRow> = [];
 
-  let layout: Array<RowLayoutRow>;
-
-  if ((node.sig.streamParams.length === 0) && (node.sig.funcParams.length === 0)) {
-    layout = [
-      {indent: false, items: [
-        'define',
-        nameItem,
-        'as',
-      ]},
-    ];
-  } else {
+  if ((node.sparams.length > 0) || (node.fparams.length > 0)) {
     // Some parameters
-    layout = [];
-
     layout.push({indent: false, items: [
-      'define',
-      nameItem,
       'given',
     ]});
 
-    node.sig.streamParams.forEach(sparam => {
+    node.sparams.forEach(sparam => {
       layout.push({
         indent: true,
         items: [{
@@ -625,14 +594,20 @@ const sizedTreeFunctionDefinitionView = ({node, ctx}: {node: TreeFunctionDefinit
       });
     });
 
-    layout.push({indent: false, items: [
-      'as',
-    ]});
+    node.fparams.forEach(fparam => {
+      layout.push({
+        indent: true,
+        items: [{
+          treeNode: fparam.name,
+          sizedReactNode: sizedNameView({node: fparam.name, ctx}),
+        }],
+      });
+    });
   }
 
   for (const bodyExpr of node.body.exprs) {
     layout.push({
-      indent: true,
+      indent: false,
       items: [
         {
           treeNode: bodyExpr,

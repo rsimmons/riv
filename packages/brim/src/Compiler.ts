@@ -1,4 +1,5 @@
-import { StreamID, FunctionID, Node, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, NodeKind, isFunctionDefinitionNode, isStreamExpressionNode, streamExprReturnedId, functionExprId } from './Tree';
+import { StreamID, FunctionID, Node, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, NodeKind, isFunctionDefinitionNode, isStreamExpressionNode } from './Tree';
+import { streamExprReturnedId, functionExprId } from './TreeUtil';
 import { CompiledDefinition, ConstStreamSpec, LocalFunctionDefinition, AppSpec } from './CompiledDefinition';
 import Environment from './Environment';
 import { visitChildren } from './Traversal';
@@ -17,27 +18,18 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
   const localStreamIds: Set<StreamID> = new Set();
   const localFunctionIds: Set<FunctionID> = new Set();
 
+  // TODO: verify that internal parameters (sparams, fparams) match the signature
+
   // Identify locally defined stream and function ids
-  definition.sig.streamParams.forEach((_sparam, idx) => {
-    const spid = definition.spids[idx];
-
-    if (streamEnvironment.has(spid)) {
+  definition.sparams.forEach(({sid}) => {
+    if (streamEnvironment.has(sid)) {
       throw new Error('must be unique');
     }
-    streamEnvironment.set(spid, null);
-    localStreamIds.add(spid);
+    streamEnvironment.set(sid, null);
+    localStreamIds.add(sid);
   });
 
-  /*
-  definition.sig.funcParams.forEach((fparam, idx) => {
-    const fpid = definition.fpids[idx];
-    if (functionEnvironment.has(fpid)) {
-      throw new Error('must be unique');
-    }
-    functionEnvironment.set(fpid, fparam.sig);
-    localFunctionIds.add(fpid);
-  });
-  */
+  // TODO: handle fparams as well
 
   const visitToFindLocals = (node: Node): void => {
     if (isStreamExpressionNode(node)) {
@@ -252,8 +244,8 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
   // TODO: verify that yieldIds doesn't have any "holes" and matches signature
 
   const compiledDefinition: CompiledDefinition = {
-    streamParamIds: definition.spids,
-    funcParamIds: definition.fpids,
+    streamParamIds: definition.sparams.map(({sid}) => sid),
+    funcParamIds: definition.fparams.map(({fid}) => fid),
     constStreams,
     apps,
     localDefs,

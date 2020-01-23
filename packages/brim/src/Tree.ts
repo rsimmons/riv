@@ -43,11 +43,13 @@ export enum NodeKind {
   StreamReference = 'sref',
   Application = 'app',
   FunctionReference = 'fref',
-  SignatureStreamParameter = 'sparam',
-  SignatureFunctionParameter = 'fparam',
-  SignatureYield = 'yield',
+  SignatureStreamParameter = 'sig-sparam',
+  SignatureFunctionParameter = 'sig-fparam',
+  SignatureYield = 'sig-yield',
   Signature = 'sig',
-  YieldExpression = 'yexp',
+  YieldExpression = 'yield',
+  StreamParameter = 'sparam',
+  FunctionParameter = 'fparam',
   TreeFunctionBody = 'tbody',
   TreeFunctionDefinition = 'tdef',
   NativeFunctionDefinition = 'ndef',
@@ -117,51 +119,32 @@ export function isStreamExpressionNode(node: Node): node is StreamExpressionNode
   return isSimpleLiteralNode(node) || (node.kind === NodeKind.StreamReference) || (node.kind === NodeKind.Application);
 }
 
-export function streamExprReturnedId(node: StreamExpressionNode): StreamID | undefined {
-  switch (node.kind) {
-    case NodeKind.UndefinedLiteral:
-    case NodeKind.NumberLiteral:
-    case NodeKind.TextLiteral:
-    case NodeKind.BooleanLiteral:
-      return node.sid;
-
-    case NodeKind.StreamReference:
-      return node.ref;
-
-    case NodeKind.Application:
-      for (const out of node.outs) {
-        if (!out.name) {
-          return out.sid;
-        }
-      }
-      return undefined;
-
-    default: {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const exhaustive: never = node; // this will cause a type error if we haven't handled all cases
-      throw new Error();
-    }
-  }
-}
-
 /**
  * FUNCTION NODES
  */
 
 export interface SignatureStreamParameterNode {
   readonly kind: NodeKind.SignatureStreamParameter;
-  readonly name: NameNode;
+  // eventually, type info will go here
+}
+
+// When we auto-generate a function as an argument for this function-parameter,
+//  prefill its (internal) parameter/yield names as such.
+export interface SignatureFunctionParameterTemplateNames {
+  readonly streamParams: ReadonlyArray<string>;
+  readonly funcParams: ReadonlyArray<string>;
+  readonly yields: ReadonlyArray<string>;
 }
 
 export interface SignatureFunctionParameterNode {
   readonly kind: NodeKind.SignatureFunctionParameter;
-  readonly name: NameNode;
   readonly sig: SignatureNode;
+  readonly templateNames: SignatureFunctionParameterTemplateNames;
 }
 
 export interface SignatureYieldNode {
   readonly kind: NodeKind.SignatureYield;
-  readonly name: NameNode;
+  // eventually, type info will go here
 }
 
 export interface SignatureNode {
@@ -174,6 +157,7 @@ export interface SignatureNode {
 export interface YieldExpressionNode {
   readonly kind: NodeKind.YieldExpression;
   readonly idx: number;
+  readonly name: NameNode;
   readonly expr: StreamExpressionNode;
 }
 
@@ -187,22 +171,32 @@ export interface TreeFunctionBodyNode {
   readonly exprs: ReadonlyArray<BodyExpressionNode>;
 }
 
+export interface StreamParameterNode {
+  readonly kind: NodeKind.StreamParameter;
+  readonly sid: StreamID;
+  readonly name: NameNode;
+}
+
+export interface FunctionParameterNode {
+  readonly kind: NodeKind.FunctionParameter;
+  readonly fid: FunctionID;
+  readonly name: NameNode;
+}
+
 export interface TreeFunctionDefinitionNode {
   readonly kind: NodeKind.TreeFunctionDefinition;
   readonly fid: FunctionID;
-  readonly name: NameNode;
   readonly sig: SignatureNode;
   readonly format: string;
 
-  readonly spids: ReadonlyArray<StreamID>;
-  readonly fpids: ReadonlyArray<FunctionID>;
+  readonly sparams: ReadonlyArray<StreamParameterNode>;
+  readonly fparams: ReadonlyArray<FunctionParameterNode>;
   readonly body: TreeFunctionBodyNode;
 }
 
 export interface NativeFunctionDefinitionNode {
   readonly kind: NodeKind.NativeFunctionDefinition;
   readonly fid: FunctionID;
-  readonly name: NameNode;
   readonly sig: SignatureNode;
   readonly format: string;
 
@@ -224,21 +218,4 @@ export function isFunctionExpressionNode(node: Node): node is FunctionExpression
   return (node.kind === NodeKind.FunctionReference) || isFunctionDefinitionNode(node);
 }
 
-export function functionExprId(node: FunctionExpressionNode): FunctionID {
-  switch (node.kind) {
-    case NodeKind.FunctionReference:
-      return node.ref;
-
-    case NodeKind.TreeFunctionDefinition:
-    case NodeKind.NativeFunctionDefinition:
-      return node.fid;
-
-    default: {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const exhaustive: never = node; // this will cause a type error if we haven't handled all cases
-      throw new Error();
-    }
-  }
-}
-
-export type Node = NameNode | SignatureNode | TreeFunctionBodyNode | BodyExpressionNode | SignatureStreamParameterNode | SignatureFunctionParameterNode | SignatureYieldNode;
+export type Node = NameNode | SignatureNode | StreamParameterNode | FunctionParameterNode | TreeFunctionBodyNode | BodyExpressionNode | SignatureStreamParameterNode | SignatureFunctionParameterNode | SignatureYieldNode;
