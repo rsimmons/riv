@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import './ExpressionChooser.css';
-import { generateStreamId, Node, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, SignatureFunctionParameterNode, generateFunctionId, StreamID, StreamExpressionNode, generateApplicationId, ApplicationOut, FunctionExpressionNode } from './Tree';
+import { generateStreamId, Node, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, SignatureFunctionParameterNode, generateFunctionId, StreamID, StreamExpressionNode, generateApplicationId, ApplicationOut, FunctionExpressionNode, NativeFunctionDefinitionNode } from './Tree';
 import { streamExprReturnedId, functionReturnedIndex } from './TreeUtil';
 import { fuzzy_match } from './vendor/fts_fuzzy_match';
-import { EnvironmentLookups, StreamDefinition } from './EditReducer';
+import { EnvironmentLookups, StreamDefinition, computeParentLookup, computeEnvironmentLookups } from './EditReducer';
+import { SelTree } from './State';
 
 interface UndefinedChoice {
   readonly type: 'undefined';
@@ -116,7 +117,15 @@ interface DropdownState {
   index: number;
 }
 
-const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: EnvironmentLookups, dispatch: (action: any) => void, compileError: string | undefined}> = ({ overNode, atRoot, envLookups, dispatch, compileError }) => {
+const ExpressionChooser: React.FC<{initSelTree: SelTree, nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>, dispatch: (action: any) => void, compileError: string | undefined}> = ({ initSelTree, nativeFunctions, dispatch, compileError }) => {
+  const parentLookup = useMemo(() => computeParentLookup(initSelTree.mainDefinition), [initSelTree.mainDefinition]);
+  const parent = parentLookup.get(initSelTree.selectedNode);
+  if (!parent) {
+    throw new Error();
+  }
+  const atRoot = parent.kind === NodeKind.TreeFunctionBody;
+  const envLookups = useMemo(() => computeEnvironmentLookups(initSelTree.mainDefinition, nativeFunctions), [initSelTree.mainDefinition, nativeFunctions]);
+
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     inputRef.current && inputRef.current.select();
@@ -129,26 +138,26 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
     }
   });
 
-  const [origNode] = useState(overNode);
-
-  if (!isStreamExpressionNode(origNode)) {
+  if (!isStreamExpressionNode(initSelTree.selectedNode)) {
     throw new Error();
   }
 
+  const initNode = initSelTree.selectedNode;
+
   const [text, setText] = useState(() => {
     // Initialize text based on node
-    switch (origNode.kind) {
+    switch (initNode.kind) {
       case NodeKind.UndefinedLiteral:
         return '';
 
       case NodeKind.NumberLiteral:
-        return origNode.val.toString();
+        return initNode.val.toString();
 
       case NodeKind.TextLiteral:
-        return origNode.val;
+        return initNode.val;
 
       case NodeKind.BooleanLiteral:
-        return origNode.val.toString();
+        return initNode.val.toString();
 
       case NodeKind.StreamReference:
       case NodeKind.Application:
@@ -156,7 +165,7 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
 
       default: {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const exhaustive: never = origNode; // this will cause a type error if we haven't handled all cases
+        const exhaustive: never = initNode; // this will cause a type error if we haven't handled all cases
         throw new Error();
       }
     }
@@ -179,7 +188,7 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
       });
     }
 
-    const nearestDef = envLookups.nodeToNearestTreeDef.get(overNode);
+    const nearestDef = envLookups.nodeToNearestTreeDef.get(initNode);
     if (!nearestDef) {
       throw new Error();
     }
@@ -194,7 +203,7 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
 
     const envStreams: Array<[string, StreamDefinition]> = [];
     streamEnv.forEach((sdef, ) => {
-      const selfRef = (sdef.kind === 'expr') && (sdef.expr === overNode);
+      const selfRef = (sdef.kind === 'expr') && (sdef.expr === initNode);
       if (!selfRef) {
         envStreams.push([sdef.name.text || '<unnamed>', sdef]);
       }
@@ -247,7 +256,7 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
       value: text,
     });
 
-    if (text.trim() !== '') {
+    if (atRoot && text.trim() !== '') {
       choices.push({
         type: 'bind',
         name: text.trim(),
@@ -267,12 +276,12 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
   const realizeChoice = (state: DropdownState): void => {
     const choice = state.choices[state.index];
 
-    if (isStreamExpressionNode(origNode)) {
+    if (isStreamExpressionNode(initNode)) {
       let newNode: Node;
-      const newSid: StreamID = (origNode.kind === NodeKind.StreamReference) ? generateStreamId() : (streamExprReturnedId(origNode) || generateStreamId());
+      const newSid: StreamID = (initNode.kind === NodeKind.StreamReference) ? generateStreamId() : (streamExprReturnedId(initNode) || generateStreamId());
 
       let origStreamChildren: ReadonlyArray<StreamExpressionNode>;
-      switch (origNode.kind) {
+      switch (initNode.kind) {
         case NodeKind.UndefinedLiteral:
         case NodeKind.NumberLiteral:
         case NodeKind.TextLiteral:
@@ -282,12 +291,12 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
           break;
 
         case NodeKind.Application:
-          origStreamChildren = origNode.sargs;
+          origStreamChildren = initNode.sargs;
           break;
 
         default: {
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const exhaustive: never = origNode; // this will cause a type error if we haven't handled all cases
+          const exhaustive: never = initNode; // this will cause a type error if we haven't handled all cases
           throw new Error();
         }
       }
@@ -495,7 +504,7 @@ const ExpressionChooser: React.FC<{overNode: Node, atRoot: boolean, envLookups: 
   };
 
   return (
-    <div>
+    <div className="ExpressionChooser">
       <input className="ExpressionChooser-input" value={text} onChange={onChange} onKeyDown={onKeyDown} ref={inputRef} autoFocus />
       <ul className="ExpressionChooser-dropdown">
         {dropdownState.choices.map((choice, idx) => {

@@ -1,11 +1,12 @@
-import React, { useReducer, useRef, useEffect, useMemo } from 'react';
+import React, { useReducer, useRef, useEffect, useMemo, useLayoutEffect } from 'react';
 import { HotKeys, ObserveKeys } from "react-hotkeys";
 import { initialState, reducer, computeEnvironmentLookups, computeParentLookup, getReferentOfSelected } from './EditReducer';
 import { StoragePanel } from './StoragePanel';
 import './Editor.css';
 import { TreeFunctionDefinitionView, TreeViewContext } from './TreeView';
-import { Node, TreeFunctionDefinitionNode } from './Tree';
-import { ProgramInfo } from './State';
+import { Node, TreeFunctionDefinitionNode, NodeKind, generateFunctionId } from './Tree';
+import { ProgramInfo, SelTree } from './State';
+import ExpressionChooser from './ExpressionChooser';
 
 const keyMap = {
   TOGGLE_EDIT: 'enter',
@@ -82,11 +83,9 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
     dispatch({type: 'LOAD_PROGRAM', newProgram: {info: info, mainDefinition}});
   };
 
-  const displayedSelTree = state.editing ? state.editing.curSelTree : state.stableSelTree;
-  const editing = !!state.editing;
+  const displayedSelTree = state.editing ? state.editing.initSelTree : state.stableSelTree;
 
   const envLookups = useMemo(() => computeEnvironmentLookups(displayedSelTree.mainDefinition, state.nativeFunctions), [displayedSelTree.mainDefinition, state.nativeFunctions]);
-  const parentLookup = useMemo(() => computeParentLookup(displayedSelTree.mainDefinition), [displayedSelTree.mainDefinition]);
 
   const referentNode = getReferentOfSelected(displayedSelTree, envLookups);
 
@@ -95,21 +94,38 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
       selected: displayedSelTree.selectedNode,
       referent: referentNode,
     },
-    editing,
-    compileError: state.editing ? state.editing.compileError : undefined,
     // clipboardTopNode: (state.clipboardStack.length > 0) ? state.derivedLookups.streamIdToNode!.get(state.clipboardStack[state.clipboardStack.length-1].streamId) : null,
     // clipboardRestNodes: state.clipboardStack.slice(0, -1).map(frame => state.derivedLookups.streamIdToNode!.get(frame.streamId)),
     envLookups,
-    parentLookup,
-    dispatch,
-    onSelectNode: (node: Node) => {
+    setSelectedNode: (node: Node) => {
       dispatch({
         type: 'SET_SELECTED_NODE',
         newNode: node,
       });
     },
-    focusSelected: !editing && (autoFocus || !firstRender.current),
+    focusSelected: !state.editing && (autoFocus || !firstRender.current),
   };
+
+  const positionedForEditSessionId: React.MutableRefObject<string | undefined> = useRef();
+
+  // Position the chooser
+  useLayoutEffect(() => {
+    const editingSessionId = state.editing ? state.editing.sessionId : undefined;
+
+    if (positionedForEditSessionId.current !== editingSessionId) {
+      // NOTE: Directly referring to these class names is hacky
+      const cpElem = document.querySelector('.Editor-chooser-positioner') as HTMLElement;
+      const selElem = document.querySelector('.TreeView-selected');
+      if (cpElem && selElem) {
+        // const cpRect = cpElem.getBoundingClientRect();
+        const selRect = selElem.getBoundingClientRect();
+        cpElem.style.left = selRect.left + 'px';
+        cpElem.style.top = (selRect.bottom + 2) + 'px';
+      }
+
+      positionedForEditSessionId.current = editingSessionId;
+    }
+  });
 
   return (
     <div className="Editor">
@@ -120,6 +136,11 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
         <ObserveKeys only={CATCH_IN_INPUTS}>
           <div className="Editor-workspace" onKeyDown={onKeyDown} tabIndex={0} ref={editorElem}>
             <TreeFunctionDefinitionView node={displayedSelTree.mainDefinition} ctx={treeViewCtxData} />
+            {state.editing && (
+              <div className="Editor-chooser-positioner" style={{position: 'absolute'}}>
+                <ExpressionChooser key={state.editing.sessionId} initSelTree={state.editing.initSelTree} nativeFunctions={state.nativeFunctions} dispatch={dispatch} compileError={state.editing.compileError} />
+              </div>
+            )}
           </div>
         </ObserveKeys>
       </HotKeys>

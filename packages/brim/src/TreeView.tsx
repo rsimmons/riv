@@ -1,8 +1,7 @@
 import React, { useState, useRef, useLayoutEffect } from 'react';
 import { Node, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, isFunctionExpressionNode, FunctionExpressionNode, isFunctionDefinitionNode, StreamReferenceNode, NameNode, ApplicationNode } from './Tree';
-import ExpressionChooser from './ExpressionChooser';
 import './TreeView.css';
-import { EnvironmentLookups, StreamDefinition } from './EditReducer';
+import { EnvironmentLookups } from './EditReducer';
 
 const BOUND_NAME_BOX_COLOR = '#d1e6ff';
 const STREAM_REFERENCE_BOX_COLOR = '#a1cdff';
@@ -37,12 +36,8 @@ interface MarkedNodes {
 
 export interface TreeViewContext {
   markedNodes: MarkedNodes;
-  editing: boolean;
-  compileError: string | undefined;
   envLookups: EnvironmentLookups;
-  parentLookup: Map<Node, Node>;
-  dispatch: (action: any) => void; // TODO: tighten up type
-  onSelectNode: (node: Node) => void;
+  setSelectedNode: (node: Node) => void;
   focusSelected: boolean;
 };
 
@@ -62,7 +57,7 @@ function useSelectable(node: Node, ref: React.RefObject<HTMLDivElement>, ctx: Tr
   const handleClick = (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
     if ((e.target as Element).tagName !== 'INPUT') {
       e.stopPropagation();
-      ctx.onSelectNode(node);
+      ctx.setSelectedNode(node);
     }
   };
 
@@ -161,10 +156,7 @@ const RowView: React.FC<{node: Node, layout: RowLayout, ctx: TreeViewContext}> =
     if ((e.key === 'ArrowRight') && (ref.current === e.target)) {
       if (selectionRows.length > 0) {
         e.stopPropagation();
-        ctx.dispatch({
-          type: 'SET_SELECTED_NODE',
-          newNode: selectionRows[0][0].treeNode,
-        });
+        ctx.setSelectedNode(selectionRows[0][0].treeNode);
       }
     } else if ((e.key === 'ArrowLeft') || (e.key === 'ArrowRight') || (e.key === 'ArrowUp') || (e.key === 'ArrowDown')) {
       let located = false;
@@ -182,41 +174,26 @@ const RowView: React.FC<{node: Node, layout: RowLayout, ctx: TreeViewContext}> =
             if (e.key === 'ArrowLeft') {
               e.stopPropagation();
               if (itemIdx === 0) {
-                ctx.dispatch({
-                  type: 'SET_SELECTED_NODE',
-                  newNode: node,
-                });
+                ctx.setSelectedNode(node);
               } else {
                 const newItemIdx = itemIdx - 1;
-                ctx.dispatch({
-                  type: 'SET_SELECTED_NODE',
-                  newNode: selectionRows[rowIdx][newItemIdx].treeNode,
-                });
+                ctx.setSelectedNode(selectionRows[rowIdx][newItemIdx].treeNode);
               }
             } else if (e.key === 'ArrowRight') {
               if (itemIdx < (row.length - 1)) {
                 e.stopPropagation();
                 const newItemIdx = itemIdx + 1;
-                ctx.dispatch({
-                  type: 'SET_SELECTED_NODE',
-                  newNode: selectionRows[rowIdx][newItemIdx].treeNode,
-                });
+                ctx.setSelectedNode(selectionRows[rowIdx][newItemIdx].treeNode);
               }
             } else if ((e.key === 'ArrowUp') && (rowIdx === 0)) {
               e.stopPropagation();
-              ctx.dispatch({
-                type: 'SET_SELECTED_NODE',
-                newNode: node,
-              });
+              ctx.setSelectedNode(node);
             } else if ((e.key === 'ArrowDown') && (rowIdx === (selectionRows.length - 1))) {
               // Ignore, maybe ancestor will handle
             } else if ((e.key === 'ArrowUp') || (e.key === 'ArrowDown')) {
               const newRowIdx = rowIdx + ((e.key === 'ArrowDown') ? 1 : -1);
               e.stopPropagation();
-              ctx.dispatch({
-                type: 'SET_SELECTED_NODE',
-                newNode: selectionRows[newRowIdx][0].treeNode,
-              });
+              ctx.setSelectedNode(selectionRows[newRowIdx][0].treeNode);
             }
           }
         });
@@ -436,57 +413,30 @@ const sizedApplicationView = ({node, ctx}: {node: ApplicationNode, ctx: TreeView
 };
 
 const sizedStreamExpressionView = ({node, ctx}: {node: StreamExpressionNode, ctx: TreeViewContext}): SizedReactNode => {
-  const nodeView: SizedReactNode = (() => {
-    switch (node.kind) {
-      case NodeKind.UndefinedLiteral:
-        return sizedSimpleNodeView({treeNode: node, content: '\xa0\xa0\xa0\xa0\xa0\xa0', bgColor: 'red', ctx});
+  switch (node.kind) {
+    case NodeKind.UndefinedLiteral:
+      return sizedSimpleNodeView({treeNode: node, content: '\xa0\xa0\xa0\xa0\xa0\xa0', bgColor: 'red', ctx});
 
-      case NodeKind.NumberLiteral:
-        return sizedSimpleNodeView({treeNode: node, content: node.val.toString(), bgColor: '#cce8cc', ctx});
+    case NodeKind.NumberLiteral:
+      return sizedSimpleNodeView({treeNode: node, content: node.val.toString(), bgColor: '#cce8cc', ctx});
 
-      case NodeKind.TextLiteral:
-        return sizedSimpleNodeView({treeNode: node, content: node.val, bgColor: '#cce8cc', ctx});
+    case NodeKind.TextLiteral:
+      return sizedSimpleNodeView({treeNode: node, content: node.val, bgColor: '#cce8cc', ctx});
 
-      case NodeKind.BooleanLiteral:
-        return sizedSimpleNodeView({treeNode: node, content: node.val.toString(), bgColor: '#cce8cc', ctx});
+    case NodeKind.BooleanLiteral:
+      return sizedSimpleNodeView({treeNode: node, content: node.val.toString(), bgColor: '#cce8cc', ctx});
 
-      case NodeKind.StreamReference:
-        return sizedStreamReferenceView({node, ctx});
+    case NodeKind.StreamReference:
+      return sizedStreamReferenceView({node, ctx});
 
-      case NodeKind.Application:
-        return sizedApplicationView({node, ctx});
+    case NodeKind.Application:
+      return sizedApplicationView({node, ctx});
 
-      default: {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const exhaustive: never = node; // this will cause a type error if we haven't handled all cases
-        throw new Error();
-      }
-    }
-  })();
-
-  const selected = (ctx.markedNodes.selected === node);
-  if (selected && ctx.editing) {
-    const parent = ctx.parentLookup.get(node);
-    if (!parent) {
+    default: {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const exhaustive: never = node; // this will cause a type error if we haven't handled all cases
       throw new Error();
     }
-    const atRoot = parent.kind === NodeKind.TreeFunctionBody;
-
-    const {singleLineWidth, reactNode} = nodeView;
-
-    return {
-      reactNode: (
-        <div style={{position: 'relative'}}>
-          {reactNode}
-          <div style={{position: 'absolute', top: 28}}>
-            <ExpressionChooser overNode={node} atRoot={atRoot} envLookups={ctx.envLookups} dispatch={ctx.dispatch} compileError={ctx.compileError} />
-          </div>
-        </div>
-      ),
-      singleLineWidth,
-    };
-  } else {
-    return nodeView;
   }
 }
 

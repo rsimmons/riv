@@ -19,7 +19,8 @@ export interface SelTree {
 }
 
 interface EditState {
-  origSelTree: SelTree;
+  sessionId: string; // lets us "reset" chooser when we jump to editing a different thing
+  initSelTree: SelTree;
   curSelTree: SelTree;
   compileError: string | undefined;
 }

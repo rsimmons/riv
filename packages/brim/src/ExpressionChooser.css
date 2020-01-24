@@ -1,11 +1,19 @@
+.ExpressionChooser {
+  background: white;
+  box-shadow: 0 0 1em 0 rgba(0, 0, 0, 0.5);
+  /* border: 1px solid #777; */
+}
+
 .ExpressionChooser-input {
-  border: 0;
+  border: 1px solid transparent;
   font-size: inherit;
   font-family: inherit;
   font-weight: inherit;
   background: #eee;
   color: #333;
   padding: 0.3em;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .ExpressionChooser-dropdown {
@@ -13,15 +21,16 @@
   /* margin: 2px 0 0 0; */
   margin: 0;
   padding: 0;
-  max-height: 20em;
+  max-height: 10em;
   overflow-y: scroll;
   background: #eee;
   color: #333;
+  border: 1px solid #777;
+  border-top: none;
 }
 
 .ExpressionChooser-dropdown li {
   padding: 0.3em 0.2em;
-  border-bottom: 1px solid #777;
 }
 
 .ExpressionChooser-dropdown li.ExpressionChooser-dropdown-selected {

@@ -1,6 +1,6 @@
 import genuid from './uid';
 import { State, ProgramInfo, SelTree } from './State';
-import { StreamID, FunctionID, generateStreamId, generateFunctionId, NodeKind, Node, TreeFunctionDefinitionNode, FunctionDefinitionNode, isFunctionDefinitionNode, StreamExpressionNode, NativeFunctionDefinitionNode, isStreamExpressionNode, UndefinedLiteralNode, BodyExpressionNode, generateApplicationId, isSimpleLiteralNode, NameNode, StreamParameterNode } from './Tree';
+import { StreamID, FunctionID, generateStreamId, generateFunctionId, NodeKind, Node, TreeFunctionDefinitionNode, FunctionDefinitionNode, isFunctionDefinitionNode, StreamExpressionNode, NativeFunctionDefinitionNode, isStreamExpressionNode, UndefinedLiteralNode, BodyExpressionNode, generateApplicationId, NameNode, StreamParameterNode } from './Tree';
 import { CompiledDefinition } from './CompiledDefinition';
 import { compileGlobalTreeDefinition, CompilationError } from './Compiler';
 import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
@@ -476,7 +476,8 @@ function attemptBeginEditSelected(state: State): State {
     return {
       ...state,
       editing: {
-        origSelTree: state.stableSelTree,
+        sessionId: genuid(),
+        initSelTree: state.stableSelTree,
         curSelTree: state.stableSelTree,
         compileError: undefined, // we assume
       },
@@ -520,15 +521,16 @@ function attemptInsertBeforeAfter(state: State, before: boolean): State {
       if (newMain.kind !== NodeKind.TreeFunctionDefinition) {
         throw new Error();
       }
-      const origSelTree = {
+      const initSelTree = {
         mainDefinition: newMain,
         selectedNode: newElem,
       };
       return {
         ...state,
         editing: {
-          origSelTree,
-          curSelTree: origSelTree,
+          sessionId: genuid(),
+          initSelTree,
+          curSelTree: initSelTree,
           compileError: undefined, // TODO: assumed, not sure if guaranteed safe
         },
       };
@@ -686,7 +688,8 @@ function attemptEditNextUndefinedOrInsert(state: State): State {
     return {
       ...state,
       editing: {
-        origSelTree: editSelTree,
+        sessionId: genuid(),
+        initSelTree: editSelTree,
         curSelTree: editSelTree,
         compileError: undefined,
       },
@@ -790,8 +793,8 @@ export function reducer(state: State, action: Action): State {
     if (!state.editing) {
       throw new Error();
     }
-    const parentLookup = computeParentLookup(state.editing.origSelTree.mainDefinition); // TODO: memoize
-    const newMain = replaceNode(state.editing.origSelTree.selectedNode, action.newNode!, parentLookup);
+    const parentLookup = computeParentLookup(state.editing.initSelTree.mainDefinition); // TODO: memoize
+    const newMain = replaceNode(state.editing.initSelTree.selectedNode, action.newNode!, parentLookup);
     if (newMain.kind !== NodeKind.TreeFunctionDefinition) {
       throw new Error();
     }
