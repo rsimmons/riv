@@ -272,7 +272,7 @@ export function getReferentOfSelected(selTree: SelTree, envLookups: EnvironmentL
         return streamDef.expr;
 
       case 'param':
-        return undefined; // TODO: can we return something useful?
+        return streamDef.param;
 
       default: {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
