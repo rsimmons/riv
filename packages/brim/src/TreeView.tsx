@@ -112,7 +112,7 @@ const SimpleNodeView: React.FC<{treeNode: Node, content: string, bgColor: string
   const ref = useRef<HTMLDivElement>(null);
   const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(treeNode, ref, ctx);
   return (
-    <div ref={ref} className={selectionClasses.concat(['TreeView-node']).join(' ')} {...selectionHandlers} style={{background: bgColor}}>{content}</div>
+    <div ref={ref} className={selectionClasses.concat(['TreeView-node', 'TreeView-simple-node']).join(' ')} {...selectionHandlers} style={{background: bgColor}}>{content}</div>
   );
 };
 
@@ -210,7 +210,7 @@ const RowView: React.FC<{node: Node, layout: RowLayout, groupingLines: boolean, 
         for (const item of row.items) {
           if (typeof item === 'string') {
             itemElems.push(
-              <div>{item}</div>
+              <div className="TreeView-row-view-plain-text">{item}</div>
             );
           } else {
             const ref: React.RefObject<HTMLDivElement> = React.createRef();
