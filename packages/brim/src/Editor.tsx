@@ -1,11 +1,11 @@
 import React, { useReducer, useRef, useEffect, useMemo, useLayoutEffect } from 'react';
 import { HotKeys, ObserveKeys } from "react-hotkeys";
-import { initialState, reducer, computeEnvironmentLookups, computeParentLookup, getReferentOfSelected } from './EditReducer';
+import { initialState, reducer, computeEnvironmentLookups, getReferentOfSelected } from './EditReducer';
 import { StoragePanel } from './StoragePanel';
 import './Editor.css';
 import { TreeFunctionDefinitionView, TreeViewContext } from './TreeView';
-import { Node, TreeFunctionDefinitionNode, NodeKind, generateFunctionId } from './Tree';
-import { ProgramInfo, SelTree } from './State';
+import { Node, TreeFunctionDefinitionNode } from './Tree';
+import { ProgramInfo } from './State';
 import ExpressionChooser from './ExpressionChooser';
 
 const keyMap = {

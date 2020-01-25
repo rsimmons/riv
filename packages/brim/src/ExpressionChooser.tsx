@@ -3,7 +3,7 @@ import './ExpressionChooser.css';
 import { generateStreamId, Node, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, SignatureFunctionParameterNode, generateFunctionId, StreamID, StreamExpressionNode, generateApplicationId, ApplicationOut, FunctionExpressionNode, NativeFunctionDefinitionNode } from './Tree';
 import { streamExprReturnedId, functionReturnedIndex } from './TreeUtil';
 import { fuzzy_match } from './vendor/fts_fuzzy_match';
-import { EnvironmentLookups, StreamDefinition, computeParentLookup, computeEnvironmentLookups } from './EditReducer';
+import { StreamDefinition, computeParentLookup, computeEnvironmentLookups } from './EditReducer';
 import { SelTree } from './State';
 
 interface UndefinedChoice {
