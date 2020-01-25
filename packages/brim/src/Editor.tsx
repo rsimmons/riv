@@ -1,6 +1,6 @@
 import React, { useReducer, useRef, useEffect, useMemo, useLayoutEffect } from 'react';
 import { HotKeys, ObserveKeys } from "react-hotkeys";
-import { initialState, reducer, computeEnvironmentLookups, getReferentOfSelected } from './EditReducer';
+import { initialState, reducer, computeEnvironmentLookups, getReferentNameNodeOfSelected } from './EditReducer';
 import { StoragePanel } from './StoragePanel';
 import './Editor.css';
 import { TreeFunctionDefinitionView, TreeViewContext } from './TreeView';
@@ -34,7 +34,7 @@ const COMMAND_CHARS = new Set([
 
 // By default, if an input element is focused, keys will be ignored. But we want some
 // of them to be processed even when an input is focused, and those ones are listed here.
-// Note that react-hotkeys only lets us list the individual keys here not "combinations"
+// Note that react-hotkeys only lets us list the individual keys herfe not "combinations"
 // as we would want.
 const CATCH_IN_INPUTS = [
   'Enter',
@@ -87,12 +87,12 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
 
   const envLookups = useMemo(() => computeEnvironmentLookups(displayedSelTree.mainDefinition, state.nativeFunctions), [displayedSelTree.mainDefinition, state.nativeFunctions]);
 
-  const referentNode = getReferentOfSelected(displayedSelTree, envLookups);
+  const referentNameNode = getReferentNameNodeOfSelected(displayedSelTree, envLookups);
 
   const treeViewCtxData: TreeViewContext = {
     markedNodes: {
       selected: displayedSelTree.selectedNode,
-      referent: referentNode,
+      referentName: referentNameNode,
     },
     // clipboardTopNode: (state.clipboardStack.length > 0) ? state.derivedLookups.streamIdToNode!.get(state.clipboardStack[state.clipboardStack.length-1].streamId) : null,
     // clipboardRestNodes: state.clipboardStack.slice(0, -1).map(frame => state.derivedLookups.streamIdToNode!.get(frame.streamId)),

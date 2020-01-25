@@ -31,7 +31,7 @@ function getFunctionNodeFromRef(funcRef: FunctionExpressionNode, envLookups: Env
 
 interface MarkedNodes {
   selected: Node;
-  referent: Node | undefined;
+  referentName: Node | undefined;
 }
 
 export interface TreeViewContext {
@@ -52,7 +52,7 @@ interface UseSelectableResult {
 }
 
 function useSelectable(node: Node, ref: React.RefObject<HTMLDivElement>, ctx: TreeViewContext): UseSelectableResult {
-  const [hovered, setHovered] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
 
   const handleClick = (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
     if ((e.target as Element).tagName !== 'INPUT') {
@@ -62,31 +62,31 @@ function useSelectable(node: Node, ref: React.RefObject<HTMLDivElement>, ctx: Tr
   };
 
   const handleMouseOver = (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
-    setHovered(true);
+    setIsHovered(true);
     e.stopPropagation();
   };
 
   const handleMouseOut = (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
-    setHovered(false);
+    setIsHovered(false);
   };
 
   const classes: Array<string> = [];
 
-  const selected = (ctx.markedNodes.selected === node);
-  const referent = (ctx.markedNodes.referent === node);
-  if (selected) {
+  const isSelected = (ctx.markedNodes.selected === node);
+  const isReferent = (ctx.markedNodes.referentName === node);
+  if (isSelected) {
     classes.push('TreeView-selected');
   }
-  if (referent) {
+  if (isReferent) {
     classes.push('TreeView-referent');
   }
-  if (hovered) {
+  if (isHovered) {
     classes.push('TreeView-hovered');
   }
   // TODO: handle clipboard-top, clipboard-rest?
 
   useLayoutEffect(() => {
-    if (ctx.focusSelected && selected && ref.current) {
+    if (ctx.focusSelected && isSelected && ref.current) {
       ref.current.focus();
     }
   });

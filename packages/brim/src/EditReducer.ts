@@ -251,7 +251,7 @@ export function computeEnvironmentLookups(mainDefinition: TreeFunctionDefinition
   };
 }
 
-export function getReferentOfSelected(selTree: SelTree, envLookups: EnvironmentLookups): Node | undefined {
+export function getReferentNameNodeOfSelected(selTree: SelTree, envLookups: EnvironmentLookups): NameNode | undefined {
   const node = selTree.selectedNode;
   if (node.kind === NodeKind.StreamReference) {
     const nearestDef = envLookups.nodeToNearestTreeDef.get(node);
@@ -269,10 +269,10 @@ export function getReferentOfSelected(selTree: SelTree, envLookups: EnvironmentL
 
     switch (streamDef.kind) {
       case 'expr':
-        return streamDef.expr;
+        return streamDef.name;
 
       case 'param':
-        return streamDef.param;
+        return streamDef.name;
 
       default: {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
