@@ -18,12 +18,18 @@
   align-items: center;
 }
 
-.TreeView-row-view-row-indented {
+.TreeView-row-view-row-indented-without-line {
+  padding-left: 2em;
+}
+
+.TreeView-row-view-row-indented-with-line {
   padding-left: 1.5em;
+  border-left: 1px solid #ccc;
+  margin-left: 0.5em;
 }
 
 .TreeView-row-view-row:not(:last-child) {
-  margin-bottom: 0.3em;
+  margin-bottom: 0.1em;
 }
 
 .TreeView-row-view-row > *:not(:last-child) {

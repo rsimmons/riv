@@ -135,7 +135,7 @@ interface RowLayoutRow {
 
 type RowLayout = ReadonlyArray<RowLayoutRow>;
 
-const RowView: React.FC<{node: Node, layout: RowLayout, ctx: TreeViewContext}> = ({node, layout, ctx}) => {
+const RowView: React.FC<{node: Node, layout: RowLayout, groupingLines: boolean, ctx: TreeViewContext}> = ({node, layout, groupingLines, ctx}) => {
   const ref = useRef<HTMLDivElement>(null);
   const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node, ref, ctx);
 
@@ -203,7 +203,7 @@ const RowView: React.FC<{node: Node, layout: RowLayout, ctx: TreeViewContext}> =
 
   return (
     <div ref={ref} className={selectionClasses.concat(['TreeView-row-view TreeView-node']).join(' ')} {...selectionHandlers} onKeyDown={onKeyDown}>
-      {layout.map(row => {
+      {layout.map((row, rowIdx) => {
         const selectionRow: Array<SelectionRecord> = [];
         const itemElems: Array<React.ReactNode> = [];
 
@@ -234,7 +234,11 @@ const RowView: React.FC<{node: Node, layout: RowLayout, ctx: TreeViewContext}> =
 
         const classes = ['TreeView-row-view-row'];
         if (row.indent) {
-          classes.push('TreeView-row-view-row-indented');
+          if (groupingLines && (rowIdx < (layout.length-1))) {
+            classes.push('TreeView-row-view-row-indented-with-line');
+          } else {
+            classes.push('TreeView-row-view-row-indented-without-line');
+          }
         }
 
         return (
@@ -245,7 +249,7 @@ const RowView: React.FC<{node: Node, layout: RowLayout, ctx: TreeViewContext}> =
   );
 }
 
-const sizedRowView = ({node, layout, ctx}: {node: Node, layout: RowLayout, ctx: TreeViewContext}): SizedReactNode => {
+const sizedRowView = ({node, layout, groupingLines, ctx}: {node: Node, layout: RowLayout, groupingLines: boolean, ctx: TreeViewContext}): SizedReactNode => {
   // Determine size
   let singleLineWidth: number | undefined = undefined;
   if (layout.length === 1) {
@@ -273,12 +277,13 @@ const sizedRowView = ({node, layout, ctx}: {node: Node, layout: RowLayout, ctx: 
 
   return {
     singleLineWidth,
-    reactNode: <RowView node={node} layout={layout} ctx={ctx} />
+    reactNode: <RowView node={node} layout={layout} groupingLines={groupingLines} ctx={ctx} />
   };
 }
 
-const sizedTemplateView = ({node, template, nodeMap, ctx}: {node: Node, template: string, nodeMap: Map<string, TreeAndSizedNodes>, ctx: TreeViewContext}): SizedReactNode => {
+const sizedTemplateView = ({node, template, nodeMap, groupingLines, ctx}: {node: Node, template: string, nodeMap: Map<string, TreeAndSizedNodes>, groupingLines: boolean, ctx: TreeViewContext}): SizedReactNode => {
   const MAX_WIDTH = 30;
+  const ELLIPSES = false;
 
   const createLayout = (trySingleLine: boolean): [RowLayout, number | undefined] => {
     const splits = template.split(/(\$[a-z0-9]+|\|)/).map(s => s.trim()).filter(s => s);
@@ -314,6 +319,9 @@ const sizedTemplateView = ({node, template, nodeMap, ctx}: {node: Node, template
           }
         } else {
           // not single-line node
+          if (ELLIPSES) {
+            accumItems.push('…'); // or ↴
+          }
           emitAccumItems();
           layout.push({
             indent: true,
@@ -327,6 +335,9 @@ const sizedTemplateView = ({node, template, nodeMap, ctx}: {node: Node, template
           totalWidth = undefined;
         }
       } else {
+        if (ELLIPSES && (accumItems.length === 0) && (layout.length > 0)) {
+            accumItems.push('…');
+        }
         accumItems.push(split);
         if (totalWidth !== undefined) {
           totalWidth += split.length;
@@ -342,13 +353,13 @@ const sizedTemplateView = ({node, template, nodeMap, ctx}: {node: Node, template
   if ((singleLineWidth !== undefined) && (singleLineWidth <= MAX_WIDTH)) {
     return {
       singleLineWidth,
-      reactNode: <RowView node={node} layout={singleLayout} ctx={ctx} />,
+      reactNode: <RowView node={node} layout={singleLayout} groupingLines={groupingLines} ctx={ctx} />,
     };
   } else {
     const [multiLayout, ] = createLayout(false);
     return {
       singleLineWidth: undefined,
-      reactNode: <RowView node={node} layout={multiLayout} ctx={ctx} />,
+      reactNode: <RowView node={node} layout={multiLayout} groupingLines={groupingLines} ctx={ctx} />,
     };
   }
 }
@@ -408,6 +419,7 @@ const sizedApplicationView = ({node, ctx}: {node: ApplicationNode, ctx: TreeView
     node,
     template: functionNode.format || ('need format for ' + functionNode.fid),
     nodeMap,
+    groupingLines: true,
     ctx,
   });
 };
@@ -459,6 +471,7 @@ const sizedBodyExpressionView = ({node, ctx}: {node: BodyExpressionNode, ctx: Tr
           sizedReactNode: sizedStreamExpressionView({node: node.expr, ctx}),
         }],
       ]),
+      groupingLines: true,
       ctx,
     });
   } else {
@@ -510,7 +523,7 @@ const sizedTreeFunctionDefinitionView = ({node, ctx}: {node: TreeFunctionDefinit
     });
   }
 
-  const {singleLineWidth, reactNode} = sizedRowView({node, layout, ctx});
+  const {singleLineWidth, reactNode} = sizedRowView({node, layout, groupingLines: false, ctx});
   return {
     singleLineWidth,
     reactNode: (
