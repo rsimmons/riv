@@ -18,13 +18,13 @@
 }
 
 .TreeView-row-view-row-indented-without-line {
-  padding-left: 2em;
+  margin-left: 1.5em;
 }
 
 .TreeView-row-view-row-indented-with-line {
-  padding-left: 1em;
+  padding-left: 0.75em;
   border-left: 1px solid #ccc;
-  margin-left: 1em;
+  margin-left: 0.75em;
 }
 
 .TreeView-row-view-row:not(:last-child) {
