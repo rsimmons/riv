@@ -358,7 +358,7 @@ const sizedTemplateView = ({node, template, nodeMap, groupingLines, ctx}: {node:
 }
 
 const sizedNameView = ({node, ctx}: {node: NameNode, ctx: TreeViewContext}): SizedReactNode => {
-  return sizedSimpleNodeView({treeNode: node, content: node.text || '\xa0\xa0\xa0\xa0\xa0\xa0', bgColor: BOUND_NAME_BOX_COLOR, ctx});
+  return sizedSimpleNodeView({treeNode: node, content: node.text || '\xa0\xa0\xa0\xa0', bgColor: BOUND_NAME_BOX_COLOR, ctx});
 };
 
 const sizedStreamReferenceView = ({node, ctx}: {node: StreamReferenceNode, ctx: TreeViewContext}): SizedReactNode => {
@@ -375,7 +375,7 @@ const sizedStreamReferenceView = ({node, ctx}: {node: StreamReferenceNode, ctx: 
     throw new Error();
   }
 
-  return sizedSimpleNodeView({treeNode: node, content: streamDef.name.text || '\xa0\xa0\xa0\xa0\xa0\xa0', bgColor: STREAM_REFERENCE_BOX_COLOR, ctx});
+  return sizedSimpleNodeView({treeNode: node, content: streamDef.name.text || '\xa0\xa0\xa0\xa0', bgColor: STREAM_REFERENCE_BOX_COLOR, ctx});
 };
 
 const sizedApplicationView = ({node, ctx}: {node: ApplicationNode, ctx: TreeViewContext}): SizedReactNode => {
@@ -420,7 +420,7 @@ const sizedApplicationView = ({node, ctx}: {node: ApplicationNode, ctx: TreeView
 const sizedStreamExpressionView = ({node, ctx}: {node: StreamExpressionNode, ctx: TreeViewContext}): SizedReactNode => {
   switch (node.kind) {
     case NodeKind.UndefinedLiteral:
-      return sizedSimpleNodeView({treeNode: node, content: '\xa0\xa0\xa0\xa0\xa0\xa0', bgColor: 'red', ctx});
+      return sizedSimpleNodeView({treeNode: node, content: '\xa0\xa0\xa0\xa0', bgColor: '#faa', ctx});
 
     case NodeKind.NumberLiteral:
       return sizedSimpleNodeView({treeNode: node, content: node.val.toString(), bgColor: '#cce8cc', ctx});
