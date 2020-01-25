@@ -283,7 +283,6 @@ const sizedRowView = ({node, layout, groupingLines, ctx}: {node: Node, layout: R
 
 const sizedTemplateView = ({node, template, nodeMap, groupingLines, ctx}: {node: Node, template: string, nodeMap: Map<string, TreeAndSizedNodes>, groupingLines: boolean, ctx: TreeViewContext}): SizedReactNode => {
   const MAX_WIDTH = 30;
-  const ELLIPSES = false;
 
   const createLayout = (trySingleLine: boolean): [RowLayout, number | undefined] => {
     const splits = template.split(/(\$[a-z0-9]+|\|)/).map(s => s.trim()).filter(s => s);
@@ -319,9 +318,6 @@ const sizedTemplateView = ({node, template, nodeMap, groupingLines, ctx}: {node:
           }
         } else {
           // not single-line node
-          if (ELLIPSES) {
-            accumItems.push('…'); // or ↴
-          }
           emitAccumItems();
           layout.push({
             indent: true,
@@ -335,9 +331,6 @@ const sizedTemplateView = ({node, template, nodeMap, groupingLines, ctx}: {node:
           totalWidth = undefined;
         }
       } else {
-        if (ELLIPSES && (accumItems.length === 0) && (layout.length > 0)) {
-            accumItems.push('…');
-        }
         accumItems.push(split);
         if (totalWidth !== undefined) {
           totalWidth += split.length;
