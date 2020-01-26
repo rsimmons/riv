@@ -210,7 +210,7 @@ export function computeEnvironmentLookups(mainDefinition: TreeFunctionDefinition
 
       if (isStreamExpressionNode(node)) {
         if (node.kind === NodeKind.Application) {
-          node.outs.forEach((out, idx) => {
+          node.outs.forEach(out => {
             if (streamEnv.has(out.sid)) {
               throw new Error();
             }
@@ -381,7 +381,7 @@ function deleteNodeSubtree(node: Node, parentLookup: Map<Node, Node>, selMoveLoo
         mainDefinition: newRoot,
         selectedNode: newNode,
       };
-    } else if (parent.kind === NodeKind.TreeFunctionBody) {
+    } else if ((parent.kind === NodeKind.ArrayLiteral) || (parent.kind === NodeKind.TreeFunctionBody)) {
       return deleteArrayElementNode(node, parentLookup, selMoveLookups);
     } else {
       throw new Error();
@@ -507,7 +507,34 @@ function attemptInsertBeforeAfter(state: State, before: boolean): State {
       return state;
     }
 
-    if (parent.kind === NodeKind.TreeFunctionBody) {
+    if (parent.kind === NodeKind.ArrayLiteral) {
+      const idx = parent.elems.indexOf(n as StreamExpressionNode);
+      const newElem: UndefinedLiteralNode = {
+        kind: NodeKind.UndefinedLiteral,
+        sid: generateStreamId(),
+      };
+      const newArrNode = {
+        ...parent,
+        elems: arrInsertBeforeAfter(parent.elems, idx, before, newElem),
+      };
+      const newMain = replaceNode(parent, newArrNode, parentLookup);
+      if (newMain.kind !== NodeKind.TreeFunctionDefinition) {
+        throw new Error();
+      }
+      const initSelTree = {
+        mainDefinition: newMain,
+        selectedNode: newElem,
+      };
+      return {
+        ...state,
+        editing: {
+          sessionId: genuid(),
+          initSelTree,
+          curSelTree: initSelTree,
+          compileError: undefined, // TODO: assumed, not sure if guaranteed safe
+        },
+      };
+    } else if (parent.kind === NodeKind.TreeFunctionBody) {
       const idx = parent.exprs.indexOf(n as BodyExpressionNode);
       const newElem: UndefinedLiteralNode = {
         kind: NodeKind.UndefinedLiteral,
@@ -713,7 +740,7 @@ function attemptEditNextUndefinedOrInsert(state: State): State {
     if (!parent) {
       return state; // reached root, do nothing
     }
-    if (parent.kind === NodeKind.TreeFunctionBody) {
+    if ((parent.kind === NodeKind.ArrayLiteral) || (parent.kind === NodeKind.TreeFunctionBody)) {
       return attemptInsertBeforeAfter(state, false);
     } else {
       const parentsChildren = [...iterChildren(parent)];

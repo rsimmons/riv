@@ -29,6 +29,10 @@ export function* iterChildren(node: Node) {
       // no children
       break;
 
+    case NodeKind.ArrayLiteral:
+      yield* node.elems;
+      break;
+
     case NodeKind.Application:
       yield node.func;
       for (const out of node.outs) {
@@ -117,6 +121,9 @@ export function visitChildren<T>(node: Node, visit: (node: Node) => T | undefine
     case NodeKind.SignatureYield:
       // no children
       return;
+
+    case NodeKind.ArrayLiteral:
+      return visitArray(node.elems, visit);
 
     case NodeKind.Application:
       return visit(node.func) || visitOuts(node.outs, visit) || visitArray(node.sargs, visit) || visitArray(node.fargs, visit);
@@ -303,6 +310,17 @@ export function transformChildren(node: Node, transform: (node: Node) => Node): 
     case NodeKind.SignatureYield:
       // no children to transform
       return node;
+
+    case NodeKind.ArrayLiteral:
+      const newElems = xStreamExprArr(node.elems);
+      if (newElems === node.elems) {
+        return node;
+      } else {
+        return {
+          ...node,
+          elems: newElems,
+        };
+      }
 
     case NodeKind.Application: {
       const newFunc = xFuncExpr(node.func);
@@ -526,6 +544,12 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
     case NodeKind.SignatureYield:
       throw new Error('no children to replace');
 
+    case NodeKind.ArrayLiteral:
+      return {
+        ...node,
+        elems: replaceStreamExprArr(node.elems),
+      };
+
     case NodeKind.Application:
       return {
         ...node,
@@ -599,6 +623,12 @@ export function deleteArrayElementChild(node: Node, child: Node): Node {
     case NodeKind.SignatureYield:
     case NodeKind.FunctionReference:
       throw new Error('no array-children');
+
+    case NodeKind.ArrayLiteral:
+      return {
+        ...node,
+        elems: filterOut(node.elems),
+      };
 
     case NodeKind.Application:
       return {

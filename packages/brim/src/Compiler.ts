@@ -38,6 +38,7 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
         case NodeKind.NumberLiteral:
         case NodeKind.TextLiteral:
         case NodeKind.BooleanLiteral:
+        case NodeKind.ArrayLiteral:
           if (streamEnvironment.has(node.sid)) {
             throw new Error('must be unique');
           }
@@ -123,6 +124,33 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
         constStreams.push({sid: node.sid, val: node.val});
         break;
 
+      case NodeKind.ArrayLiteral: {
+        const streamArgIds: Array<StreamID> = [];
+
+        temporaryMarked.add(node);
+
+        for (const elem of node.elems) {
+          traverseStreamExpr(elem);
+          const elemRetSid = streamExprReturnedId(elem);
+          if (!elemRetSid) {
+            throw new Error();
+          }
+          streamArgIds.push(elemRetSid);
+        }
+
+        temporaryMarked.delete(node);
+
+        apps.push({
+          sids: [node.sid],
+          appId: node.aid,
+          funcId: 'Array_of',
+          sargIds: streamArgIds,
+          fargIds: [],
+        });
+
+        break;
+      }
+
       case NodeKind.StreamReference:
         if (localStreamIds.has(node.ref)) {
           const targetExpressionNode = streamEnvironment.get(node.ref);
@@ -143,7 +171,7 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
         }
         break;
 
-      case NodeKind.Application:
+      case NodeKind.Application: {
         const functionNode = functionEnvironment.get(functionExprId(node.func));
         if (!functionNode) {
           throw new CompilationError();
@@ -213,6 +241,7 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
           fargIds: funcArgIds,
         });
         break;
+      }
 
       default: {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars

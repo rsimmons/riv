@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import './ExpressionChooser.css';
-import { generateStreamId, Node, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, SignatureFunctionParameterNode, generateFunctionId, StreamID, StreamExpressionNode, generateApplicationId, ApplicationOut, FunctionExpressionNode, NativeFunctionDefinitionNode } from './Tree';
+import { generateStreamId, Node, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, SignatureFunctionParameterNode, generateFunctionId, StreamID, StreamExpressionNode, generateApplicationId, ApplicationOut, FunctionExpressionNode, NativeFunctionDefinitionNode, UndefinedLiteralNode, ArrayLiteralNode } from './Tree';
 import { streamExprReturnedId, functionReturnedIndex } from './TreeUtil';
 import { fuzzy_match } from './vendor/fts_fuzzy_match';
 import { StreamDefinition, computeParentLookup, computeEnvironmentLookups } from './EditReducer';
@@ -159,6 +159,7 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, nativeFunctions: Readon
       case NodeKind.BooleanLiteral:
         return initNode.val.toString();
 
+      case NodeKind.ArrayLiteral:
       case NodeKind.StreamReference:
       case NodeKind.Application:
         return ''; // Don't prefill with text
@@ -288,6 +289,10 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, nativeFunctions: Readon
         case NodeKind.BooleanLiteral:
         case NodeKind.StreamReference:
           origStreamChildren = [];
+          break;
+
+        case NodeKind.ArrayLiteral:
+          origStreamChildren = initNode.elems;
           break;
 
         case NodeKind.Application:
@@ -462,13 +467,13 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, nativeFunctions: Readon
 
     if (newText === '[') {
       // This is a special case, we bypass the normal dropdown/choice stuff
-      /*
       const initElemNode: UndefinedLiteralNode = {
         kind: NodeKind.UndefinedLiteral,
         sid: generateStreamId(),
       };
       const newArrNode: ArrayLiteralNode = {
         kind: NodeKind.ArrayLiteral,
+        aid: generateApplicationId(),
         sid: generateStreamId(),
         elems: [initElemNode],
       };
@@ -476,7 +481,6 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, nativeFunctions: Readon
       dispatch({type: 'TOGGLE_EDIT'});
       dispatch({type: 'SET_SELECTED_NODE', newNode: initElemNode});
       dispatch({type: 'TOGGLE_EDIT'});
-      */
     } else {
       setText(newText);
       setDropdownState(recomputeDropdownChoices(newText));

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useLayoutEffect } from 'react';
-import { Node, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, isFunctionExpressionNode, FunctionExpressionNode, isFunctionDefinitionNode, StreamReferenceNode, NameNode, ApplicationNode } from './Tree';
+import { Node, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, isFunctionExpressionNode, FunctionExpressionNode, isFunctionDefinitionNode, StreamReferenceNode, NameNode, ApplicationNode, ArrayLiteralNode } from './Tree';
 import './TreeView.css';
 import { EnvironmentLookups } from './EditReducer';
 
@@ -378,6 +378,34 @@ const sizedStreamReferenceView = ({node, ctx}: {node: StreamReferenceNode, ctx: 
   return sizedSimpleNodeView({treeNode: node, content: streamDef.name.text || '\xa0\xa0\xa0\xa0', bgColor: STREAM_REFERENCE_BOX_COLOR, ctx});
 };
 
+const sizedArrayLiteralView = ({node, ctx}: {node: ArrayLiteralNode, ctx: TreeViewContext}): SizedReactNode => {
+  const layout: Array<RowLayoutRow> = [];
+
+  layout.push({
+    indent: false,
+    items: ['['],
+  });
+
+  for (const elem of node.elems) {
+    layout.push({
+      indent: true,
+      items: [
+        {
+          treeNode: elem,
+          sizedReactNode: sizedBodyExpressionView({node: elem, ctx}),
+        },
+      ],
+    });
+  }
+
+  layout.push({
+    indent: false,
+    items: [']'],
+  });
+
+  return sizedRowView({node, layout, groupingLines: true, ctx});
+}
+
 const sizedApplicationView = ({node, ctx}: {node: ApplicationNode, ctx: TreeViewContext}): SizedReactNode => {
   if (node.func.kind !== NodeKind.FunctionReference) {
     throw new Error('unimplemented');
@@ -430,6 +458,9 @@ const sizedStreamExpressionView = ({node, ctx}: {node: StreamExpressionNode, ctx
 
     case NodeKind.BooleanLiteral:
       return sizedSimpleNodeView({treeNode: node, content: node.val.toString(), bgColor: '#cce8cc', ctx});
+
+    case NodeKind.ArrayLiteral:
+      return sizedArrayLiteralView({node, ctx});
 
     case NodeKind.StreamReference:
       return sizedStreamReferenceView({node, ctx});
