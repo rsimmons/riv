@@ -123,6 +123,20 @@ const sizedSimpleNodeView = ({treeNode, content, bgColor, ctx}: {treeNode: Node,
   };
 };
 
+const objKeyWeakMap: WeakMap<object, number> = new WeakMap();
+let nextKey = 0;
+function objKey(obj: object): number {
+  const key = objKeyWeakMap.get(obj);
+  if (key) {
+    return key;
+  } else {
+    const newKey = nextKey;
+    nextKey++;
+    objKeyWeakMap.set(obj, newKey);
+    return newKey;
+  }
+}
+
 interface TreeAndSizedNodes {
   sizedReactNode: SizedReactNode;
   treeNode?: Node; // we just use its identity for selection. may be undefined if not selectable
@@ -207,10 +221,11 @@ const RowView: React.FC<{node: Node, layout: RowLayout, groupingLines: boolean, 
         const selectionRow: Array<SelectionRecord> = [];
         const itemElems: Array<React.ReactNode> = [];
 
-        for (const item of row.items) {
+        row.items.forEach((item, itemIdx) => {
           if (typeof item === 'string') {
+            const key = itemIdx;
             itemElems.push(
-              <div className="TreeView-row-view-plain-text">{item}</div>
+              <div className="TreeView-row-view-plain-text" key={key}>{item}</div>
             );
           } else {
             const ref: React.RefObject<HTMLDivElement> = React.createRef();
@@ -222,11 +237,13 @@ const RowView: React.FC<{node: Node, layout: RowLayout, groupingLines: boolean, 
               });
             }
 
+            const key = item.treeNode ? objKey(item.treeNode) : itemIdx;
+
             itemElems.push(
-              <div ref={ref}>{item.sizedReactNode.reactNode}</div>
+              <div ref={ref} key={key}>{item.sizedReactNode.reactNode}</div>
             );
           }
-        }
+        });
 
         if (selectionRow.length > 0) {
           selectionRows.push(selectionRow);
@@ -242,7 +259,7 @@ const RowView: React.FC<{node: Node, layout: RowLayout, groupingLines: boolean, 
         }
 
         return (
-          <div className={classes.join(' ')}>{itemElems}</div>
+          <div key={rowIdx} className={classes.join(' ')}>{itemElems}</div>
         );
       })}
     </div>
