@@ -1,12 +1,12 @@
 import genuid from './uid';
 import { State, ProgramInfo, SelTree } from './State';
-import { StreamID, FunctionID, generateStreamId, generateFunctionId, NodeKind, Node, TreeFunctionDefinitionNode, FunctionDefinitionNode, isFunctionDefinitionNode, StreamExpressionNode, NativeFunctionDefinitionNode, isStreamExpressionNode, UndefinedLiteralNode, BodyExpressionNode, generateApplicationId, NameNode, StreamParameterNode } from './Tree';
+import { StreamID, FunctionID, generateStreamId, generateFunctionId, NodeKind, Node, TreeFunctionDefinitionNode, FunctionDefinitionNode, isFunctionDefinitionNode, StreamExpressionNode, NativeFunctionDefinitionNode, isStreamExpressionNode, UndefinedLiteralNode, BodyExpressionNode, generateApplicationId, NameNode, StreamParameterNode, ArrayLiteralNode, TreeFunctionBodyNode } from './Tree';
 import { CompiledDefinition } from './CompiledDefinition';
 import { compileGlobalTreeDefinition, CompilationError } from './Compiler';
 import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
 import { createLiveFunction } from './LiveFunction';
 import Environment from './Environment';
-import { iterChildren, visitChildren, replaceChild, deleteArrayElementChild, transformChildren } from './Traversal';
+import { iterChildren, visitChildren, replaceChild, transformChildren } from './Traversal';
 import globalNativeFunctions from './globalNatives';
 
 // We don't make a discriminated union of specific actions, but maybe we could
@@ -282,50 +282,6 @@ export function getReferentNameNodeOfSelected(selTree: SelTree, envLookups: Envi
   }
 }
 
-function nextArrowSelectableLeft(node: Node, selMoveLookups: SelectionMovementLookups): Node | undefined {
-  return selMoveLookups.rootward.get(node);
-}
-
-function nextArrowSelectableRight(node: Node, selMoveLookups: SelectionMovementLookups): Node | undefined {
-  return selMoveLookups.leafward.get(node);
-}
-
-function nextArrowSelectableUpDown(node: Node, up: boolean, selMoveLookups: SelectionMovementLookups): Node | undefined {
-  let n: Node = node;
-
-  while (true) {
-    const sib = up ? selMoveLookups.prev.get(n) : selMoveLookups.next.get(n);
-    if (sib) {
-      return sib;
-    }
-    const parent = selMoveLookups.rootward.get(n);
-    if (!parent) {
-      // Made it to root without being able to move up/down
-      return undefined;
-    }
-    n = parent;
-  }
-}
-
-function handleSelectionAction(action: Action, selectedNode: Node, selMoveLookups: SelectionMovementLookups): Node | void {
-  switch (action.type) {
-    case 'SET_SELECTED_NODE':
-      return action.newNode!;
-
-    case 'MOVE_LEFT':
-      return nextArrowSelectableLeft(selectedNode, selMoveLookups);
-
-    case 'MOVE_RIGHT':
-      return nextArrowSelectableRight(selectedNode, selMoveLookups);
-
-    case 'MOVE_UP':
-      return nextArrowSelectableUpDown(selectedNode, true, selMoveLookups);
-
-    case 'MOVE_DOWN':
-      return nextArrowSelectableUpDown(selectedNode, false, selMoveLookups);
-  }
-}
-
 /**
  * Note that this returns the new _root_ of the whole tree
  */
@@ -337,30 +293,27 @@ function replaceNode(node: Node, newNode: Node, parentLookup: Map<Node, Node>): 
   return replaceNode(parent, replaceChild(parent, node, newNode), parentLookup);
 }
 
-/**
- * Returns [newRoot, newSelectedNode]
- */
-function deleteArrayElementNode(node: Node, parentLookup: Map<Node, Node>, selMoveLookups: SelectionMovementLookups): SelTree {
-  const parent = parentLookup.get(node);
-  if (!parent) {
-    throw new Error();
-  }
+function deleteNodeSubtree(node: Node, parentLookup: Map<Node, Node>): SelTree | void {
+  const deleteFromArr = <T extends Node>(nodeToRemove: T, arr: ReadonlyArray<T>): [ReadonlyArray<T>, T | undefined] => {
+    const idx = arr.indexOf(nodeToRemove);
+    if (idx < 0) {
+      throw new Error();
+    }
 
-  const sibling = selMoveLookups.prev.get(node) || selMoveLookups.next.get(node);
-  const newParent = deleteArrayElementChild(parent, node);
-  const newRoot = replaceNode(parent, newParent, parentLookup);
-  const newSelectedNode: Node = sibling || newParent;
-  // TODO: newParent might not be selectable? assert at least?
-  if (newRoot.kind !== NodeKind.TreeFunctionDefinition) {
-    throw new Error();
-  }
-  return {
-    mainDefinition: newRoot,
-    selectedNode: newSelectedNode,
+    const newArr = arr.slice(0, idx).concat(arr.slice(idx + 1));
+
+    let newSibSel: T | undefined;
+    if (newArr.length === 0) {
+      newSibSel = undefined;
+    } else if (idx === 0) {
+      newSibSel = newArr[0];
+    } else {
+      newSibSel = newArr[idx-1];
+    }
+
+    return [newArr, newSibSel];
   };
-}
 
-function deleteNodeSubtree(node: Node, parentLookup: Map<Node, Node>, selMoveLookups: SelectionMovementLookups): SelTree | void {
   const parent = parentLookup.get(node);
 
   if (!parent) {
@@ -381,18 +334,44 @@ function deleteNodeSubtree(node: Node, parentLookup: Map<Node, Node>, selMoveLoo
         mainDefinition: newRoot,
         selectedNode: newNode,
       };
-    } else if ((parent.kind === NodeKind.ArrayLiteral) || (parent.kind === NodeKind.TreeFunctionBody)) {
-      return deleteArrayElementNode(node, parentLookup, selMoveLookups);
+    } else if (parent.kind === NodeKind.ArrayLiteral) {
+      const [newElems, newSibSel] = deleteFromArr(node, parent.elems);
+      const newParent: ArrayLiteralNode = {
+        ...parent,
+        elems: newElems,
+      };
+      const newRoot = replaceNode(parent, newParent, parentLookup);
+      if (newRoot.kind !== NodeKind.TreeFunctionDefinition) {
+        throw new Error();
+      }
+      return {
+        mainDefinition: newRoot,
+        selectedNode: newSibSel || newParent,
+      };
+    } else if (parent.kind === NodeKind.TreeFunctionBody) {
+      const [newExprs, newSibSel] = deleteFromArr(node, parent.exprs);
+      const newParent: TreeFunctionBodyNode = {
+        ...parent,
+        exprs: newExprs,
+      };
+      const newRoot = replaceNode(parent, newParent, parentLookup);
+      if (newRoot.kind !== NodeKind.TreeFunctionDefinition) {
+        throw new Error();
+      }
+      return {
+        mainDefinition: newRoot,
+        selectedNode: newSibSel || newParent,
+      };
     } else {
       throw new Error();
     }
   }
 }
 
-function handleInstantEditAction(action: Action, selTree: SelTree, parentLookup: Map<Node, Node>, selMoveLookups: SelectionMovementLookups): SelTree | void {
+function handleInstantEditAction(action: Action, selTree: SelTree, parentLookup: Map<Node, Node>): SelTree | void {
   switch (action.type) {
     case 'DELETE_SUBTREE':
-      return deleteNodeSubtree(selTree.selectedNode, parentLookup, selMoveLookups);
+      return deleteNodeSubtree(selTree.selectedNode, parentLookup);
   }
 }
 
@@ -410,65 +389,6 @@ export function computeParentLookup(root: Node): Map<Node, Node> {
   visit(root);
 
   return parent;
-}
-
-interface SelectionMovementLookups {
-  prev: Map<Node, Node>;
-  next: Map<Node, Node>;
-  rootward: Map<Node, Node>;
-  leafward: Map<Node, Node>;
-}
-
-export function computeSelectionMovementLookups(root: Node): SelectionMovementLookups {
-  const prev: Map<Node, Node> = new Map();
-  const next: Map<Node, Node> = new Map();
-  const rootward: Map<Node, Node> = new Map();
-  const leafward: Map<Node, Node> = new Map();
-
-  const setForArr = (arr: ReadonlyArray<Node>, parent: Node): void => {
-    if (arr.length) {
-      leafward.set(parent, arr[0]);
-    }
-
-    let p: Node | undefined;
-    for (const n of arr) {
-      rootward.set(n, parent);
-      if (p) {
-        prev.set(n, p);
-        next.set(p, n);
-      }
-      p = n;
-    }
-  };
-
-  const visit = (node: Node): void => {
-    switch (node.kind) {
-      case NodeKind.Application: {
-        setForArr(([] as ReadonlyArray<Node>).concat(node.sargs, node.fargs), node);
-        break;
-      }
-
-      case NodeKind.TreeFunctionDefinition:
-        setForArr(node.body.exprs, node);
-        break;
-
-      case NodeKind.YieldExpression:
-        leafward.set(node, node.expr);
-        rootward.set(node.expr, node);
-        break;
-    }
-
-    visitChildren(node, visit);
-  };
-
-  visit(root);
-
-  return {
-    prev,
-    next,
-    rootward,
-    leafward,
-  };
 }
 
 function attemptBeginEditSelected(state: State): State {
@@ -860,12 +780,8 @@ export function reducer(state: State, action: Action): State {
       console.log('nothing to undo');
       return state;
     }
-  }
-
-  const selMoveLookups = computeSelectionMovementLookups(state.stableSelTree.mainDefinition); // TODO: memoize
-  const handleSelectionActionResult = handleSelectionAction(action, state.stableSelTree.selectedNode, selMoveLookups);
-  if (handleSelectionActionResult) {
-    const newSelectedNode = handleSelectionActionResult;
+  } else if (action.type === 'SET_SELECTED_NODE') {
+    const newSelectedNode = action.newNode!;
     if (newSelectedNode !== state.stableSelTree.selectedNode) {
       return {
         ...state,
@@ -881,7 +797,7 @@ export function reducer(state: State, action: Action): State {
   }
 
   const parentLookup = computeParentLookup(state.stableSelTree.mainDefinition); // TODO: memoize
-  const handleEditActionResult = handleInstantEditAction(action, state.stableSelTree, parentLookup, selMoveLookups);
+  const handleEditActionResult = handleInstantEditAction(action, state.stableSelTree, parentLookup);
   if (handleEditActionResult) {
     const newSelTree = handleEditActionResult;
 
