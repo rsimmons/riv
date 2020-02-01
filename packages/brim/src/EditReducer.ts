@@ -617,12 +617,17 @@ function attemptCommitEdit(state: State, newSelTree: SelTree): State {
   }
 }
 
-function findNextUndefinedUnder(node: Node): Node | undefined {
+function nodeIsHole(node: Node): boolean {
+  return (node.kind === NodeKind.UndefinedLiteral) ||
+   ((node.kind === NodeKind.Name) && !node.text);
+}
+
+function findNextHoleUnder(node: Node): Node | undefined {
   for (const child of iterChildren(node)) {
-    if (child.kind === NodeKind.UndefinedLiteral) {
+    if (nodeIsHole(child)) {
       return child;
     } else {
-      const recur = findNextUndefinedUnder(child);
+      const recur = findNextHoleUnder(child);
       if (recur) {
         return recur;
       }
@@ -630,7 +635,7 @@ function findNextUndefinedUnder(node: Node): Node | undefined {
   }
 }
 
-function attemptEditNextUndefinedOrInsert(state: State): State {
+function attemptEditNextHoleOrInsert(state: State): State {
   const editNode = (node: Node): State => {
     const editSelTree = {
       mainDefinition: state.stableSelTree.mainDefinition,
@@ -653,7 +658,7 @@ function attemptEditNextUndefinedOrInsert(state: State): State {
 
   const parentLookup = computeParentLookup(state.stableSelTree.mainDefinition);
 
-  const under = findNextUndefinedUnder(state.stableSelTree.selectedNode);
+  const under = findNextHoleUnder(state.stableSelTree.selectedNode);
   if (under) {
     return editNode(under);
   }
@@ -677,7 +682,7 @@ function attemptEditNextUndefinedOrInsert(state: State): State {
         if (sib.kind === NodeKind.UndefinedLiteral) {
           return editNode(sib);
         }
-        const under = findNextUndefinedUnder(sib);
+        const under = findNextHoleUnder(sib);
         if (under) {
           return editNode(under);
         }
@@ -729,7 +734,7 @@ export function reducer(state: State, action: Action): State {
         ...pushUndo(state),
       }, state.editing.curSelTree);
 
-      return attemptEditNextUndefinedOrInsert(stateAfterCommit);
+      return attemptEditNextHoleOrInsert(stateAfterCommit);
     } else {
       return attemptBeginEditSelected(state);
     }
