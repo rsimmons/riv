@@ -391,8 +391,12 @@ export function computeParentLookup(root: Node): Map<Node, Node> {
   return parent;
 }
 
+function canBeginEditOnNode(node: Node) {
+  return isStreamExpressionNode(node) || (node.kind === NodeKind.Name);
+}
+
 function attemptBeginEditSelected(state: State): State {
-  if (isStreamExpressionNode(state.stableSelTree.selectedNode)) {
+  if (canBeginEditOnNode(state.stableSelTree.selectedNode)) {
     return {
       ...state,
       editing: {
@@ -403,7 +407,7 @@ function attemptBeginEditSelected(state: State): State {
       },
     };
   } else {
-    console.log('Not starting edit because not a stream expression');
+    console.log('Can\'t edit this node');
     return state;
   }
 }

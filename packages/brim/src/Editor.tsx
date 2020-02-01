@@ -6,7 +6,7 @@ import './Editor.css';
 import { TreeFunctionDefinitionView, TreeViewContext } from './TreeView';
 import { Node, TreeFunctionDefinitionNode } from './Tree';
 import { ProgramInfo } from './State';
-import ExpressionChooser from './ExpressionChooser';
+import Chooser from './Chooser';
 
 const keyMap = {
   TOGGLE_EDIT: 'enter',
@@ -138,7 +138,7 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
             <TreeFunctionDefinitionView node={displayedSelTree.mainDefinition} ctx={treeViewCtxData} />
             {state.editing && (
               <div className="Editor-chooser-positioner" style={{position: 'absolute'}}>
-                <ExpressionChooser key={state.editing.sessionId} initSelTree={state.editing.initSelTree} nativeFunctions={state.nativeFunctions} dispatch={dispatch} compileError={state.editing.compileError} />
+                <Chooser key={state.editing.sessionId} initSelTree={state.editing.initSelTree} nativeFunctions={state.nativeFunctions} dispatch={dispatch} compileError={state.editing.compileError} />
               </div>
             )}
           </div>

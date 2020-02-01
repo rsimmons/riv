@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import './ExpressionChooser.css';
-import { generateStreamId, Node, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, SignatureFunctionParameterNode, generateFunctionId, StreamID, StreamExpressionNode, generateApplicationId, ApplicationOut, FunctionExpressionNode, NativeFunctionDefinitionNode, UndefinedLiteralNode, ArrayLiteralNode } from './Tree';
+import './Chooser.css';
+import { generateStreamId, Node, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, SignatureFunctionParameterNode, generateFunctionId, StreamID, StreamExpressionNode, generateApplicationId, ApplicationOut, FunctionExpressionNode, NativeFunctionDefinitionNode, UndefinedLiteralNode, ArrayLiteralNode, NameNode } from './Tree';
 import { streamExprReturnedId, functionReturnedIndex } from './TreeUtil';
 import { fuzzy_match } from './vendor/fts_fuzzy_match';
 import { StreamDefinition, computeParentLookup, computeEnvironmentLookups } from './EditReducer';
@@ -508,23 +508,23 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, nativeFunctions: Readon
   };
 
   return (
-    <div className="ExpressionChooser">
-      <input className="ExpressionChooser-input" value={text} onChange={onChange} onKeyDown={onKeyDown} ref={inputRef} autoFocus />
-      <ul className="ExpressionChooser-dropdown">
+    <div className="Chooser">
+      <input className="Chooser-input" value={text} onChange={onChange} onKeyDown={onKeyDown} ref={inputRef} autoFocus />
+      <ul className="Chooser-dropdown">
         {dropdownState.choices.map((choice, idx) => {
           const classNames = [];
           if (idx === dropdownState.index) {
             if (compileError) {
-              classNames.push('ExpressionChooser-dropdown-selected-error');
+              classNames.push('Chooser-dropdown-selected-error');
             } else {
-              classNames.push('ExpressionChooser-dropdown-selected');
+              classNames.push('Chooser-dropdown-selected');
             }
           }
           return (
             <li key={idx} className={classNames.join(' ')} ref={(idx === dropdownState.index) ? selectedListElem : undefined}>
               <Choice choice={choice} />
               {(compileError && (idx === dropdownState.index)) ?
-                <div className="ExpressionChooser-dropdown-compile-error">{compileError}</div>
+                <div className="Chooser-dropdown-compile-error">{compileError}</div>
               : null}
             </li>
           );
@@ -533,4 +533,49 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, nativeFunctions: Readon
     </div>
   );
 }
-export default ExpressionChooser;
+
+const NameChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any) => void}> = ({ initSelTree, dispatch }) => {
+  const initNode = initSelTree.selectedNode;
+  if (initNode.kind !== NodeKind.Name) {
+    throw new Error();
+  }
+
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    inputRef.current && inputRef.current.select();
+  }, []);
+
+  const [text, setText] = useState(() => {
+    return initNode.text;
+  });
+
+  const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newText = e.target.value;
+
+    setText(newText);
+
+    const newNode: NameNode = {
+      ...initNode,
+      text: newText,
+    };
+    dispatch({type: 'UPDATE_EDITING_NODE', newNode: newNode});
+  };
+
+  return (
+    <div className="Chooser">
+      <input className="Chooser-input" value={text} onChange={onChange} ref={inputRef} autoFocus />
+    </div>
+  );
+}
+
+const Chooser: React.FC<{initSelTree: SelTree, nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>, dispatch: (action: any) => void, compileError: string | undefined}> = ({ initSelTree, nativeFunctions, dispatch, compileError }) => {
+  if (initSelTree.selectedNode.kind === NodeKind.Name) {
+    return <NameChooser initSelTree={initSelTree} dispatch={dispatch} />
+  } else if (isStreamExpressionNode(initSelTree.selectedNode)) {
+    return <ExpressionChooser initSelTree={initSelTree} nativeFunctions={nativeFunctions} dispatch={dispatch} compileError={compileError} />
+  } else {
+    throw new Error();
+  }
+}
+
+export default Chooser;
