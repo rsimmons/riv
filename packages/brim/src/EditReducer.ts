@@ -305,10 +305,10 @@ function deleteNodeSubtree(node: Node, parentLookup: Map<Node, Node>): SelTree |
     let newSibSel: T | undefined;
     if (newArr.length === 0) {
       newSibSel = undefined;
-    } else if (idx === 0) {
-      newSibSel = newArr[0];
-    } else {
+    } else if (idx === (arr.length - 1)) {
       newSibSel = newArr[idx-1];
+    } else {
+      newSibSel = newArr[idx];
     }
 
     return [newArr, newSibSel];
