@@ -501,6 +501,35 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, nativeFunctions: Readon
         adjustDropdownIndex(1);
         break;
 
+      case '=': {
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (!inputRef.current) {
+          throw new Error();
+        }
+        const inputText = inputRef.current.value;
+        const bindNode: ApplicationNode = {
+          kind: NodeKind.Application,
+          aid: generateApplicationId(),
+          outs: [{sid: generateStreamId(), name: {kind: NodeKind.Name, text: inputText}}],
+          func: {
+            kind: NodeKind.FunctionReference,
+            ref: 'bind',
+          },
+          sargs: [
+            {
+              kind: NodeKind.UndefinedLiteral,
+              sid: generateStreamId(),
+            },
+          ],
+          fargs: [],
+        };
+        dispatch({type: 'UPDATE_EDITING_NODE', newNode: bindNode});
+        dispatch({type: 'TOGGLE_EDIT'});
+        break;
+      }
+
       default:
         // do nothing
         break;
