@@ -20,9 +20,10 @@ export interface SelTree {
 
 interface EditState {
   sessionId: string; // lets us "reset" chooser when we jump to editing a different thing
-  initSelTree: SelTree;
+  initSelTree: SelTree; // initial when this "session" (current node) began, not initial of chain of edits
   curSelTree: SelTree;
   compileError: string | undefined;
+  isInsert: boolean; // was this session an insert into an array-like?
 }
 
 interface ExecutionState {

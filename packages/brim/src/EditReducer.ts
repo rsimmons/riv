@@ -404,6 +404,7 @@ function attemptBeginEditSelected(state: State): State {
         initSelTree: state.stableSelTree,
         curSelTree: state.stableSelTree,
         compileError: undefined, // we assume
+        isInsert: false,
       },
     };
   } else {
@@ -456,6 +457,7 @@ function attemptInsertBeforeAfter(state: State, before: boolean): State {
           initSelTree,
           curSelTree: initSelTree,
           compileError: undefined, // TODO: assumed, not sure if guaranteed safe
+          isInsert: true,
         },
       };
     } else if (parent.kind === NodeKind.TreeFunctionBody) {
@@ -483,6 +485,7 @@ function attemptInsertBeforeAfter(state: State, before: boolean): State {
           initSelTree,
           curSelTree: initSelTree,
           compileError: undefined, // TODO: assumed, not sure if guaranteed safe
+          isInsert: true,
         },
       };
     } else {
@@ -635,7 +638,7 @@ function findNextHoleUnder(node: Node): Node | undefined {
   }
 }
 
-function attemptEditNextHoleOrInsert(state: State): State {
+function attemptChainEdit(state: State, tryInsert: boolean): State {
   const editNode = (node: Node): State => {
     const editSelTree = {
       mainDefinition: state.stableSelTree.mainDefinition,
@@ -648,6 +651,7 @@ function attemptEditNextHoleOrInsert(state: State): State {
         initSelTree: editSelTree,
         curSelTree: editSelTree,
         compileError: undefined,
+        isInsert: false,
       },
     };
   };
@@ -670,7 +674,11 @@ function attemptEditNextHoleOrInsert(state: State): State {
       return state; // reached root, do nothing
     }
     if ((parent.kind === NodeKind.ArrayLiteral) || (parent.kind === NodeKind.TreeFunctionBody)) {
-      return attemptInsertBeforeAfter(state, false);
+      if (tryInsert) {
+        return attemptInsertBeforeAfter(state, false);
+      } else {
+        return state;
+      }
     } else {
       const parentsChildren = [...iterChildren(parent)];
       const nodeIdx = parentsChildren.indexOf(n);
@@ -730,11 +738,12 @@ export function reducer(state: State, action: Action): State {
     }
   } else if (action.type === 'TOGGLE_EDIT') {
     if (state.editing) {
+      const insertAgain = state.editing.isInsert;
       const stateAfterCommit = attemptCommitEdit({
         ...pushUndo(state),
       }, state.editing.curSelTree);
 
-      return attemptEditNextHoleOrInsert(stateAfterCommit);
+      return attemptChainEdit(stateAfterCommit, insertAgain);
     } else {
       return attemptBeginEditSelected(state);
     }
