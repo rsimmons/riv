@@ -2,6 +2,7 @@ import React, { useState, useRef, useLayoutEffect } from 'react';
 import { Node, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, isFunctionExpressionNode, FunctionExpressionNode, isFunctionDefinitionNode, StreamReferenceNode, NameNode, ApplicationNode, ArrayLiteralNode } from './Tree';
 import './TreeView.css';
 import { StaticEnvironment, extendStaticEnv } from './EditReducer';
+import { parseFormatString } from './Format';
 import quotesIcon from './icons/quotes.svg';
 import booleanIcon from './icons/boolean.svg';
 
@@ -281,10 +282,9 @@ const sizedTemplateView = ({node, template, nodeMap, groupingLines, ctx}: {node:
   const MAX_WIDTH = 30;
 
   const createLayout = (trySingleLine: boolean): [RowLayout, number | undefined] => {
-    const splits = template.split(/(\$[a-z0-9]+|\|)/).map(s => s.trim()).filter(s => s);
-
     const layout: Array<RowLayoutRow> = [];
     let accumItems: Array<string | TreeAndSizedNodes> = [];
+    let accumLength: number = 0;
     let totalWidth: number | undefined = 0; // this gets set to undefined if we determine that result is not single-line
 
     const emitAccumItems = () => {
@@ -295,25 +295,23 @@ const sizedTemplateView = ({node, template, nodeMap, groupingLines, ctx}: {node:
         });
       }
       accumItems = [];
+      accumLength = 0;
     };
 
-    for (const split of splits) {
-      if (split.startsWith('$')) {
-        const key = split.substr(1);
-        const nodes = nodeMap.get(key);
+    for (const piece of parseFormatString(template)) {
+      if (piece.kind === 'wildcard') {
+        const nodes = nodeMap.get(piece.key);
         if (!nodes) {
           throw new Error();
         }
 
-        if (nodes.sizedReactNode.singleLineWidth !== undefined) {
-          // single-line node
-          // TODO: if !trySingleLine, need to check if this will make the row too long
+        if ((nodes.sizedReactNode.singleLineWidth !== undefined) && ((accumLength + nodes.sizedReactNode.singleLineWidth) <= MAX_WIDTH)) {
           accumItems.push(nodes);
+          accumLength += nodes.sizedReactNode.singleLineWidth;
           if (totalWidth !== undefined) {
             totalWidth += nodes.sizedReactNode.singleLineWidth;
           }
         } else {
-          // not single-line node
           emitAccumItems();
           layout.push({
             indent: true,
@@ -321,17 +319,22 @@ const sizedTemplateView = ({node, template, nodeMap, groupingLines, ctx}: {node:
           });
           totalWidth = undefined;
         }
-      } else if (split === '|') {
+      } else if (piece.kind === 'linebreak') {
         if (!trySingleLine) {
           emitAccumItems();
           totalWidth = undefined;
         }
-      } else {
+      } else if (piece.kind === 'text') {
         const ellipsis = (accumItems.length === 0) && (layout.length > 0);
-        accumItems.push((ellipsis ? '…' : '') + split);
+        accumItems.push((ellipsis ? '…' : '') + piece.text);
+        accumLength += piece.text.length;
         if (totalWidth !== undefined) {
-          totalWidth += split.length;
+          totalWidth += piece.text.length;
         }
+      } else {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const exhaustive: never = piece; // this will cause a type error if we haven't handled all cases
+        throw new Error();
       }
     }
     emitAccumItems();
@@ -340,6 +343,9 @@ const sizedTemplateView = ({node, template, nodeMap, groupingLines, ctx}: {node:
   }
 
   const [singleLayout, singleLineWidth] = createLayout(true);
+  if ((node.kind === NodeKind.Application) && (node.func.kind === NodeKind.FunctionReference) && (node.func.ref === 'snabbdom.input')) {
+    console.log('INPUT WTF', singleLayout, singleLineWidth);
+  }
   if ((singleLineWidth !== undefined) && (singleLineWidth <= MAX_WIDTH)) {
     return {
       singleLineWidth,

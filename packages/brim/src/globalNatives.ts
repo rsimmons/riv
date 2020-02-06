@@ -73,10 +73,10 @@ const nativeFunctions: Array<[string, string, SignatureNode, Function]> = [
   ['text2num', 'text $s0 as a number', simpleSig([''], true), (text: string) => Number(text)],
 
   // snabbdom
-  ['snabbdom.renderDOMIntoSelector', 'render HTML $s0 into selector $s1', simpleSig(['', ''], false), renderDOMIntoSelector],
+  ['snabbdom.renderDOMIntoSelector', 'render HTML $s0 | into selector $s1', simpleSig(['', ''], false), renderDOMIntoSelector],
   ['snabbdom.span', '<span> $s0 </span>', simpleSig([''], true), (text: string) => h('span', {}, text)],
   ['snabbdom.div', '<div> $s0 </div>', simpleSig([''], true), (children: ReadonlyArray<any>) => h('div', {}, children)],
-  ['snabbdom.input', '<input text→ $o1 prefill= $s0 />', {
+  ['snabbdom.input', '<input | text→ $o1 | prefill= $s0 | />', {
     kind: NodeKind.Signature,
     streamParams: [
       {
