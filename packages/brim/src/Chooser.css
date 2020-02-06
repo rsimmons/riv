@@ -9,7 +9,7 @@
   font-size: inherit;
   font-family: inherit;
   font-weight: inherit;
-  background: #eee;
+  background: white;
   color: #333;
   padding: 0.3em;
   width: 100%;
@@ -21,9 +21,9 @@
   /* margin: 2px 0 0 0; */
   margin: 0;
   padding: 0;
-  max-height: 10em;
+  max-height: 20em;
   overflow-y: scroll;
-  background: #eee;
+  background:white;
   color: #333;
   border: 1px solid #777;
   border-top: none;
@@ -34,11 +34,11 @@
 }
 
 .Chooser-dropdown li.Chooser-dropdown-selected {
-  background: #bbb;
+  background: #ddd;
 }
 
 .Chooser-dropdown li.Chooser-dropdown-selected-error {
-  background: #bbb;
+  background: #ddd;
   color: #555;
 }
 

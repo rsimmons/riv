@@ -1,48 +1,15 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import './Chooser.css';
-import { generateStreamId, Node, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, SignatureFunctionParameterNode, generateFunctionId, StreamID, StreamExpressionNode, generateApplicationId, ApplicationOut, FunctionExpressionNode, NativeFunctionDefinitionNode, UndefinedLiteralNode, ArrayLiteralNode, NameNode } from './Tree';
-import { streamExprReturnedId, functionReturnedIndex } from './TreeUtil';
+import { generateStreamId, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, SignatureFunctionParameterNode, generateFunctionId, StreamExpressionNode, generateApplicationId, ApplicationOut, FunctionExpressionNode, NativeFunctionDefinitionNode, UndefinedLiteralNode, ArrayLiteralNode, NameNode } from './Tree';
+import { functionReturnedIndex } from './TreeUtil';
 import { fuzzy_match } from './vendor/fts_fuzzy_match';
-import { StreamDefinition, computeParentLookup, computeEnvironmentLookups } from './EditReducer';
+import { StreamDefinition, computeParentLookup } from './EditReducer';
 import { SelTree } from './State';
+import { StreamExpressionView, TreeViewContext } from './TreeView';
 
-interface UndefinedChoice {
-  readonly type: 'undefined';
+interface Choice {
+  node: StreamExpressionNode;
 }
-
-interface NumberChoice {
-  readonly type: 'number';
-  readonly value: number;
-}
-
-interface TextChoice {
-  readonly type: 'text';
-  readonly value: string;
-}
-
-interface BooleanChoice {
-  readonly type: 'boolean';
-  readonly value: boolean;
-}
-
-interface BindChoice {
-  readonly type: 'bind';
-  readonly name: string;
-}
-
-interface StreamRefChoice {
-  readonly type: 'streamref';
-  readonly sid: StreamID;
-  readonly name: string;
-}
-
-interface AppChoice {
-  readonly type: 'app';
-  readonly text: string;
-  readonly funcDefNode: FunctionDefinitionNode;
-}
-
-type Choice = UndefinedChoice | NumberChoice | TextChoice | BooleanChoice | BindChoice | StreamRefChoice | AppChoice;
 
 interface SearchResult<T> {
   score: number;
@@ -78,38 +45,10 @@ function fuzzySearch<T>(query: string, items: ReadonlyArray<[string, T]>): Array
 
 const FLOAT_REGEX = /^[-+]?(?:\d*\.?\d+|\d+\.?\d*)(?:[eE][-+]?\d+)?$/;
 
-interface ChoiceProps {
-  choice: Choice;
-}
-function Choice({ choice }: ChoiceProps) {
-  switch (choice.type) {
-    case 'undefined':
-      return <em>undefined</em>
-
-    case 'number':
-      return <span>{choice.value.toString()}</span>
-
-    case 'text':
-      return <span><em>T</em> {choice.value}</span>
-
-    case 'boolean':
-      return <span><em>B</em> {choice.value.toString()}</span>
-
-    case 'bind':
-      return <span><em>I</em> {choice.name}</span>
-
-    case 'streamref':
-      return <span><em>S</em> {choice.name}</span>
-
-    case 'app':
-      return <span><em>F</em> {choice.text}</span>
-
-    default: {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const exhaustive: never = choice; // this will cause a type error if we haven't handled all cases
-      throw new Error();
-    }
-  }
+const ChoiceView: React.FC<{choice: Choice, treeViewCtx: TreeViewContext}> = ({ choice, treeViewCtx }) => {
+  return (
+    <StreamExpressionView node={choice.node} ctx={treeViewCtx} />
+  );
 }
 
 interface DropdownState {
@@ -117,14 +56,13 @@ interface DropdownState {
   index: number;
 }
 
-const ExpressionChooser: React.FC<{initSelTree: SelTree, nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>, dispatch: (action: any) => void, compileError: string | undefined}> = ({ initSelTree, nativeFunctions, dispatch, compileError }) => {
+const ExpressionChooser: React.FC<{initSelTree: SelTree, nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>, dispatch: (action: any) => void, compileError: string | undefined, infixMode: boolean, treeViewCtx: TreeViewContext}> = ({ initSelTree, nativeFunctions, dispatch, compileError, infixMode, treeViewCtx }) => {
   const parentLookup = useMemo(() => computeParentLookup(initSelTree.mainDefinition), [initSelTree.mainDefinition]);
   const parent = parentLookup.get(initSelTree.selectedNode);
   if (!parent) {
     throw new Error();
   }
   const atRoot = parent.kind === NodeKind.TreeFunctionBody;
-  const envLookups = useMemo(() => computeEnvironmentLookups(initSelTree.mainDefinition, nativeFunctions), [initSelTree.mainDefinition, nativeFunctions]);
 
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -145,29 +83,33 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, nativeFunctions: Readon
   const initNode = initSelTree.selectedNode;
 
   const [text, setText] = useState(() => {
-    // Initialize text based on node
-    switch (initNode.kind) {
-      case NodeKind.UndefinedLiteral:
-        return '';
+    if (infixMode) {
+      return '';
+    } else {
+      // Initialize text based on node
+      switch (initNode.kind) {
+        case NodeKind.UndefinedLiteral:
+          return '';
 
-      case NodeKind.NumberLiteral:
-        return initNode.val.toString();
+        case NodeKind.NumberLiteral:
+          return initNode.val.toString();
 
-      case NodeKind.TextLiteral:
-        return initNode.val;
+        case NodeKind.TextLiteral:
+          return initNode.val;
 
-      case NodeKind.BooleanLiteral:
-        return initNode.val.toString();
+        case NodeKind.BooleanLiteral:
+          return initNode.val.toString();
 
-      case NodeKind.ArrayLiteral:
-      case NodeKind.StreamReference:
-      case NodeKind.Application:
-        return ''; // Don't prefill with text
+        case NodeKind.ArrayLiteral:
+        case NodeKind.StreamReference:
+        case NodeKind.Application:
+          return ''; // Don't prefill with text
 
-      default: {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const exhaustive: never = initNode; // this will cause a type error if we haven't handled all cases
-        throw new Error();
+        default: {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const exhaustive: never = initNode; // this will cause a type error if we haven't handled all cases
+          throw new Error();
+        }
       }
     }
   });
@@ -178,29 +120,25 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, nativeFunctions: Readon
     // If there is no text, put this first as a sort of default
     if (text === '') {
       choices.push({
-        type: 'undefined',
+        node: {
+          kind: NodeKind.UndefinedLiteral,
+          sid: generateStreamId(),
+        },
       });
     }
 
     if (FLOAT_REGEX.test(text)) {
       choices.push({
-        type: 'number',
-        value: Number(text),
+        node:  {
+          kind: NodeKind.NumberLiteral,
+          sid: generateStreamId(),
+          val: Number(text),
+        },
       });
     }
 
-    const nearestDef = envLookups.nodeToNearestTreeDef.get(initNode);
-    if (!nearestDef) {
-      throw new Error();
-    }
-    const streamEnv = envLookups.treeDefToStreamEnv.get(nearestDef);
-    if (!streamEnv) {
-      throw new Error();
-    }
-    const functionEnv = envLookups.treeDefToFunctionEnv.get(nearestDef);
-    if (!functionEnv) {
-      throw new Error();
-    }
+    const streamEnv = treeViewCtx.staticEnv.streamEnv;
+    const functionEnv = treeViewCtx.staticEnv.functionEnv;
 
     const envStreams: Array<[string, StreamDefinition]> = [];
     streamEnv.forEach((sdef, ) => {
@@ -213,9 +151,10 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, nativeFunctions: Readon
     const streamSearchResults = fuzzySearch(text, envStreams);
     for (const result of streamSearchResults) {
       choices.push({
-        type: 'streamref',
-        sid: result.data.sid,
-        name: result.name,
+        node: {
+          kind: NodeKind.StreamReference,
+          ref: result.data.sid,
+        },
       });
     }
 
@@ -236,37 +175,122 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, nativeFunctions: Readon
     const functionSearchResults = fuzzySearch(text, namedFunctions);
     for (const result of functionSearchResults) {
       const funcDefNode = result.data;
+
+      const retIdx = functionReturnedIndex(funcDefNode);
+
+      const outs: ReadonlyArray<ApplicationOut> = funcDefNode.sig.yields.map((_, idx) => {
+        const thisYieldReturned = (idx === retIdx);
+        return {
+          sid: generateStreamId(),
+          name: thisYieldReturned ? null : {
+            kind: NodeKind.Name,
+            text: '',
+          },
+        };
+      });
+
+      const sargs: ReadonlyArray<StreamExpressionNode> = funcDefNode.sig.streamParams.map((_, idx) => (
+        {
+          kind: NodeKind.UndefinedLiteral,
+          sid: generateStreamId(),
+        }
+      ));
+
+      const fargs: ReadonlyArray<FunctionExpressionNode> = funcDefNode.sig.funcParams.map((param: SignatureFunctionParameterNode) => {
+        return {
+          kind: NodeKind.TreeFunctionDefinition,
+          fid: generateFunctionId(),
+          sig: param.sig,
+          format: '',
+          sparams: param.templateNames.streamParams.map(name => ({
+            kind: NodeKind.StreamParameter,
+            sid: generateStreamId(),
+            name: { kind: NodeKind.Name, text: name },
+          })),
+          fparams: param.templateNames.funcParams.map(name => ({
+            kind: NodeKind.FunctionParameter,
+            fid: generateFunctionId(),
+            name: { kind: NodeKind.Name, text: name },
+          })),
+          body: {
+            kind: NodeKind.TreeFunctionBody,
+            exprs: param.templateNames.yields.map((name, idx) => ({
+              kind: NodeKind.YieldExpression,
+              idx,
+              name: { kind: NodeKind.Name, text: name },
+              expr: {
+                kind: NodeKind.UndefinedLiteral,
+                sid: generateStreamId(),
+              },
+            })),
+          },
+        }
+      });
+
+      const n: ApplicationNode = {
+        kind: NodeKind.Application,
+        aid: generateApplicationId(),
+        outs,
+        func: {
+          kind: NodeKind.FunctionReference,
+          ref: funcDefNode.fid,
+        },
+        sargs,
+        fargs,
+      };
+
       choices.push({
-        type: 'app',
-        text: result.name,
-        funcDefNode,
+        node: n,
       });
     }
 
     for (const bv of [true, false]) {
       if (bv.toString().startsWith(text)) {
         choices.push({
-          type: 'boolean',
-          value: bv,
+          node: {
+            kind: NodeKind.BooleanLiteral,
+            sid: generateStreamId(),
+            val: bv,
+          },
         });
       }
     }
 
     choices.push({
-      type: 'text',
-      value: text,
+      node: {
+        kind: NodeKind.TextLiteral,
+        sid: generateStreamId(),
+        val: text,
+      },
     });
 
     if (atRoot && text.trim() !== '') {
       choices.push({
-        type: 'bind',
-        name: text.trim(),
+        node: {
+          kind: NodeKind.Application,
+          aid: generateApplicationId(),
+          outs: [{sid: generateStreamId(), name: {kind: NodeKind.Name, text: text.trim()}}],
+          func: {
+            kind: NodeKind.FunctionReference,
+            ref: 'bind',
+          },
+          sargs: [
+            {
+              kind: NodeKind.UndefinedLiteral,
+              sid: generateStreamId(),
+            },
+          ],
+          fargs: [],
+        },
       });
     }
 
     if (choices.length === 0) {
       choices.push({
-        type: 'undefined',
+        node: {
+          kind: NodeKind.UndefinedLiteral,
+          sid: generateStreamId(),
+        },
       });
     }
 
@@ -277,167 +301,7 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, nativeFunctions: Readon
   const realizeChoice = (state: DropdownState): void => {
     const choice = state.choices[state.index];
 
-    if (isStreamExpressionNode(initNode)) {
-      let newNode: Node;
-      const newSid: StreamID = (initNode.kind === NodeKind.StreamReference) ? generateStreamId() : (streamExprReturnedId(initNode) || generateStreamId());
-
-      let origStreamChildren: ReadonlyArray<StreamExpressionNode>;
-      switch (initNode.kind) {
-        case NodeKind.UndefinedLiteral:
-        case NodeKind.NumberLiteral:
-        case NodeKind.TextLiteral:
-        case NodeKind.BooleanLiteral:
-        case NodeKind.StreamReference:
-          origStreamChildren = [];
-          break;
-
-        case NodeKind.ArrayLiteral:
-          origStreamChildren = initNode.elems;
-          break;
-
-        case NodeKind.Application:
-          origStreamChildren = initNode.sargs;
-          break;
-
-        default: {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const exhaustive: never = initNode; // this will cause a type error if we haven't handled all cases
-          throw new Error();
-        }
-      }
-
-      switch (choice.type) {
-        case 'undefined':
-          newNode = {
-            kind: NodeKind.UndefinedLiteral,
-            sid: newSid,
-          };
-          break;
-
-        case 'number':
-          newNode = {
-            kind: NodeKind.NumberLiteral,
-            sid: newSid,
-            val: choice.value,
-          };
-          break;
-
-        case 'text':
-          newNode = {
-            kind: NodeKind.TextLiteral,
-            sid: newSid,
-            val: choice.value,
-          };
-          break;
-
-        case 'boolean':
-          newNode = {
-            kind: NodeKind.BooleanLiteral,
-            sid: newSid,
-            val: choice.value,
-          };
-          break;
-
-        case 'bind':
-          newNode = {
-            kind: NodeKind.Application,
-            aid: generateApplicationId(),
-            outs: [{sid: newSid, name: {kind: NodeKind.Name, text: choice.name}}],
-            func: {
-              kind: NodeKind.FunctionReference,
-              ref: 'bind',
-            },
-            sargs: (origStreamChildren.length > 0) ? [origStreamChildren[0]] : [{
-              kind: NodeKind.UndefinedLiteral,
-              sid: generateStreamId(),
-            }],
-            fargs: [],
-          };
-          break;
-
-        case 'streamref':
-          newNode = {
-            kind: NodeKind.StreamReference,
-            ref: choice.sid,
-          };
-          break;
-
-        case 'app': {
-          const retIdx = functionReturnedIndex(choice.funcDefNode);
-
-          const outs: ReadonlyArray<ApplicationOut> = choice.funcDefNode.sig.yields.map((_, idx) => {
-            const thisYieldReturned = (idx === retIdx);
-            return {
-              sid: thisYieldReturned ? newSid : generateStreamId(),
-              name: thisYieldReturned ? null : {
-                kind: NodeKind.Name,
-                text: '',
-              },
-            };
-          });
-
-          const sargs: ReadonlyArray<StreamExpressionNode> = choice.funcDefNode.sig.streamParams.map((_, idx) => (
-            (idx < origStreamChildren.length) ? origStreamChildren[idx] : {
-              kind: NodeKind.UndefinedLiteral,
-              sid: generateStreamId(),
-            }
-          ));
-
-          const fargs: ReadonlyArray<FunctionExpressionNode> = choice.funcDefNode.sig.funcParams.map((param: SignatureFunctionParameterNode) => {
-            return {
-              kind: NodeKind.TreeFunctionDefinition,
-              fid: generateFunctionId(),
-              sig: param.sig,
-              format: '',
-              sparams: param.templateNames.streamParams.map(name => ({
-                kind: NodeKind.StreamParameter,
-                sid: generateStreamId(),
-                name: { kind: NodeKind.Name, text: name },
-              })),
-              fparams: param.templateNames.funcParams.map(name => ({
-                kind: NodeKind.FunctionParameter,
-                fid: generateFunctionId(),
-                name: { kind: NodeKind.Name, text: name },
-              })),
-              body: {
-                kind: NodeKind.TreeFunctionBody,
-                exprs: param.templateNames.yields.map((name, idx) => ({
-                  kind: NodeKind.YieldExpression,
-                  idx,
-                  name: { kind: NodeKind.Name, text: name },
-                  expr: {
-                    kind: NodeKind.UndefinedLiteral,
-                    sid: generateStreamId(),
-                  },
-                })),
-              },
-            }
-          });
-
-          const n: ApplicationNode = {
-            kind: NodeKind.Application,
-            aid: generateApplicationId(),
-            outs,
-            func: {
-              kind: NodeKind.FunctionReference,
-              ref: choice.funcDefNode.fid,
-            },
-            sargs,
-            fargs,
-          };
-          newNode = n;
-          break;
-        }
-
-        default: {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const exhaustive: never = choice; // this will cause a type error if we haven't handled all cases
-          throw new Error();
-        }
-      }
-
-      dispatch({type: 'UPDATE_EDITING_NODE', newNode});
-    }
+    dispatch({type: 'UPDATE_EDITING_NODE', newNode: choice.node});
   };
 
   const recomputeDropdownChoices = (text: string): DropdownState => {
@@ -551,7 +415,7 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, nativeFunctions: Readon
           }
           return (
             <li key={idx} className={classNames.join(' ')} ref={(idx === dropdownState.index) ? selectedListElem : undefined}>
-              <Choice choice={choice} />
+              <ChoiceView choice={choice} treeViewCtx={treeViewCtx} />
               {(compileError && (idx === dropdownState.index)) ?
                 <div className="Chooser-dropdown-compile-error">{compileError}</div>
               : null}
@@ -597,11 +461,11 @@ const NameChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any) => vo
   );
 }
 
-const Chooser: React.FC<{initSelTree: SelTree, nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>, dispatch: (action: any) => void, compileError: string | undefined}> = ({ initSelTree, nativeFunctions, dispatch, compileError }) => {
+const Chooser: React.FC<{initSelTree: SelTree, nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>, dispatch: (action: any) => void, compileError: string | undefined, infixMode: boolean, treeViewCtx: TreeViewContext}> = ({ initSelTree, nativeFunctions, dispatch, compileError, infixMode, treeViewCtx }) => {
   if (initSelTree.selectedNode.kind === NodeKind.Name) {
     return <NameChooser initSelTree={initSelTree} dispatch={dispatch} />
   } else if (isStreamExpressionNode(initSelTree.selectedNode)) {
-    return <ExpressionChooser initSelTree={initSelTree} nativeFunctions={nativeFunctions} dispatch={dispatch} compileError={compileError} />
+    return <ExpressionChooser initSelTree={initSelTree} nativeFunctions={nativeFunctions} dispatch={dispatch} compileError={compileError} infixMode={infixMode} treeViewCtx={treeViewCtx} />
   } else {
     throw new Error();
   }

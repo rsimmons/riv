@@ -77,10 +77,10 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
 
     if (!isFunctionDefinitionNode(node)) {
       // Don't traverse into definitions, we want to stay local
-      visitChildren(node, visitToFindLocals);
+      visitChildren(node, visitToFindLocals, undefined);
     }
   };
-  visitChildren(definition.body, visitToFindLocals);
+  visitChildren(definition.body, visitToFindLocals, undefined);
 
   const constStreams: Array<ConstStreamSpec> = [];
   const apps: Array<AppSpec> = [];

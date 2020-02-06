@@ -1,33 +1,10 @@
 import React, { useState, useRef, useLayoutEffect } from 'react';
 import { Node, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, isFunctionExpressionNode, FunctionExpressionNode, isFunctionDefinitionNode, StreamReferenceNode, NameNode, ApplicationNode, ArrayLiteralNode } from './Tree';
 import './TreeView.css';
-import { EnvironmentLookups } from './EditReducer';
+import { StaticEnvironment, extendStaticEnv } from './EditReducer';
 
 const BOUND_NAME_BOX_COLOR = '#d1e6ff';
 const STREAM_REFERENCE_BOX_COLOR = '#a1cdff';
-
-function getFunctionNodeFromRef(funcRef: FunctionExpressionNode, envLookups: EnvironmentLookups): FunctionDefinitionNode {
-  if (funcRef.kind !== NodeKind.FunctionReference) {
-    throw new Error();
-  }
-
-  const nearestDef = envLookups.nodeToNearestTreeDef.get(funcRef);
-  if (!nearestDef) {
-    throw new Error();
-  }
-
-  const nodeFunctionEnv = envLookups.treeDefToFunctionEnv.get(nearestDef);
-  if (!nodeFunctionEnv) {
-    throw new Error();
-  }
-
-  const functionNode = nodeFunctionEnv.get(funcRef.ref);
-  if (!functionNode) {
-    throw new Error();
-  }
-
-  return functionNode;
-}
 
 interface MarkedNodes {
   selected: Node;
@@ -36,7 +13,7 @@ interface MarkedNodes {
 
 export interface TreeViewContext {
   markedNodes: MarkedNodes;
-  envLookups: EnvironmentLookups;
+  staticEnv: StaticEnvironment;
   setSelectedNode: (node: Node) => void;
   focusSelected: boolean;
 };
@@ -379,15 +356,7 @@ const sizedNameView = ({node, ctx}: {node: NameNode, ctx: TreeViewContext}): Siz
 };
 
 const sizedStreamReferenceView = ({node, ctx}: {node: StreamReferenceNode, ctx: TreeViewContext}): SizedReactNode => {
-  const nearestDef = ctx.envLookups.nodeToNearestTreeDef.get(node);
-  if (!nearestDef) {
-    throw new Error();
-  }
-  const nodeStreamEnv = ctx.envLookups.treeDefToStreamEnv.get(nearestDef);
-  if (!nodeStreamEnv) {
-    throw new Error();
-  }
-  const streamDef = nodeStreamEnv.get(node.ref);
+  const streamDef = ctx.staticEnv.streamEnv.get(node.ref);
   if (!streamDef) {
     throw new Error();
   }
@@ -428,7 +397,10 @@ const sizedApplicationView = ({node, ctx}: {node: ApplicationNode, ctx: TreeView
     throw new Error('unimplemented');
   }
 
-  const functionNode = getFunctionNodeFromRef(node.func, ctx.envLookups);
+  const functionNode = ctx.staticEnv.functionEnv.get(node.func.ref);
+  if (!functionNode) {
+    throw new Error();
+  }
 
   const nodeMap: Map<string, TreeAndSizedNodes> = new Map();
 
@@ -493,6 +465,11 @@ const sizedStreamExpressionView = ({node, ctx}: {node: StreamExpressionNode, ctx
   }
 }
 
+export const StreamExpressionView: React.FC<{node: StreamExpressionNode, ctx: TreeViewContext}> = ({ node, ctx }) => {
+  const {reactNode} = sizedStreamExpressionView({node, ctx});
+  return <>{reactNode}</> // empty angle brackets are to make types work
+}
+
 const sizedBodyExpressionView = ({node, ctx}: {node: BodyExpressionNode, ctx: TreeViewContext}): SizedReactNode => {
   if (isStreamExpressionNode(node)) {
     return sizedStreamExpressionView({node, ctx});
@@ -525,6 +502,11 @@ const sizedBodyExpressionView = ({node, ctx}: {node: BodyExpressionNode, ctx: Tr
 const sizedTreeFunctionDefinitionView = ({node, ctx}: {node: TreeFunctionDefinitionNode, ctx: TreeViewContext}): SizedReactNode => {
   const layout: Array<RowLayoutRow> = [];
 
+  const newCtx: TreeViewContext = {
+    ...ctx,
+    staticEnv: extendStaticEnv(ctx.staticEnv, node),
+  };
+
   if ((node.sparams.length > 0) || (node.fparams.length > 0)) {
     // Some parameters
     layout.push({indent: false, items: [
@@ -536,7 +518,7 @@ const sizedTreeFunctionDefinitionView = ({node, ctx}: {node: TreeFunctionDefinit
         indent: true,
         items: [{
           treeNode: sparam.name,
-          sizedReactNode: sizedNameView({node: sparam.name, ctx}),
+          sizedReactNode: sizedNameView({node: sparam.name, ctx: newCtx}),
         }],
       });
     });
@@ -546,7 +528,7 @@ const sizedTreeFunctionDefinitionView = ({node, ctx}: {node: TreeFunctionDefinit
         indent: true,
         items: [{
           treeNode: fparam.name,
-          sizedReactNode: sizedNameView({node: fparam.name, ctx}),
+          sizedReactNode: sizedNameView({node: fparam.name, ctx: newCtx}),
         }],
       });
     });
@@ -558,13 +540,13 @@ const sizedTreeFunctionDefinitionView = ({node, ctx}: {node: TreeFunctionDefinit
       items: [
         {
           treeNode: bodyExpr,
-          sizedReactNode: sizedBodyExpressionView({node: bodyExpr, ctx}),
+          sizedReactNode: sizedBodyExpressionView({node: bodyExpr, ctx: newCtx}),
         },
       ],
     });
   }
 
-  const {singleLineWidth, reactNode} = sizedRowView({node, layout, groupingLines: false, ctx});
+  const {singleLineWidth, reactNode} = sizedRowView({node, layout, groupingLines: false, ctx: newCtx});
   return {
     singleLineWidth,
     reactNode: (

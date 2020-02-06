@@ -24,6 +24,7 @@ interface EditState {
   curSelTree: SelTree;
   compileError: string | undefined;
   isInsert: boolean; // was this session an insert into an array-like?
+  infixMode: boolean; // treat initSelTree.selectedNode as being the first arg to an infix/postfix function we will choose
 }
 
 interface ExecutionState {

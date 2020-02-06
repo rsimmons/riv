@@ -81,19 +81,19 @@ export function* iterChildren(node: Node) {
   }
 }
 
-function visitArray<T>(nodeArr: ReadonlyArray<Node>, visit: (node: Node) => T | undefined): T | undefined {
+function visitArray<N, C>(nodeArr: ReadonlyArray<Node>, visit: (node: Node, ctx: C) => N | undefined, ctx: C): N | undefined {
   for (const node of nodeArr) {
-    const result = visit(node);
+    const result = visit(node, ctx);
     if (result) {
       return result;
     }
   }
 }
 
-function visitOuts<T>(outs: ReadonlyArray<ApplicationOut>, visit: (node: Node) => T | undefined): T | undefined {
+function visitOuts<N, C>(outs: ReadonlyArray<ApplicationOut>, visit: (node: Node, ctx: C) => N | undefined, ctx: C): N | undefined {
   for (const out of outs) {
     if (out.name) {
-      const result = visit(out.name);
+      const result = visit(out.name, ctx);
       if (result) {
         return result;
       }
@@ -104,7 +104,7 @@ function visitOuts<T>(outs: ReadonlyArray<ApplicationOut>, visit: (node: Node) =
 /**
  * Note that this aborts if the visit function returns a truthy value.
  */
-export function visitChildren<T>(node: Node, visit: (node: Node) => T | undefined): T | undefined {
+export function visitChildren<N, C>(node: Node, visit: (node: Node, ctx: C) => N | undefined, ctx: C): N | undefined {
   switch (node.kind) {
     case NodeKind.Name:
     case NodeKind.UndefinedLiteral:
@@ -123,29 +123,29 @@ export function visitChildren<T>(node: Node, visit: (node: Node) => T | undefine
       return;
 
     case NodeKind.ArrayLiteral:
-      return visitArray(node.elems, visit);
+      return visitArray(node.elems, visit, ctx);
 
     case NodeKind.Application:
-      return visit(node.func) || visitOuts(node.outs, visit) || visitArray(node.sargs, visit) || visitArray(node.fargs, visit);
+      return visit(node.func, ctx) || visitOuts(node.outs, visit, ctx) || visitArray(node.sargs, visit, ctx) || visitArray(node.fargs, visit, ctx);
 
     case NodeKind.Signature:
-      return visitArray(node.streamParams, visit) || visitArray(node.funcParams, visit) || visitArray(node.yields, visit);
+      return visitArray(node.streamParams, visit, ctx) || visitArray(node.funcParams, visit, ctx) || visitArray(node.yields, visit, ctx);
 
     case NodeKind.StreamParameter:
     case NodeKind.FunctionParameter:
-      return visit(node.name);
+      return visit(node.name, ctx);
 
     case NodeKind.YieldExpression:
-      return visit(node.expr);
+      return visit(node.name, ctx) || visit(node.expr, ctx);
 
     case NodeKind.TreeFunctionBody:
-      return visitArray(node.exprs, visit);
+      return visitArray(node.exprs, visit, ctx);
 
     case NodeKind.TreeFunctionDefinition:
-      return visit(node.sig) || visit(node.body);
+      return visit(node.sig, ctx) || visitArray(node.sparams, visit, ctx) || visitArray(node.fparams, visit, ctx) || visit(node.body, ctx);
 
     case NodeKind.NativeFunctionDefinition:
-      return visit(node.sig);
+      return visit(node.sig, ctx);
 
     default: {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -156,9 +156,9 @@ export function visitChildren<T>(node: Node, visit: (node: Node) => T | undefine
 
 // This will always return a node of the same kind, but I can't seem to express this with generics,
 // which makes the code way more complicated than it should be, but we ensure type safety.
-export function transformChildren(node: Node, transform: (node: Node) => Node): Node {
+export function transformChildren<T>(node: Node, transform: (node: Node, ctx: T) => Node, ctx: T): Node {
   const xName = (n: NameNode): NameNode => {
-    const tn = transform(n);
+    const tn = transform(n, ctx);
     if (tn.kind !== NodeKind.Name) {
       throw new Error();
     }
@@ -169,7 +169,7 @@ export function transformChildren(node: Node, transform: (node: Node) => Node): 
     let changed = false;
     const newOuts = outs.map(out => {
       if (out.name) {
-        const newName = transform(out.name);
+        const newName = transform(out.name, ctx);
         if (newName.kind !== NodeKind.Name) {
           throw new Error();
         }
@@ -188,7 +188,7 @@ export function transformChildren(node: Node, transform: (node: Node) => Node): 
   };
 
   const xStreamExpr = (n: StreamExpressionNode): StreamExpressionNode => {
-    const tn = transform(n);
+    const tn = transform(n, ctx);
     if (!isStreamExpressionNode(tn)) {
       throw new Error();
     }
@@ -198,7 +198,7 @@ export function transformChildren(node: Node, transform: (node: Node) => Node): 
   const xStreamExprArr = (arr: ReadonlyArray<StreamExpressionNode>): ReadonlyArray<StreamExpressionNode> => {
     let changed = false;
     const newArr = arr.map(el => {
-      const nel = transform(el);
+      const nel = transform(el, ctx);
       if (!isStreamExpressionNode(nel)) {
         throw new Error();
       }
@@ -213,7 +213,7 @@ export function transformChildren(node: Node, transform: (node: Node) => Node): 
   const xStreamParamArr = (arr: ReadonlyArray<StreamParameterNode>): ReadonlyArray<StreamParameterNode> => {
     let changed = false;
     const newArr = arr.map(el => {
-      const nel = transform(el);
+      const nel = transform(el, ctx);
       if (nel.kind !== NodeKind.StreamParameter) {
         throw new Error();
       }
@@ -228,7 +228,7 @@ export function transformChildren(node: Node, transform: (node: Node) => Node): 
   const xFunctionParamArr = (arr: ReadonlyArray<FunctionParameterNode>): ReadonlyArray<FunctionParameterNode> => {
     let changed = false;
     const newArr = arr.map(el => {
-      const nel = transform(el);
+      const nel = transform(el, ctx);
       if (nel.kind !== NodeKind.FunctionParameter) {
         throw new Error();
       }
@@ -243,7 +243,7 @@ export function transformChildren(node: Node, transform: (node: Node) => Node): 
   const xBodyExprArr = (arr: ReadonlyArray<BodyExpressionNode>): ReadonlyArray<BodyExpressionNode> => {
     let changed = false;
     const newArr = arr.map(el => {
-      const nel = transform(el);
+      const nel = transform(el, ctx);
       if (!isBodyExpressionNode(nel)) {
         throw new Error();
       }
@@ -256,7 +256,7 @@ export function transformChildren(node: Node, transform: (node: Node) => Node): 
   };
 
   const xFuncExpr = (n: FunctionExpressionNode): FunctionExpressionNode => {
-    const tn = transform(n);
+    const tn = transform(n, ctx);
     if (!isFunctionExpressionNode(tn)) {
       throw new Error();
     }
@@ -266,7 +266,7 @@ export function transformChildren(node: Node, transform: (node: Node) => Node): 
   const xFuncExprArr = (arr: ReadonlyArray<FunctionExpressionNode>): ReadonlyArray<FunctionExpressionNode> => {
     let changed = false;
     const newArr = arr.map(el => {
-      const nel = transform(el);
+      const nel = transform(el, ctx);
       if (!isFunctionExpressionNode(nel)) {
         throw new Error();
       }
@@ -279,7 +279,7 @@ export function transformChildren(node: Node, transform: (node: Node) => Node): 
   };
 
   const xSignature = (n: SignatureNode): SignatureNode => {
-    const tn = transform(n);
+    const tn = transform(n, ctx);
     if (tn.kind !== NodeKind.Signature) {
       throw new Error();
     }
@@ -287,7 +287,7 @@ export function transformChildren(node: Node, transform: (node: Node) => Node): 
   };
 
   const xTreeBody = (n: TreeFunctionBodyNode): TreeFunctionBodyNode => {
-    const tn = transform(n);
+    const tn = transform(n, ctx);
     if (tn.kind !== NodeKind.TreeFunctionBody) {
       throw new Error();
     }

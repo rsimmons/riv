@@ -170,99 +170,110 @@ interface ParamStreamDefinition {
 
 export type StreamDefinition = ExprStreamDefinition | ParamStreamDefinition;
 
-export interface EnvironmentLookups {
-  nodeToNearestTreeDef: Map<Node, TreeFunctionDefinitionNode>;
-  treeDefToStreamEnv: Map<TreeFunctionDefinitionNode, Environment<StreamID, StreamDefinition>>;
-  treeDefToFunctionEnv: Map<TreeFunctionDefinitionNode, Environment<FunctionID, FunctionDefinitionNode>>;
+export interface StaticEnvironment {
+  streamEnv: Environment<StreamID, StreamDefinition>;
+  functionEnv: Environment<FunctionID, FunctionDefinitionNode>;
 }
 
-export function computeEnvironmentLookups(mainDefinition: TreeFunctionDefinitionNode, nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>): EnvironmentLookups {
-  const nodeToNearestTreeDef: Map<Node, TreeFunctionDefinitionNode> = new Map();
-  const treeDefToStreamEnv: Map<TreeFunctionDefinitionNode, Environment<StreamID, StreamDefinition>> = new Map();
-  const treeDefToFunctionEnv: Map<TreeFunctionDefinitionNode, Environment<FunctionID, FunctionDefinitionNode>> = new Map();
-
-  const visitTreeDef = (def: TreeFunctionDefinitionNode, outerStreamEnv: Environment<StreamID, StreamDefinition> | undefined, outerFunctionEnv: Environment<FunctionID, FunctionDefinitionNode> | undefined): void => {
-    const streamEnv: Environment<StreamID, StreamDefinition> = new Environment(outerStreamEnv);
-    const functionEnv: Environment<FunctionID, FunctionDefinitionNode> = new Environment(outerFunctionEnv);
-
-    treeDefToStreamEnv.set(def, streamEnv);
-    treeDefToFunctionEnv.set(def, functionEnv);
-
-    def.sparams.forEach((sparam, idx) => {
-      const {sid, name} = sparam;
-      if (streamEnv.has(sid)) {
-        throw new Error();
-      }
-      streamEnv.set(sid, {
-        kind: 'param',
-        sid,
-        name,
-        param: sparam,
-      });
-    });
-
-    const visitAny = (node: Node): void => {
-      if (node.kind === NodeKind.TreeFunctionDefinition) {
-        return visitTreeDef(node, streamEnv, functionEnv);
-      }
-
-      nodeToNearestTreeDef.set(node, def);
-
-      if (isStreamExpressionNode(node)) {
-        if (node.kind === NodeKind.Application) {
-          node.outs.forEach(out => {
-            if (streamEnv.has(out.sid)) {
-              throw new Error();
-            }
-            if (out.name) {
-              streamEnv.set(out.sid, {
-                kind: 'expr',
-                sid: out.sid,
-                name: out.name,
-                expr: node,
-              });
-            }
-          });
-        }
-      }
-      if (isFunctionDefinitionNode(node)) {
-        if (functionEnv.has(node.fid)) {
-          throw new Error('function ids must be unique');
-        }
-        functionEnv.set(node.fid, node);
-      }
-      visitChildren(node, visitAny);
-    };
-
-    visitChildren(def.body, visitAny);
-  };
-
-  const nativeFuncEnv: Environment<FunctionID, FunctionDefinitionNode> = new Environment();
-  for (const extFunc of nativeFunctions) {
-    nativeFuncEnv.set(extFunc.fid, extFunc);
+export function initStaticEnv(globalFunctions: ReadonlyArray<FunctionDefinitionNode>): StaticEnvironment {
+  const globalFunctionEnv: Environment<FunctionID, FunctionDefinitionNode> = new Environment();
+  for (const fdef of globalFunctions) {
+    globalFunctionEnv.set(fdef.fid, fdef);
   }
 
-  visitTreeDef(mainDefinition, undefined, nativeFuncEnv);
-
   return {
-    nodeToNearestTreeDef,
-    treeDefToStreamEnv,
-    treeDefToFunctionEnv,
+    streamEnv: new Environment(),
+    functionEnv: globalFunctionEnv,
   };
 }
 
-export function getReferentNameNodeOfSelected(selTree: SelTree, envLookups: EnvironmentLookups): NameNode | undefined {
+export function extendStaticEnv(outer: StaticEnvironment, def: TreeFunctionDefinitionNode): StaticEnvironment {
+  const streamEnv: Environment<StreamID, StreamDefinition> = new Environment(outer.streamEnv);
+  const functionEnv: Environment<FunctionID, FunctionDefinitionNode> = new Environment(outer.functionEnv);
+
+  def.sparams.forEach(sparam => {
+    const {sid, name} = sparam;
+    if (streamEnv.has(sid)) {
+      throw new Error();
+    }
+    streamEnv.set(sid, {
+      kind: 'param',
+      sid,
+      name,
+      param: sparam,
+    });
+  });
+
+  const visit = (node: Node): void => {
+    if (isStreamExpressionNode(node)) {
+      if (node.kind === NodeKind.Application) {
+        node.outs.forEach(out => {
+          if (streamEnv.has(out.sid)) {
+            throw new Error('stream ids must be unique');
+          }
+          if (out.name) {
+            streamEnv.set(out.sid, {
+              kind: 'expr',
+              sid: out.sid,
+              name: out.name,
+              expr: node,
+            });
+          }
+        });
+      }
+    }
+
+    if (isFunctionDefinitionNode(node)) {
+      if (functionEnv.has(node.fid)) {
+        throw new Error('function ids must be unique');
+      }
+      functionEnv.set(node.fid, node);
+    } else {
+      visitChildren(node, visit, undefined);
+    }
+  };
+
+  visitChildren(def.body, visit, undefined);
+
+  return {
+    streamEnv,
+    functionEnv,
+  };
+}
+
+export function getStaticEnvForSelected(selTree: SelTree, nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>): StaticEnvironment {
+  let selectedNodeEnv: StaticEnvironment | undefined;
+
+  const visit = (node: Node, env: StaticEnvironment): void => {
+    let newEnv: StaticEnvironment;
+    if (node.kind === NodeKind.TreeFunctionDefinition) {
+      newEnv = extendStaticEnv(env, node);
+    } else {
+      newEnv = env;
+    }
+
+    if (node === selTree.selectedNode) {
+      selectedNodeEnv = newEnv;
+    }
+
+    visitChildren(node, visit, newEnv);
+  };
+
+  visit(selTree.mainDefinition, initStaticEnv(nativeFunctions));
+
+  if (!selectedNodeEnv) {
+    throw new Error();
+  }
+
+  return selectedNodeEnv;
+}
+
+export function getReferentNameNodeOfSelected(selTree: SelTree, nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>): NameNode | undefined {
+  const selectedEnv = getStaticEnvForSelected(selTree, nativeFunctions);
+
   const node = selTree.selectedNode;
   if (node.kind === NodeKind.StreamReference) {
-    const nearestDef = envLookups.nodeToNearestTreeDef.get(node);
-    if (!nearestDef) {
-      throw new Error();
-    }
-    const nodeStreamEnv = envLookups.treeDefToStreamEnv.get(nearestDef);
-    if (!nodeStreamEnv) {
-      throw new Error();
-    }
-    const streamDef = nodeStreamEnv.get(node.ref);
+    const streamDef = selectedEnv.streamEnv.get(node.ref);
     if (!streamDef) {
       throw new Error();
     }
@@ -383,7 +394,7 @@ export function computeParentLookup(root: Node): Map<Node, Node> {
       parent.set(child, node);
     }
 
-    visitChildren(node, visit);
+    visitChildren(node, visit, undefined);
   };
 
   visit(root);
@@ -405,6 +416,7 @@ function attemptBeginEditSelected(state: State): State {
         curSelTree: state.stableSelTree,
         compileError: undefined, // we assume
         isInsert: false,
+        infixMode: false,
       },
     };
   } else {
@@ -458,6 +470,7 @@ function attemptInsertBeforeAfter(state: State, before: boolean): State {
           curSelTree: initSelTree,
           compileError: undefined, // TODO: assumed, not sure if guaranteed safe
           isInsert: true,
+          infixMode: false,
         },
       };
     } else if (parent.kind === NodeKind.TreeFunctionBody) {
@@ -486,6 +499,7 @@ function attemptInsertBeforeAfter(state: State, before: boolean): State {
           curSelTree: initSelTree,
           compileError: undefined, // TODO: assumed, not sure if guaranteed safe
           isInsert: true,
+          infixMode: false,
         },
       };
     } else {
@@ -502,32 +516,30 @@ function pushUndo(state: State): State {
 }
 
 function fixupDanglingRefs(selTree: SelTree, nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>): SelTree {
-  const envLookups = computeEnvironmentLookups(selTree.mainDefinition, nativeFunctions);
+  const globalEnv = initStaticEnv(nativeFunctions);
 
   const oldNodeToNew: Map<Node, Node> = new Map();
 
-  const transform = (node: Node): Node => {
+  const transform = (node: Node, env: StaticEnvironment): Node => {
     let newNode: Node = node;
     if (node.kind === NodeKind.StreamReference) {
-      const nearestDef = envLookups.nodeToNearestTreeDef.get(node);
-      if (!nearestDef) {
-        throw new Error();
-      }
-      const nodeStreamEnv = envLookups.treeDefToStreamEnv.get(nearestDef);
-      if (!nodeStreamEnv) {
-        throw new Error();
-      }
-      const streamDef = nodeStreamEnv.get(node.ref);
+      const streamDef = env.streamEnv.get(node.ref);
       if (!streamDef) {
         newNode = {
           kind: NodeKind.UndefinedLiteral,
           sid: generateStreamId(),
         };
       }
-
     }
 
-    const newNewNode = transformChildren(newNode, transform);
+    let newEnv: StaticEnvironment;
+    if (node.kind === NodeKind.TreeFunctionDefinition) {
+      newEnv = extendStaticEnv(env, node);
+    } else {
+      newEnv = env;
+    }
+
+    const newNewNode = transformChildren(newNode, transform, newEnv);
 
     if (newNewNode !== node) {
       oldNodeToNew.set(node, newNewNode);
@@ -536,7 +548,7 @@ function fixupDanglingRefs(selTree: SelTree, nativeFunctions: ReadonlyArray<Nati
     return newNewNode;
   };
 
-  const newMain = transform(selTree.mainDefinition);
+  const newMain = transform(selTree.mainDefinition, globalEnv);
   if (newMain.kind !== NodeKind.TreeFunctionDefinition) {
     throw new Error();
   }
@@ -652,6 +664,7 @@ function attemptChainEdit(state: State, tryInsert: boolean): State {
         curSelTree: editSelTree,
         compileError: undefined,
         isInsert: false,
+        infixMode: false,
       },
     };
   };
@@ -746,6 +759,21 @@ export function reducer(state: State, action: Action): State {
       return attemptChainEdit(stateAfterCommit, insertAgain);
     } else {
       return attemptBeginEditSelected(state);
+    }
+  } else if (action.type === 'INFIX_EDIT') {
+    if (state.editing) {
+      return {
+        ...state,
+        editing: {
+          sessionId: genuid(),
+          initSelTree: state.editing.curSelTree,
+          curSelTree: state.editing.curSelTree,
+          compileError: undefined, // we assume?
+          isInsert: false,
+          infixMode: true,
+        },
+      };
+    } else {
     }
   } else if (action.type === 'ABORT_EDIT') {
     if (state.editing) {

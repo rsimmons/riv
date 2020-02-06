@@ -1,6 +1,6 @@
-import React, { useReducer, useRef, useEffect, useMemo, useLayoutEffect } from 'react';
+import React, { useReducer, useRef, useEffect, useLayoutEffect } from 'react';
 import { HotKeys, ObserveKeys } from "react-hotkeys";
-import { initialState, reducer, computeEnvironmentLookups, getReferentNameNodeOfSelected } from './EditReducer';
+import { initialState, reducer, getReferentNameNodeOfSelected, initStaticEnv, getStaticEnvForSelected } from './EditReducer';
 import { StoragePanel } from './StoragePanel';
 import './Editor.css';
 import { TreeFunctionDefinitionView, TreeViewContext } from './TreeView';
@@ -11,6 +11,7 @@ import Chooser from './Chooser';
 const keyMap = {
   TOGGLE_EDIT: 'enter',
   ABORT_EDIT: 'escape',
+  INFIX_EDIT: 'shift+enter',
 
   INSERT_BEFORE: 'shift+up',
   INSERT_AFTER: 'shift+down',
@@ -85,18 +86,16 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
 
   const displayedSelTree = state.editing ? state.editing.initSelTree : state.stableSelTree;
 
-  const envLookups = useMemo(() => computeEnvironmentLookups(displayedSelTree.mainDefinition, state.nativeFunctions), [displayedSelTree.mainDefinition, state.nativeFunctions]);
+  const referentNameNode = getReferentNameNodeOfSelected(displayedSelTree, state.nativeFunctions);
 
-  const referentNameNode = getReferentNameNodeOfSelected(displayedSelTree, envLookups);
-
-  const treeViewCtxData: TreeViewContext = {
+  const treeViewCtx: TreeViewContext = {
     markedNodes: {
       selected: displayedSelTree.selectedNode,
       referentName: referentNameNode,
     },
     // clipboardTopNode: (state.clipboardStack.length > 0) ? state.derivedLookups.streamIdToNode!.get(state.clipboardStack[state.clipboardStack.length-1].streamId) : null,
     // clipboardRestNodes: state.clipboardStack.slice(0, -1).map(frame => state.derivedLookups.streamIdToNode!.get(frame.streamId)),
-    envLookups,
+    staticEnv: initStaticEnv(state.nativeFunctions),
     setSelectedNode: (node: Node) => {
       dispatch({
         type: 'SET_SELECTED_NODE',
@@ -135,10 +134,10 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
       <HotKeys keyMap={keyMap} handlers={handlers}>
         <ObserveKeys only={CATCH_IN_INPUTS}>
           <div className="Editor-workspace" onKeyDown={onKeyDown} tabIndex={0} ref={editorElem}>
-            <TreeFunctionDefinitionView node={displayedSelTree.mainDefinition} ctx={treeViewCtxData} />
+            <TreeFunctionDefinitionView node={displayedSelTree.mainDefinition} ctx={treeViewCtx} />
             {state.editing && (
               <div className="Editor-chooser-positioner" style={{position: 'absolute'}}>
-                <Chooser key={state.editing.sessionId} initSelTree={state.editing.initSelTree} nativeFunctions={state.nativeFunctions} dispatch={dispatch} compileError={state.editing.compileError} />
+                <Chooser key={state.editing.sessionId} initSelTree={state.editing.initSelTree} nativeFunctions={state.nativeFunctions} dispatch={dispatch} compileError={state.editing.compileError} infixMode={state.editing.infixMode} treeViewCtx={{...treeViewCtx, staticEnv: getStaticEnvForSelected(state.editing.initSelTree, state.nativeFunctions)}} />
               </div>
             )}
           </div>
