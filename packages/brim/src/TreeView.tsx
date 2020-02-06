@@ -443,10 +443,10 @@ const sizedStreamExpressionView = ({node, ctx}: {node: StreamExpressionNode, ctx
       return sizedSimpleNodeView({treeNode: node, content: node.val.toString(), bgColor: '#cce8cc', ctx});
 
     case NodeKind.TextLiteral:
-      return sizedSimpleNodeView({treeNode: node, content: node.val, bgColor: '#cce8cc', ctx});
+      return sizedSimpleNodeView({treeNode: node, content: node.val, bgColor: '#fff3b9', ctx});
 
     case NodeKind.BooleanLiteral:
-      return sizedSimpleNodeView({treeNode: node, content: node.val.toString(), bgColor: '#cce8cc', ctx});
+      return sizedSimpleNodeView({treeNode: node, content: node.val.toString(), bgColor: '#f0d4ff', ctx});
 
     case NodeKind.ArrayLiteral:
       return sizedArrayLiteralView({node, ctx});
