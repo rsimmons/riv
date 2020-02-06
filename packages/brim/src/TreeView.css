@@ -10,7 +10,7 @@
 
 .TreeView-simple-node-icon {
   height: 1em;
-  vertical-align: middle;
+  vertical-align: text-bottom;
 }
 
 .TreeView-row-view-plain-text {
