@@ -38,3 +38,15 @@ export function parseFormatString(s: string): ReadonlyArray<FormatPiece> {
 
   return result;
 }
+
+export function parseToJustText(s: string): string {
+  const resultPieces: Array<string> = [];
+
+  for (const piece of parseFormatString(s)) {
+    if (piece.kind === 'text') {
+      resultPieces.push(piece.text);
+    }
+  }
+
+  return resultPieces.join(' ');
+}

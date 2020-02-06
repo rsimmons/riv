@@ -6,6 +6,7 @@ import { fuzzy_match } from './vendor/fts_fuzzy_match';
 import { StreamDefinition, computeParentLookup } from './EditReducer';
 import { SelTree } from './State';
 import { StreamExpressionView, TreeViewContext } from './TreeView';
+import { parseToJustText } from './Format';
 
 interface Choice {
   node: StreamExpressionNode;
@@ -161,13 +162,13 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, nativeFunctions: Readon
     const namedFunctions: Array<[string, FunctionDefinitionNode]> = [];
     functionEnv.forEach((defNode, ) => {
       if (defNode.format) {
-        const defName = defNode.format;
+        const defAsText = parseToJustText(defNode.format);
         if (atRoot) {
-          namedFunctions.push([defName, defNode]);
+          namedFunctions.push([defAsText, defNode]);
         } else {
           const retIdx = functionReturnedIndex(defNode);
           if (retIdx !== undefined) {
-            namedFunctions.push([defName, defNode]);
+            namedFunctions.push([defAsText, defNode]);
           }
         }
       }
