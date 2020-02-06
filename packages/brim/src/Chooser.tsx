@@ -190,7 +190,9 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, nativeFunctions: Readon
       });
 
       const sargs: ReadonlyArray<StreamExpressionNode> = funcDefNode.sig.streamParams.map((_, idx) => (
-        {
+        (infixMode && (idx === 0))
+        ? initNode
+        : {
           kind: NodeKind.UndefinedLiteral,
           sid: generateStreamId(),
         }

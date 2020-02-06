@@ -774,6 +774,17 @@ export function reducer(state: State, action: Action): State {
         },
       };
     } else {
+      return {
+        ...state,
+        editing: {
+          sessionId: genuid(),
+          initSelTree: state.stableSelTree,
+          curSelTree: state.stableSelTree,
+          compileError: undefined, // we assume?
+          isInsert: false,
+          infixMode: true,
+        },
+      };
     }
   } else if (action.type === 'ABORT_EDIT') {
     if (state.editing) {
