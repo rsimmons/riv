@@ -2,6 +2,8 @@ import React, { useState, useRef, useLayoutEffect } from 'react';
 import { Node, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, isFunctionExpressionNode, FunctionExpressionNode, isFunctionDefinitionNode, StreamReferenceNode, NameNode, ApplicationNode, ArrayLiteralNode } from './Tree';
 import './TreeView.css';
 import { StaticEnvironment, extendStaticEnv } from './EditReducer';
+import quotesIcon from './icons/quotes.svg';
+import booleanIcon from './icons/boolean.svg';
 
 const BOUND_NAME_BOX_COLOR = '#d1e6ff';
 const STREAM_REFERENCE_BOX_COLOR = '#a1cdff';
@@ -85,18 +87,18 @@ interface SizedReactNode {
   reactNode: React.ReactNode;
 }
 
-const SimpleNodeView: React.FC<{treeNode: Node, content: string, bgColor: string, ctx: TreeViewContext}> = ({treeNode, content, bgColor, ctx}) => {
+const SimpleNodeView: React.FC<{treeNode: Node, content: string, icon?: string, bgColor: string, ctx: TreeViewContext}> = ({treeNode, content, icon, bgColor, ctx}) => {
   const ref = useRef<HTMLDivElement>(null);
   const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(treeNode, ref, ctx);
   return (
-    <div ref={ref} className={selectionClasses.concat(['TreeView-node', 'TreeView-simple-node']).join(' ')} {...selectionHandlers} style={{background: bgColor}}>{content}</div>
+  <div ref={ref} className={selectionClasses.concat(['TreeView-node', 'TreeView-simple-node']).join(' ')} {...selectionHandlers} style={{background: bgColor}}>{icon && <img className="TreeView-simple-node-icon" src={icon} /> }{content}</div>
   );
 };
 
-const sizedSimpleNodeView = ({treeNode, content, bgColor, ctx}: {treeNode: Node, content: string, bgColor: string, ctx: TreeViewContext}): SizedReactNode => {
+const sizedSimpleNodeView = ({treeNode, content, icon, bgColor, ctx}: {treeNode: Node, content: string, icon?: string, bgColor: string, ctx: TreeViewContext}): SizedReactNode => {
   return {
     singleLineWidth: content.length,
-    reactNode: <SimpleNodeView treeNode={treeNode} content={content} bgColor={bgColor} ctx={ctx} />,
+    reactNode: <SimpleNodeView treeNode={treeNode} content={content} icon={icon} bgColor={bgColor} ctx={ctx} />,
   };
 };
 
@@ -443,10 +445,10 @@ const sizedStreamExpressionView = ({node, ctx}: {node: StreamExpressionNode, ctx
       return sizedSimpleNodeView({treeNode: node, content: node.val.toString(), bgColor: '#cce8cc', ctx});
 
     case NodeKind.TextLiteral:
-      return sizedSimpleNodeView({treeNode: node, content: node.val, bgColor: '#fff3b9', ctx});
+      return sizedSimpleNodeView({treeNode: node, content: node.val, icon: quotesIcon, bgColor: '#fff3b9', ctx});
 
     case NodeKind.BooleanLiteral:
-      return sizedSimpleNodeView({treeNode: node, content: node.val.toString(), bgColor: '#f0d4ff', ctx});
+      return sizedSimpleNodeView({treeNode: node, content: node.val.toString(), icon: booleanIcon, bgColor: '#f0d4ff', ctx});
 
     case NodeKind.ArrayLiteral:
       return sizedArrayLiteralView({node, ctx});
