@@ -327,7 +327,8 @@ const sizedTemplateView = ({node, template, nodeMap, groupingLines, ctx}: {node:
           totalWidth = undefined;
         }
       } else {
-        accumItems.push(split);
+        const ellipsis = (accumItems.length === 0) && (layout.length > 0);
+        accumItems.push((ellipsis ? '…' : '') + split);
         if (totalWidth !== undefined) {
           totalWidth += split.length;
         }
