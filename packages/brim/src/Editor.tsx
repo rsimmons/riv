@@ -135,11 +135,20 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
         <ObserveKeys only={CATCH_IN_INPUTS}>
           <div className="Editor-workspace" onKeyDown={onKeyDown} tabIndex={0} ref={editorElem}>
             <TreeFunctionDefinitionView node={displayedSelTree.mainDefinition} ctx={treeViewCtx} />
-            {state.editing && (
-              <div className="Editor-chooser-positioner" style={{position: 'absolute'}}>
-                <Chooser key={state.editing.sessionId} initSelTree={state.editing.initSelTree} nativeFunctions={state.nativeFunctions} dispatch={dispatch} compileError={state.editing.compileError} infixMode={state.editing.infixMode} treeViewCtx={{...treeViewCtx, staticEnv: getStaticEnvForSelected(state.editing.initSelTree, state.nativeFunctions)}} />
-              </div>
-            )}
+            {state.editing && (() => {
+              const chooserTreeViewCtx: TreeViewContext = {
+                ...treeViewCtx,
+                setSelectedNode: () => {},
+                staticEnv: getStaticEnvForSelected(state.editing.initSelTree, state.nativeFunctions),
+                focusSelected: false,
+              };
+
+              return (
+                <div className="Editor-chooser-positioner" style={{position: 'absolute'}}>
+                  <Chooser key={state.editing.sessionId} initSelTree={state.editing.initSelTree} nativeFunctions={state.nativeFunctions} dispatch={dispatch} compileError={state.editing.compileError} infixMode={state.editing.infixMode} treeViewCtx={chooserTreeViewCtx} />
+                </div>
+              );
+            })()}
           </div>
         </ObserveKeys>
       </HotKeys>
