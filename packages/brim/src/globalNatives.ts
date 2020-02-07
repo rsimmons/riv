@@ -40,6 +40,7 @@ const nativeFunctions: Array<[string, string, SignatureNode, Function]> = [
   // simple
   ['bind', '$o0 = $s0', simpleSig([''], true), (v: any) => v],
   ['ifte', 'if $s0 | then $s1 | else $s2', simpleSig(['_cond', 'then', 'else'], true), (cond: any, _then: any, _else: any) => (cond ? _then : _else)],
+  ['equals', '$s0 equals $s1', simpleSig(['', ''], true), (a: any, b: any) => Object.is(a, b)],
 
   // events
   ['changeCount', '', simpleSig(['_stream'], true), changeCount],
