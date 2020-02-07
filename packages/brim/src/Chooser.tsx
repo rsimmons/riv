@@ -1,47 +1,15 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import './Chooser.css';
-import { generateStreamId, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, SignatureFunctionParameterNode, generateFunctionId, StreamExpressionNode, generateApplicationId, ApplicationOut, FunctionExpressionNode, NativeFunctionDefinitionNode, UndefinedLiteralNode, ArrayLiteralNode, NameNode } from './Tree';
+import { generateStreamId, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, SignatureFunctionParameterNode, generateFunctionId, StreamExpressionNode, generateApplicationId, ApplicationOut, FunctionExpressionNode, NativeFunctionDefinitionNode, UndefinedLiteralNode, ArrayLiteralNode, NameNode, StreamID } from './Tree';
 import { functionReturnedIndex } from './TreeUtil';
-import { fuzzy_match } from './vendor/fts_fuzzy_match';
-import { StreamDefinition, computeParentLookup } from './EditReducer';
+import Fuse from 'fuse.js';
+import { computeParentLookup } from './EditReducer';
 import { SelTree } from './State';
 import { StreamExpressionView, TreeViewContext } from './TreeView';
 import { parseToJustText } from './Format';
 
 interface Choice {
   node: StreamExpressionNode;
-}
-
-interface SearchResult<T> {
-  score: number;
-  formattedStr: string;
-  name: string;
-  data: T;
-}
-function fuzzySearch<T>(query: string, items: ReadonlyArray<[string, T]>): Array<SearchResult<T>> {
-  const results: Array<SearchResult<T>> = [];
-
-  for (const [name, data] of items) {
-    const [hit, score, formattedStr] = fuzzy_match(query, name);
-    if (typeof score !== 'number') {
-      throw new Error();
-    }
-    if (typeof formattedStr !== 'string') {
-      throw new Error();
-    }
-    if (hit) {
-      results.push({
-        score,
-        formattedStr,
-        name,
-        data,
-      });
-    }
-  }
-  if (query !== '') { // TODO: this is a hack, if query is empty, scoring is dumb
-    results.sort((a, b) => (b.score - a.score));
-  }
-  return results;
 }
 
 const FLOAT_REGEX = /^[-+]?(?:\d*\.?\d+|\d+\.?\d*)(?:[eE][-+]?\d+)?$/;
@@ -138,44 +106,74 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, nativeFunctions: Readon
       });
     }
 
+    // SEARCH OVER STREAMS
     const streamEnv = treeViewCtx.staticEnv.streamEnv;
-    const functionEnv = treeViewCtx.staticEnv.functionEnv;
 
-    const envStreams: Array<[string, StreamDefinition]> = [];
+    interface EnvStreamSearchItem {
+      name: string;
+      sid: StreamID;
+    }
+    const envStreamSearchItems: Array<EnvStreamSearchItem> = [];
     streamEnv.forEach((sdef, ) => {
       const selfRef = (sdef.kind === 'expr') && (sdef.expr === initNode);
       if (!selfRef) {
-        envStreams.push([sdef.name.text || '<unnamed>', sdef]);
+        envStreamSearchItems.push({
+          name: sdef.name.text || ' ',
+          sid: sdef.sid,
+        });
       }
     });
 
-    const streamSearchResults = fuzzySearch(text, envStreams);
-    for (const result of streamSearchResults) {
+    const envStreamSearchOptions: Fuse.FuseOptions<EnvStreamSearchItem> = {
+      keys: ['name'],
+    };
+    const envStreamSearchResults = (new Fuse(envStreamSearchItems, envStreamSearchOptions)).search<EnvStreamSearchItem, false, false>(text);
+
+    for (const result of envStreamSearchResults) {
       choices.push({
         node: {
           kind: NodeKind.StreamReference,
-          ref: result.data.sid,
+          ref: result.sid,
         },
       });
     }
 
-    const namedFunctions: Array<[string, FunctionDefinitionNode]> = [];
-    functionEnv.forEach((defNode, ) => {
+    // SEARCH OVER FUNCTIONS
+    const functionEnv = treeViewCtx.staticEnv.functionEnv;
+
+    interface EnvFuncSearchItem {
+      name: string;
+      def: FunctionDefinitionNode;
+    }
+    const envFuncSearchItems: Array<EnvFuncSearchItem> = [];
+
+    functionEnv.forEach(defNode => {
       if (defNode.format) {
         const defAsText = parseToJustText(defNode.format);
         if (atRoot) {
-          namedFunctions.push([defAsText, defNode]);
+          envFuncSearchItems.push({
+            name: defAsText,
+            def: defNode,
+          });
         } else {
           const retIdx = functionReturnedIndex(defNode);
           if (retIdx !== undefined) {
-            namedFunctions.push([defAsText, defNode]);
+            envFuncSearchItems.push({
+              name: defAsText,
+              def: defNode,
+            });
           }
         }
       }
     });
-    const functionSearchResults = fuzzySearch(text, namedFunctions);
-    for (const result of functionSearchResults) {
-      const funcDefNode = result.data;
+
+    const envFuncSearchOptions: Fuse.FuseOptions<EnvFuncSearchItem> = {
+      keys: ['name'],
+    };
+    const envFuncSearchResults = (new Fuse(envFuncSearchItems, envFuncSearchOptions)).search<EnvFuncSearchItem, false, false>(text);
+
+    for (const result of envFuncSearchResults) {
+      const funcDefNode = result.def;
 
       const retIdx = functionReturnedIndex(funcDefNode);
 
@@ -248,7 +246,7 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, nativeFunctions: Readon
     }
 
     for (const bv of [true, false]) {
-      if (bv.toString().startsWith(text)) {
+      if ((text.length > 0) && bv.toString().startsWith(text)) {
         choices.push({
           node: {
             kind: NodeKind.BooleanLiteral,
