@@ -343,9 +343,6 @@ const sizedTemplateView = ({node, template, nodeMap, groupingLines, ctx}: {node:
   }
 
   const [singleLayout, singleLineWidth] = createLayout(true);
-  if ((node.kind === NodeKind.Application) && (node.func.kind === NodeKind.FunctionReference) && (node.func.ref === 'snabbdom.input')) {
-    console.log('INPUT WTF', singleLayout, singleLineWidth);
-  }
   if ((singleLineWidth !== undefined) && (singleLineWidth <= MAX_WIDTH)) {
     return {
       singleLineWidth,
