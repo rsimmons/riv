@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import './Chooser.css';
 import { generateStreamId, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, SignatureFunctionParameterNode, generateFunctionId, StreamExpressionNode, generateApplicationId, ApplicationOut, FunctionExpressionNode, NativeFunctionDefinitionNode, UndefinedLiteralNode, ArrayLiteralNode, NameNode, StreamID } from './Tree';
-import { functionReturnedIndex } from './TreeUtil';
 import Fuse from 'fuse.js';
 import { computeParentLookup } from './EditReducer';
 import { SelTree } from './State';
 import { StreamExpressionView, TreeViewContext } from './TreeView';
-import { parseToJustText } from './Format';
+import { asPlainText } from './FunctionUI';
 
 interface Choice {
   node: StreamExpressionNode;
@@ -148,16 +147,15 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, nativeFunctions: Readon
     const envFuncSearchItems: Array<EnvFuncSearchItem> = [];
 
     functionEnv.forEach(defNode => {
-      if (defNode.format) {
-        const defAsText = parseToJustText(defNode.format);
+      if (defNode.ui) {
+        const defAsText = asPlainText(defNode.ui);
         if (atRoot) {
           envFuncSearchItems.push({
             name: defAsText,
             def: defNode,
           });
         } else {
-          const retIdx = functionReturnedIndex(defNode);
-          if (retIdx !== undefined) {
+          if (defNode.sig.returnedIdx !== undefined) {
             envFuncSearchItems.push({
               name: defAsText,
               def: defNode,
@@ -175,10 +173,8 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, nativeFunctions: Readon
     for (const result of envFuncSearchResults) {
       const funcDefNode = result.def;
 
-      const retIdx = functionReturnedIndex(funcDefNode);
-
       const outs: ReadonlyArray<ApplicationOut> = funcDefNode.sig.yields.map((_, idx) => {
-        const thisYieldReturned = (idx === retIdx);
+        const thisYieldReturned = (idx === funcDefNode.sig.returnedIdx);
         return {
           sid: generateStreamId(),
           name: thisYieldReturned ? null : {
@@ -202,7 +198,7 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, nativeFunctions: Readon
           kind: NodeKind.TreeFunctionDefinition,
           fid: generateFunctionId(),
           sig: param.sig,
-          format: '',
+          ui: {kind: 'none'},
           sparams: param.templateNames.streamParams.map(name => ({
             kind: NodeKind.StreamParameter,
             sid: generateStreamId(),

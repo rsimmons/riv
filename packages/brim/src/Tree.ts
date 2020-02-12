@@ -1,4 +1,5 @@
 import genuid from './uid';
+import { FunctionUI } from './FunctionUI';
 
 /**
  * IDS
@@ -160,6 +161,7 @@ export interface SignatureNode {
   readonly streamParams: ReadonlyArray<SignatureStreamParameterNode>;
   readonly funcParams: ReadonlyArray<SignatureFunctionParameterNode>;
   readonly yields: ReadonlyArray<SignatureYieldNode>;
+  readonly returnedIdx: number | undefined; // which of the yields (if any) is returned to the tree-parent
 }
 
 export interface YieldExpressionNode {
@@ -195,7 +197,7 @@ export interface TreeFunctionDefinitionNode {
   readonly kind: NodeKind.TreeFunctionDefinition;
   readonly fid: FunctionID;
   readonly sig: SignatureNode;
-  readonly format: string;
+  readonly ui: FunctionUI;
 
   readonly sparams: ReadonlyArray<StreamParameterNode>;
   readonly fparams: ReadonlyArray<FunctionParameterNode>;
@@ -206,7 +208,7 @@ export interface NativeFunctionDefinitionNode {
   readonly kind: NodeKind.NativeFunctionDefinition;
   readonly fid: FunctionID;
   readonly sig: SignatureNode;
-  readonly format: string;
+  readonly ui: FunctionUI;
 
   // TODO: JS code as string?
 }

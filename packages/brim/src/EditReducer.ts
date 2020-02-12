@@ -900,11 +900,11 @@ globalNativeFunctions.forEach(([id, , , jsFunc]) => {
 });
 
 function initialStateFromDefinition(mainDefinition: TreeFunctionDefinitionNode, programInfo: ProgramInfo): State {
-  const nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode> = globalNativeFunctions.map(([fid, format, signature, ]) => ({
+  const nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode> = globalNativeFunctions.map(([fid, ui, signature, ]) => ({
     kind: NodeKind.NativeFunctionDefinition,
     fid,
     sig: signature,
-    format,
+    ui: (typeof ui === 'string') ? {kind: 'fmtstring', format: ui} : {kind: 'none'},
   }));
 
   const initSelTree = {mainDefinition, selectedNode: mainDefinition};
@@ -931,8 +931,9 @@ const INITIAL_MAIN: TreeFunctionDefinitionNode = {
     streamParams: [],
     funcParams: [],
     yields: [],
+    returnedIdx: undefined,
   },
-  format: '',
+  ui: {kind: 'none'},
   sparams: [],
   fparams: [],
   body: {

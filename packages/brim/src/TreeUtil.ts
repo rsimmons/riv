@@ -1,4 +1,4 @@
-import { NodeKind, StreamID, FunctionID, StreamExpressionNode, FunctionExpressionNode, FunctionDefinitionNode } from './Tree';
+import { NodeKind, StreamID, FunctionID, StreamExpressionNode, FunctionExpressionNode } from './Tree';
 
 export function streamExprReturnedId(node: StreamExpressionNode): StreamID | undefined {
   switch (node.kind) {
@@ -13,6 +13,9 @@ export function streamExprReturnedId(node: StreamExpressionNode): StreamID | und
       return node.ref;
 
     case NodeKind.Application:
+      // NOTE: This is hacky, but works.
+      //  We could be more robust by looking up the function definition and checking its signature.
+      //  That would require having the environment available.
       for (const out of node.outs) {
         if (!out.name) {
           return out.sid;
@@ -42,31 +45,5 @@ export function functionExprId(node: FunctionExpressionNode): FunctionID {
       const exhaustive: never = node; // this will cause a type error if we haven't handled all cases
       throw new Error();
     }
-  }
-}
-
-export function functionReturnedIndex(def: FunctionDefinitionNode): number | undefined {
-  const boundYieldIdxs: Set<number> = new Set();
-  const hits = def.format.match(/\$o[0-9]+/g);
-  if (hits) {
-    for (const hit of hits) {
-      const idx = Number(hit.substr(2));
-      boundYieldIdxs.add(idx);
-    }
-  }
-
-  const unboundYieldIdxs: Set<number> = new Set();
-  def.sig.yields.forEach((y, idx) => {
-    if (!boundYieldIdxs.has(idx)) {
-      unboundYieldIdxs.add(idx);
-    }
-  });
-
-  if (unboundYieldIdxs.size === 0) {
-    return undefined;
-  } else if (unboundYieldIdxs.size === 1) {
-    return [...unboundYieldIdxs][0];
-  } else {
-    throw new Error();
   }
 }

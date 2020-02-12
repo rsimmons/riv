@@ -33,12 +33,19 @@ function simpleSig(ptypes: Array<string>, yields: boolean): SignatureNode {
     streamParams: ptypes.map(pn => ({kind: NodeKind.SignatureStreamParameter})),
     funcParams: [],
     yields: yields ? [{kind: NodeKind.SignatureYield}] : [],
-  }
+    returnedIdx: yields ? 0 : undefined,
+  };
 }
 
 const nativeFunctions: Array<[string, string, SignatureNode, Function]> = [
   // simple
-  ['bind', '$o0 = $s0', simpleSig([''], true), (v: any) => v],
+  ['bind', '$o0 = $s0', {
+    kind: NodeKind.Signature,
+    streamParams: [{kind: NodeKind.SignatureStreamParameter}, {kind: NodeKind.SignatureStreamParameter}],
+    funcParams: [],
+    yields: [{kind: NodeKind.SignatureYield}],
+    returnedIdx: undefined,
+  }, (v: any) => v],
   ['ifte', 'if $s0 | then $s1 | else $s2', simpleSig(['_cond', 'then', 'else'], true), (cond: any, _then: any, _else: any) => (cond ? _then : _else)],
   ['equals', '$s0 equals $s1', simpleSig(['', ''], true), (a: any, b: any) => Object.is(a, b)],
 
@@ -93,6 +100,7 @@ const nativeFunctions: Array<[string, string, SignatureNode, Function]> = [
         kind: NodeKind.SignatureYield,
       },
     ],
+    returnedIdx: 0,
   }, (prefill: string): any => {
     const safePrefill = (typeof prefill === 'string') ? prefill : '';
     const [text, inputHandler] = useCallbackReducer<string, any>((_, e) => {
@@ -129,6 +137,7 @@ const nativeFunctions: Array<[string, string, SignatureNode, Function]> = [
               kind: NodeKind.SignatureYield,
             }
           ],
+          returnedIdx: 0,
         },
         templateNames: {
           streamParams: ['elem'],
@@ -142,6 +151,7 @@ const nativeFunctions: Array<[string, string, SignatureNode, Function]> = [
         kind: NodeKind.SignatureYield,
       },
     ],
+    returnedIdx: 0,
   }, (arr: Array<any>, f: (v: any) => any) => streamMap(f, arr)],
 
   ['audioDriver', 'play audio, computing each sample as $f0', {
@@ -169,6 +179,7 @@ const nativeFunctions: Array<[string, string, SignatureNode, Function]> = [
               kind: NodeKind.SignatureYield,
             }
           ],
+          returnedIdx: 0,
         },
         templateNames: {
           streamParams: ['audio time', 'next frame', 'sample rate'],
@@ -178,6 +189,7 @@ const nativeFunctions: Array<[string, string, SignatureNode, Function]> = [
       },
     ],
     yields: [],
+    returnedIdx: undefined,
   }, audioDriver],
 ];
 

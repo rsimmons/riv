@@ -2,7 +2,7 @@ import React, { useState, useRef, useLayoutEffect } from 'react';
 import { Node, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, isFunctionExpressionNode, FunctionExpressionNode, isFunctionDefinitionNode, StreamReferenceNode, NameNode, ApplicationNode, ArrayLiteralNode } from './Tree';
 import './TreeView.css';
 import { StaticEnvironment, extendStaticEnv } from './EditReducer';
-import { parseFormatString } from './Format';
+import { parseFormatString } from './FormatStringFunctionUI';
 import quotesIcon from './icons/quotes.svg';
 import booleanIcon from './icons/boolean.svg';
 
@@ -431,13 +431,25 @@ const sizedApplicationView = ({node, ctx}: {node: ApplicationNode, ctx: TreeView
     }
   });
 
-  return sizedTemplateView({
-    node,
-    template: functionNode.format || ('need format for ' + functionNode.fid),
-    nodeMap,
-    groupingLines: true,
-    ctx,
-  });
+  switch (functionNode.ui.kind) {
+    case 'none':
+      throw new Error();
+
+    case 'fmtstring':
+      return sizedTemplateView({
+        node,
+        template: functionNode.ui.format || ('empty format string for ' + functionNode.fid),
+        nodeMap,
+        groupingLines: true,
+        ctx,
+      });
+
+    default: {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const exhaustive: never = functionNode.ui; // this will cause a type error if we haven't handled all cases
+      throw new Error();
+    }
+  }
 };
 
 const sizedStreamExpressionView = ({node, ctx}: {node: StreamExpressionNode, ctx: TreeViewContext}): SizedReactNode => {
