@@ -2,7 +2,7 @@ import React, { useState, useRef, useLayoutEffect } from 'react';
 import { Node, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, isFunctionExpressionNode, FunctionExpressionNode, isFunctionDefinitionNode, StreamReferenceNode, NameNode, ApplicationNode, ArrayLiteralNode } from './Tree';
 import './TreeView.css';
 import { StaticEnvironment, extendStaticEnv } from './EditReducer';
-import { parseFormatString } from './FormatStringFunctionUI';
+import { parseTemplateString } from './SyntaxTemplate';
 import quotesIcon from './icons/quotes.svg';
 import booleanIcon from './icons/boolean.svg';
 
@@ -298,7 +298,7 @@ const sizedTemplateView = ({node, template, nodeMap, groupingLines, ctx}: {node:
       accumLength = 0;
     };
 
-    for (const piece of parseFormatString(template)) {
+    for (const piece of parseTemplateString(template)) {
       if (piece.kind === 'wildcard') {
         const nodes = nodeMap.get(piece.key);
         if (!nodes) {
@@ -435,10 +435,10 @@ const sizedApplicationView = ({node, ctx}: {node: ApplicationNode, ctx: TreeView
     case 'none':
       throw new Error();
 
-    case 'fmtstring':
+    case 'tmplstr':
       return sizedTemplateView({
         node,
-        template: functionNode.ui.format || ('empty format string for ' + functionNode.fid),
+        template: functionNode.ui.tmplStr || ('empty template string for ' + functionNode.fid),
         nodeMap,
         groupingLines: true,
         ctx,

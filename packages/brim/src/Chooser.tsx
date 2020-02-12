@@ -5,7 +5,7 @@ import Fuse from 'fuse.js';
 import { computeParentLookup } from './EditReducer';
 import { SelTree } from './State';
 import { StreamExpressionView, TreeViewContext } from './TreeView';
-import { asPlainText } from './FunctionUI';
+import { functionUIAsPlainText } from './FunctionUI';
 
 interface Choice {
   node: StreamExpressionNode;
@@ -148,7 +148,7 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, nativeFunctions: Readon
 
     functionEnv.forEach(defNode => {
       if (defNode.ui) {
-        const defAsText = asPlainText(defNode.ui);
+        const defAsText = functionUIAsPlainText(defNode.ui);
         if (atRoot) {
           envFuncSearchItems.push({
             name: defAsText,

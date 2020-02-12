@@ -1,23 +1,23 @@
-import { parseToJustText } from './FormatStringFunctionUI';
+import { templateToPlainText, parseTemplateString } from './SyntaxTemplate';
 
 interface NoFunctionUI {
   kind: 'none';
 }
 
-interface FormatStringFunctionUI {
-  kind: 'fmtstring';
-  format: string;
+interface TemplateStringFunctionUI {
+  kind: 'tmplstr';
+  tmplStr: string;
 }
 
-export type FunctionUI = NoFunctionUI | FormatStringFunctionUI;
+export type FunctionUI = NoFunctionUI | TemplateStringFunctionUI;
 
-export function asPlainText(ui: FunctionUI): string {
+export function functionUIAsPlainText(ui: FunctionUI): string {
   switch (ui.kind) {
     case 'none':
       return '<no ui>';
 
-    case 'fmtstring':
-      return parseToJustText(ui.format);
+    case 'tmplstr':
+      return templateToPlainText(parseTemplateString(ui.tmplStr));
 
     default: {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars

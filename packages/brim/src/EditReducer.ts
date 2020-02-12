@@ -904,7 +904,7 @@ function initialStateFromDefinition(mainDefinition: TreeFunctionDefinitionNode, 
     kind: NodeKind.NativeFunctionDefinition,
     fid,
     sig: signature,
-    ui: (typeof ui === 'string') ? {kind: 'fmtstring', format: ui} : {kind: 'none'},
+    ui: (typeof ui === 'string') ? {kind: 'tmplstr', tmplStr: ui} : {kind: 'none'},
   }));
 
   const initSelTree = {mainDefinition, selectedNode: mainDefinition};

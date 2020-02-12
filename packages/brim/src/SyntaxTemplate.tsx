@@ -12,11 +12,13 @@ interface Text {
   text: string;
 }
 
-type FormatPiece = Wildcard | LineBreak | Text;
+type TemplateSegment = Wildcard | LineBreak | Text;
 
-export function parseFormatString(s: string): ReadonlyArray<FormatPiece> {
+type Template = ReadonlyArray<TemplateSegment>;
+
+export function parseTemplateString(s: string): Template {
   const splits = s.split(/(\$[a-z0-9]+|\|)/).map(s => s.trim()).filter(s => s);
-  const result: Array<FormatPiece> = [];
+  const result: Array<TemplateSegment> = [];
 
   for (const split of splits) {
     if (split.startsWith('$')) {
@@ -39,10 +41,10 @@ export function parseFormatString(s: string): ReadonlyArray<FormatPiece> {
   return result;
 }
 
-export function parseToJustText(s: string): string {
+export function templateToPlainText(template: Template): string {
   const resultPieces: Array<string> = [];
 
-  for (const piece of parseFormatString(s)) {
+  for (const piece of template) {
     if (piece.kind === 'text') {
       resultPieces.push(piece.text);
     }
