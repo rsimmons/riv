@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import './Chooser.css';
-import { generateStreamId, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, SignatureFunctionParameterNode, generateFunctionId, StreamExpressionNode, generateApplicationId, ApplicationOut, FunctionExpressionNode, NativeFunctionDefinitionNode, UndefinedLiteralNode, ArrayLiteralNode, NameNode, StreamID } from './Tree';
+import { generateStreamId, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, generateFunctionId, StreamExpressionNode, generateApplicationId, ApplicationOut, UndefinedLiteralNode, ArrayLiteralNode, NameNode, StreamID } from './Tree';
 import Fuse from 'fuse.js';
 import { computeParentLookup } from './EditReducer';
 import { SelTree } from './State';
 import { StreamExpressionView, TreeViewContext } from './TreeView';
-import { functionUIAsPlainText } from './FunctionUI';
+import { functionUIAsPlainText, treeSignatureFromInterfaceSpec, TreeSignatureFuncParam } from './FunctionInterface';
 
 interface Choice {
   node: StreamExpressionNode;
@@ -24,13 +24,13 @@ interface DropdownState {
   index: number;
 }
 
-const ExpressionChooser: React.FC<{initSelTree: SelTree, nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>, dispatch: (action: any) => void, compileError: string | undefined, infixMode: boolean, treeViewCtx: TreeViewContext}> = ({ initSelTree, nativeFunctions, dispatch, compileError, infixMode, treeViewCtx }) => {
-  const parentLookup = useMemo(() => computeParentLookup(initSelTree.mainDefinition), [initSelTree.mainDefinition]);
+const ExpressionChooser: React.FC<{initSelTree: SelTree, globalFunctions: ReadonlyArray<FunctionDefinitionNode>, dispatch: (action: any) => void, compileError: string | undefined, infixMode: boolean, treeViewCtx: TreeViewContext}> = ({ initSelTree, globalFunctions, dispatch, compileError, infixMode, treeViewCtx }) => {
+  const parentLookup = useMemo(() => computeParentLookup(initSelTree.mainDef), [initSelTree.mainDef]);
   const parent = parentLookup.get(initSelTree.selectedNode);
   if (!parent) {
     throw new Error();
   }
-  const atRoot = parent.kind === NodeKind.TreeFunctionBody;
+  const atRoot = parent.kind === NodeKind.TreeFunctionDefinition;
 
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -117,7 +117,7 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, nativeFunctions: Readon
       const selfRef = (sdef.kind === 'expr') && (sdef.expr === initNode);
       if (!selfRef) {
         envStreamSearchItems.push({
-          name: sdef.name.text || ' ',
+          name: sdef.name || ' ',
           sid: sdef.sid,
         });
       }
@@ -147,20 +147,19 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, nativeFunctions: Readon
     const envFuncSearchItems: Array<EnvFuncSearchItem> = [];
 
     functionEnv.forEach(defNode => {
-      if (defNode.ui) {
-        const defAsText = functionUIAsPlainText(defNode.ui);
-        if (atRoot) {
+      const defAsText = functionUIAsPlainText(defNode.iface);
+      if (atRoot) {
+        envFuncSearchItems.push({
+          name: defAsText,
+          def: defNode,
+        });
+      } else {
+        const sig = treeSignatureFromInterfaceSpec(defNode.iface, undefined);
+        if (sig.returnedIdx !== undefined) {
           envFuncSearchItems.push({
             name: defAsText,
             def: defNode,
           });
-        } else {
-          if (defNode.sig.returnedIdx !== undefined) {
-            envFuncSearchItems.push({
-              name: defAsText,
-              def: defNode,
-            });
-          }
         }
       }
     });
@@ -172,9 +171,10 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, nativeFunctions: Readon
 
     for (const result of envFuncSearchResults) {
       const funcDefNode = result.def;
+      const sig = treeSignatureFromInterfaceSpec(funcDefNode.iface, undefined);
 
-      const outs: ReadonlyArray<ApplicationOut> = funcDefNode.sig.yields.map((_, idx) => {
-        const thisYieldReturned = (idx === funcDefNode.sig.returnedIdx);
+      const outs: ReadonlyArray<ApplicationOut> = sig.yields.map((_, idx) => {
+        const thisYieldReturned = (idx === sig.returnedIdx);
         return {
           sid: generateStreamId(),
           name: thisYieldReturned ? null : {
@@ -184,7 +184,7 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, nativeFunctions: Readon
         };
       });
 
-      const sargs: ReadonlyArray<StreamExpressionNode> = funcDefNode.sig.streamParams.map((_, idx) => (
+      const sargs: ReadonlyArray<StreamExpressionNode> = sig.streamParams.map((_, idx) => (
         (infixMode && (idx === 0))
         ? initNode
         : {
@@ -193,45 +193,31 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, nativeFunctions: Readon
         }
       ));
 
-      const fargs: ReadonlyArray<FunctionExpressionNode> = funcDefNode.sig.funcParams.map((param: SignatureFunctionParameterNode) => {
+      const fargs: ReadonlyArray<FunctionDefinitionNode> = sig.funcParams.map((fparam: TreeSignatureFuncParam): FunctionDefinitionNode => {
+        const fparamSig = treeSignatureFromInterfaceSpec(fparam.ifaceSpec, undefined);
+
         return {
           kind: NodeKind.TreeFunctionDefinition,
           fid: generateFunctionId(),
-          sig: param.sig,
-          ui: {kind: 'none'},
-          sparams: param.templateNames.streamParams.map(name => ({
-            kind: NodeKind.StreamParameter,
-            sid: generateStreamId(),
-            name: { kind: NodeKind.Name, text: name },
+          iface: fparam.ifaceSpec,
+          spids: fparamSig.streamParams.map(() => generateStreamId()),
+          fpids: fparamSig.funcParams.map(() => generateFunctionId()),
+          bodyExprs: fparamSig.yields.map((_, idx) => ({
+            kind: NodeKind.YieldExpression,
+            idx,
+            expr: {
+              kind: NodeKind.UndefinedLiteral,
+              sid: generateStreamId(),
+            },
           })),
-          fparams: param.templateNames.funcParams.map(name => ({
-            kind: NodeKind.FunctionParameter,
-            fid: generateFunctionId(),
-            name: { kind: NodeKind.Name, text: name },
-          })),
-          body: {
-            kind: NodeKind.TreeFunctionBody,
-            exprs: param.templateNames.yields.map((name, idx) => ({
-              kind: NodeKind.YieldExpression,
-              idx,
-              name: { kind: NodeKind.Name, text: name },
-              expr: {
-                kind: NodeKind.UndefinedLiteral,
-                sid: generateStreamId(),
-              },
-            })),
-          },
-        }
+        };
       });
 
       const n: ApplicationNode = {
         kind: NodeKind.Application,
         aid: generateApplicationId(),
         outs,
-        func: {
-          kind: NodeKind.FunctionReference,
-          ref: funcDefNode.fid,
-        },
+        fid: funcDefNode.fid,
         sargs,
         fargs,
       };
@@ -267,10 +253,7 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, nativeFunctions: Readon
           kind: NodeKind.Application,
           aid: generateApplicationId(),
           outs: [{sid: generateStreamId(), name: {kind: NodeKind.Name, text: text.trim()}}],
-          func: {
-            kind: NodeKind.FunctionReference,
-            ref: 'bind',
-          },
+          fid: 'bind',
           sargs: [
             {
               kind: NodeKind.UndefinedLiteral,
@@ -376,10 +359,7 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, nativeFunctions: Readon
             kind: NodeKind.Application,
             aid: generateApplicationId(),
             outs: [{sid: generateStreamId(), name: {kind: NodeKind.Name, text: inputText}}],
-            func: {
-              kind: NodeKind.FunctionReference,
-              ref: 'bind',
-            },
+            fid: 'bind',
             sargs: [
               {
                 kind: NodeKind.UndefinedLiteral,
@@ -461,11 +441,11 @@ const NameChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any) => vo
   );
 }
 
-const Chooser: React.FC<{initSelTree: SelTree, nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>, dispatch: (action: any) => void, compileError: string | undefined, infixMode: boolean, treeViewCtx: TreeViewContext}> = ({ initSelTree, nativeFunctions, dispatch, compileError, infixMode, treeViewCtx }) => {
+const Chooser: React.FC<{initSelTree: SelTree, globalFunctions: ReadonlyArray<FunctionDefinitionNode>, dispatch: (action: any) => void, compileError: string | undefined, infixMode: boolean, treeViewCtx: TreeViewContext}> = ({ initSelTree, globalFunctions, dispatch, compileError, infixMode, treeViewCtx }) => {
   if (initSelTree.selectedNode.kind === NodeKind.Name) {
     return <NameChooser initSelTree={initSelTree} dispatch={dispatch} />
   } else if (isStreamExpressionNode(initSelTree.selectedNode)) {
-    return <ExpressionChooser initSelTree={initSelTree} nativeFunctions={nativeFunctions} dispatch={dispatch} compileError={compileError} infixMode={infixMode} treeViewCtx={treeViewCtx} />
+    return <ExpressionChooser initSelTree={initSelTree} globalFunctions={globalFunctions} dispatch={dispatch} compileError={compileError} infixMode={infixMode} treeViewCtx={treeViewCtx} />
   } else {
     throw new Error();
   }

@@ -1,7 +1,7 @@
 import { ExecutionContext } from 'riv-runtime';
 import { CompiledDefinition } from './CompiledDefinition';
 
-import { StreamID, Node, NativeFunctionDefinitionNode, TreeFunctionDefinitionNode } from './Tree';
+import { StreamID, Node, FunctionDefinitionNode, TreeFunctionDefinitionNode } from './Tree';
 
 export interface ClipboardStackFrame {
   readonly mode: 'cut' | 'copy';
@@ -14,7 +14,7 @@ export interface ProgramInfo {
 }
 
 export interface SelTree {
-  readonly mainDefinition: TreeFunctionDefinitionNode;
+  readonly mainDef: TreeFunctionDefinitionNode;
   readonly selectedNode: Node;
 }
 
@@ -37,7 +37,7 @@ export interface State {
   readonly programInfo: ProgramInfo;
   readonly stableSelTree: SelTree;
   readonly editing: EditState | null;
-  readonly nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>;
+  readonly globalFunctions: ReadonlyArray<FunctionDefinitionNode>;
   readonly undoStack: ReadonlyArray<SelTree>;
   readonly clipboardStack: ReadonlyArray<ClipboardStackFrame>;
   readonly execution: ExecutionState | null;

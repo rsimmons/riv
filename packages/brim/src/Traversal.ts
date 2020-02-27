@@ -1,5 +1,5 @@
 // import { Path, pathIsPrefix } from './State';
-import { NodeKind, Node, SignatureNode, NameNode, StreamExpressionNode, isStreamExpressionNode, BodyExpressionNode, isBodyExpressionNode, TreeFunctionBodyNode, FunctionExpressionNode, isFunctionExpressionNode, ApplicationOut, StreamParameterNode, FunctionParameterNode } from './Tree';
+import { NodeKind, Node, NameNode, StreamExpressionNode, isStreamExpressionNode, BodyExpressionNode, isBodyExpressionNode, ApplicationOut, FunctionDefinitionNode, isFunctionDefinitionNode } from './Tree';
 
 export function firstChild(node: Node): Node | undefined {
   const res = iterChildren(node).next();
@@ -19,13 +19,6 @@ export function* iterChildren(node: Node) {
     case NodeKind.TextLiteral:
     case NodeKind.BooleanLiteral:
     case NodeKind.StreamReference:
-    case NodeKind.FunctionReference:
-      // no children
-      break;
-
-    case NodeKind.SignatureStreamParameter:
-    case NodeKind.SignatureFunctionParameter:
-    case NodeKind.SignatureYield:
       // no children
       break;
 
@@ -34,7 +27,6 @@ export function* iterChildren(node: Node) {
       break;
 
     case NodeKind.Application:
-      yield node.func;
       for (const out of node.outs) {
         if (out.name) {
           yield out.name;
@@ -44,34 +36,15 @@ export function* iterChildren(node: Node) {
       yield* node.fargs;
       break;
 
-    case NodeKind.Signature:
-      yield* node.streamParams;
-      yield* node.funcParams;
-      yield* node.yields;
-      break;
-
-    case NodeKind.StreamParameter:
-    case NodeKind.FunctionParameter:
-      yield node.name;
-      break;
-
     case NodeKind.YieldExpression:
       yield node.expr;
       break;
 
-    case NodeKind.TreeFunctionBody:
-      yield* node.exprs;
+    case NodeKind.NativeFunctionDefinition:
       break;
 
     case NodeKind.TreeFunctionDefinition:
-      yield node.sig;
-      yield* node.sparams;
-      yield* node.fparams;
-      yield node.body;
-      break;
-
-    case NodeKind.NativeFunctionDefinition:
-      yield node.sig;
+      yield* node.bodyExprs;
       break;
 
     default: {
@@ -112,13 +85,6 @@ export function visitChildren<N, C>(node: Node, visit: (node: Node, ctx: C) => N
     case NodeKind.TextLiteral:
     case NodeKind.BooleanLiteral:
     case NodeKind.StreamReference:
-    case NodeKind.FunctionReference:
-      // no children
-      return;
-
-    case NodeKind.SignatureStreamParameter:
-    case NodeKind.SignatureFunctionParameter:
-    case NodeKind.SignatureYield:
       // no children
       return;
 
@@ -126,26 +92,16 @@ export function visitChildren<N, C>(node: Node, visit: (node: Node, ctx: C) => N
       return visitArray(node.elems, visit, ctx);
 
     case NodeKind.Application:
-      return visit(node.func, ctx) || visitOuts(node.outs, visit, ctx) || visitArray(node.sargs, visit, ctx) || visitArray(node.fargs, visit, ctx);
-
-    case NodeKind.Signature:
-      return visitArray(node.streamParams, visit, ctx) || visitArray(node.funcParams, visit, ctx) || visitArray(node.yields, visit, ctx);
-
-    case NodeKind.StreamParameter:
-    case NodeKind.FunctionParameter:
-      return visit(node.name, ctx);
+      return visitOuts(node.outs, visit, ctx) || visitArray(node.sargs, visit, ctx) || visitArray(node.fargs, visit, ctx);
 
     case NodeKind.YieldExpression:
-      return visit(node.name, ctx) || visit(node.expr, ctx);
-
-    case NodeKind.TreeFunctionBody:
-      return visitArray(node.exprs, visit, ctx);
-
-    case NodeKind.TreeFunctionDefinition:
-      return visit(node.sig, ctx) || visitArray(node.sparams, visit, ctx) || visitArray(node.fparams, visit, ctx) || visit(node.body, ctx);
+      return visit(node.expr, ctx);
 
     case NodeKind.NativeFunctionDefinition:
-      return visit(node.sig, ctx);
+      return;
+
+    case NodeKind.TreeFunctionDefinition:
+      return visitArray(node.bodyExprs, visit, ctx);
 
     default: {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -210,36 +166,6 @@ export function transformChildren<T>(node: Node, transform: (node: Node, ctx: T)
     return changed ? newArr : arr;
   };
 
-  const xStreamParamArr = (arr: ReadonlyArray<StreamParameterNode>): ReadonlyArray<StreamParameterNode> => {
-    let changed = false;
-    const newArr = arr.map(el => {
-      const nel = transform(el, ctx);
-      if (nel.kind !== NodeKind.StreamParameter) {
-        throw new Error();
-      }
-      if (nel !== el) {
-        changed = true;
-      }
-      return nel;
-    });
-    return changed ? newArr : arr;
-  };
-
-  const xFunctionParamArr = (arr: ReadonlyArray<FunctionParameterNode>): ReadonlyArray<FunctionParameterNode> => {
-    let changed = false;
-    const newArr = arr.map(el => {
-      const nel = transform(el, ctx);
-      if (nel.kind !== NodeKind.FunctionParameter) {
-        throw new Error();
-      }
-      if (nel !== el) {
-        changed = true;
-      }
-      return nel;
-    });
-    return changed ? newArr : arr;
-  };
-
   const xBodyExprArr = (arr: ReadonlyArray<BodyExpressionNode>): ReadonlyArray<BodyExpressionNode> => {
     let changed = false;
     const newArr = arr.map(el => {
@@ -255,19 +181,11 @@ export function transformChildren<T>(node: Node, transform: (node: Node, ctx: T)
     return changed ? newArr : arr;
   };
 
-  const xFuncExpr = (n: FunctionExpressionNode): FunctionExpressionNode => {
-    const tn = transform(n, ctx);
-    if (!isFunctionExpressionNode(tn)) {
-      throw new Error();
-    }
-    return tn;
-  };
-
-  const xFuncExprArr = (arr: ReadonlyArray<FunctionExpressionNode>): ReadonlyArray<FunctionExpressionNode> => {
+  const xFuncDefArr = (arr: ReadonlyArray<FunctionDefinitionNode>): ReadonlyArray<FunctionDefinitionNode> => {
     let changed = false;
     const newArr = arr.map(el => {
       const nel = transform(el, ctx);
-      if (!isFunctionExpressionNode(nel)) {
+      if (!isFunctionDefinitionNode(nel)) {
         throw new Error();
       }
       if (nel !== el) {
@@ -278,22 +196,6 @@ export function transformChildren<T>(node: Node, transform: (node: Node, ctx: T)
     return changed ? newArr : arr;
   };
 
-  const xSignature = (n: SignatureNode): SignatureNode => {
-    const tn = transform(n, ctx);
-    if (tn.kind !== NodeKind.Signature) {
-      throw new Error();
-    }
-    return tn;
-  };
-
-  const xTreeBody = (n: TreeFunctionBodyNode): TreeFunctionBodyNode => {
-    const tn = transform(n, ctx);
-    if (tn.kind !== NodeKind.TreeFunctionBody) {
-      throw new Error();
-    }
-    return tn;
-  };
-
   switch (node.kind) {
     case NodeKind.Name:
     case NodeKind.UndefinedLiteral:
@@ -301,13 +203,6 @@ export function transformChildren<T>(node: Node, transform: (node: Node, ctx: T)
     case NodeKind.TextLiteral:
     case NodeKind.BooleanLiteral:
     case NodeKind.StreamReference:
-    case NodeKind.FunctionReference:
-      // no children to transform
-      return node;
-
-    case NodeKind.SignatureStreamParameter:
-    case NodeKind.SignatureFunctionParameter:
-    case NodeKind.SignatureYield:
       // no children to transform
       return node;
 
@@ -323,26 +218,20 @@ export function transformChildren<T>(node: Node, transform: (node: Node, ctx: T)
       }
 
     case NodeKind.Application: {
-      const newFunc = xFuncExpr(node.func);
       const newOuts = xOuts(node.outs);
       const newSargs = xStreamExprArr(node.sargs);
-      const newFargs = xFuncExprArr(node.fargs);
-      if ((newFunc === node.func) && (newOuts === node.outs) && (newSargs === node.sargs) && (newFargs === node.fargs)) {
+      const newFargs = xFuncDefArr(node.fargs);
+      if ((newOuts === node.outs) && (newSargs === node.sargs) && (newFargs === node.fargs)) {
         return node;
       } else {
         return {
           ...node,
-          func: newFunc,
           outs: newOuts,
           sargs: newSargs,
           fargs: newFargs,
         };
       }
     }
-
-    case NodeKind.Signature:
-      // TODO: implement
-      return node;
 
     case NodeKind.YieldExpression: {
       const newExpr = xStreamExpr(node.expr);
@@ -356,56 +245,18 @@ export function transformChildren<T>(node: Node, transform: (node: Node, ctx: T)
       }
     }
 
-    case NodeKind.StreamParameter:
-    case NodeKind.FunctionParameter:
-      const newName = xName(node.name);
-      if (newName === node.name) {
-        return node;
-      } else {
-        return {
-          ...node,
-          name: newName,
-        };
-      }
-
-    case NodeKind.TreeFunctionBody: {
-      const newExprs = xBodyExprArr(node.exprs);
-      if (newExprs === node.exprs) {
-        return node;
-      } else {
-        return {
-          ...node,
-          exprs: newExprs,
-        };
-      }
-    }
+    case NodeKind.NativeFunctionDefinition:
+      // no children to transform
+      return node;
 
     case NodeKind.TreeFunctionDefinition: {
-      const newSig = xSignature(node.sig);
-      const newSparams = xStreamParamArr(node.sparams);
-      const newFparams = xFunctionParamArr(node.fparams);
-      const newBody = xTreeBody(node.body);
-      if ((newSig === node.sig) && (newSparams === node.sparams) && (newFparams === node.fparams) && (newBody === node.body)) {
+      const newExprs = xBodyExprArr(node.bodyExprs);
+      if (newExprs === node.bodyExprs) {
         return node;
       } else {
         return {
           ...node,
-          sig: newSig,
-          sparams: newSparams,
-          fparams: newFparams,
-          body: newBody,
-        };
-      }
-    }
-
-    case NodeKind.NativeFunctionDefinition: {
-      const newSig = xSignature(node.sig);
-      if (newSig === node.sig) {
-        return node;
-      } else {
-        return {
-          ...node,
-          sig: newSig,
+          bodyExprs: newExprs,
         };
       }
     }
@@ -430,28 +281,6 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
     }
   };
 
-  const replaceSignature = (n: SignatureNode): SignatureNode => {
-    if (n === oldChild) {
-      if (newChild.kind !== NodeKind.Signature) {
-        throw new Error();
-      }
-      return newChild;
-    } else {
-      return n;
-    }
-  };
-
-  const replaceTreeBody = (n: TreeFunctionBodyNode): TreeFunctionBodyNode => {
-    if (n === oldChild) {
-      if (newChild.kind !== NodeKind.TreeFunctionBody) {
-        throw new Error();
-      }
-      return newChild;
-    } else {
-      return n;
-    }
-  };
-
   const replaceStreamExpr = (n: StreamExpressionNode): StreamExpressionNode => {
     if (n === oldChild) {
       if (!isStreamExpressionNode(newChild)) {
@@ -467,30 +296,6 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
     return arr.map((n: StreamExpressionNode) => {
       if (n === oldChild) {
         if (!isStreamExpressionNode(newChild)) {
-          throw new Error();
-        }
-        return newChild;
-      } else {
-        return n;
-      }
-    });
-  };
-
-  const replaceFunctionExpression = (n: FunctionExpressionNode): FunctionExpressionNode => {
-    if (n === oldChild) {
-      if (!isFunctionExpressionNode(newChild)) {
-        throw new Error();
-      }
-      return newChild;
-    } else {
-      return n;
-    }
-  };
-
-  const replaceFuncExprArr = (arr: ReadonlyArray<FunctionExpressionNode>): ReadonlyArray<FunctionExpressionNode> => {
-    return arr.map((n: FunctionExpressionNode) => {
-      if (n === oldChild) {
-        if (!isFunctionExpressionNode(newChild)) {
           throw new Error();
         }
         return newChild;
@@ -529,6 +334,20 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
     });
   };
 
+  const replaceFuncDefArr = (arr: ReadonlyArray<FunctionDefinitionNode>): ReadonlyArray<FunctionDefinitionNode> => {
+    return arr.map((n: FunctionDefinitionNode) => {
+      if (n === oldChild) {
+        if (!isFunctionDefinitionNode(newChild)) {
+          throw new Error();
+        }
+        return newChild;
+      } else {
+        return n;
+      }
+    });
+  };
+
+
   switch (node.kind) {
     case NodeKind.Name:
     case NodeKind.UndefinedLiteral:
@@ -536,12 +355,6 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
     case NodeKind.TextLiteral:
     case NodeKind.BooleanLiteral:
     case NodeKind.StreamReference:
-    case NodeKind.FunctionReference:
-      throw new Error('no children to replace');
-
-    case NodeKind.SignatureStreamParameter:
-    case NodeKind.SignatureFunctionParameter:
-    case NodeKind.SignatureYield:
       throw new Error('no children to replace');
 
     case NodeKind.ArrayLiteral:
@@ -553,23 +366,9 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
     case NodeKind.Application:
       return {
         ...node,
-        func: replaceFunctionExpression(node.func),
         outs: replaceOuts(node.outs),
         sargs: replaceStreamExprArr(node.sargs),
-        fargs: replaceFuncExprArr(node.fargs),
-      };
-
-    case NodeKind.Signature:
-      return {
-        ...node,
-        // TODO: members
-      };
-
-    case NodeKind.StreamParameter:
-    case NodeKind.FunctionParameter:
-      return {
-        ...node,
-        name: replaceName(node.name),
+        fargs: replaceFuncDefArr(node.fargs),
       };
 
     case NodeKind.YieldExpression:
@@ -578,23 +377,13 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
         expr: replaceStreamExpr(node.expr),
       };
 
-    case NodeKind.TreeFunctionBody:
-      return {
-        ...node,
-        exprs: replaceBodyExprArr(node.exprs),
-      };
+    case NodeKind.NativeFunctionDefinition:
+      throw new Error('no children to replace');
 
     case NodeKind.TreeFunctionDefinition:
       return {
         ...node,
-        sig: replaceSignature(node.sig),
-        body: replaceTreeBody(node.body),
-      };
-
-    case NodeKind.NativeFunctionDefinition:
-      return {
-        ...node,
-        sig: replaceSignature(node.sig),
+        bodyExprs: replaceBodyExprArr(node.bodyExprs),
       };
 
     default: {

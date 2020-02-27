@@ -80,13 +80,13 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
     dispatch({type: 'SET_PROGRAM_NAME', newName});
   };
 
-  const handleLoadProgram = (info: ProgramInfo, mainDefinition: TreeFunctionDefinitionNode) => {
-    dispatch({type: 'LOAD_PROGRAM', newProgram: {info: info, mainDefinition}});
+  const handleLoadProgram = (info: ProgramInfo, mainDef: TreeFunctionDefinitionNode) => {
+    dispatch({type: 'LOAD_PROGRAM', newProgram: {info: info, mainDef}});
   };
 
   const displayedSelTree = state.editing ? state.editing.initSelTree : state.stableSelTree;
 
-  const referentNameNode = getReferentNameNodeOfSelected(displayedSelTree, state.nativeFunctions);
+  const referentNameNode = getReferentNameNodeOfSelected(displayedSelTree, state.globalFunctions);
 
   const treeViewCtx: TreeViewContext = {
     markedNodes: {
@@ -95,7 +95,7 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
     },
     // clipboardTopNode: (state.clipboardStack.length > 0) ? state.derivedLookups.streamIdToNode!.get(state.clipboardStack[state.clipboardStack.length-1].streamId) : null,
     // clipboardRestNodes: state.clipboardStack.slice(0, -1).map(frame => state.derivedLookups.streamIdToNode!.get(frame.streamId)),
-    staticEnv: initStaticEnv(state.nativeFunctions),
+    staticEnv: initStaticEnv(state.globalFunctions),
     setSelectedNode: (node: Node) => {
       dispatch({
         type: 'SET_SELECTED_NODE',
@@ -129,23 +129,23 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
   return (
     <div className="Editor">
       <div className="Editor-storage-panel-container Editor-panel">
-        <StoragePanel programInfo={state.programInfo} mainDefinition={state.stableSelTree.mainDefinition} onChangeName={handleChangeProgramName} onLoadProgram={handleLoadProgram} />
+        <StoragePanel programInfo={state.programInfo} mainDefinition={state.stableSelTree.mainDef} onChangeName={handleChangeProgramName} onLoadProgram={handleLoadProgram} />
       </div>
       <HotKeys keyMap={keyMap} handlers={handlers}>
         <ObserveKeys only={CATCH_IN_INPUTS}>
           <div className="Editor-workspace" onKeyDown={onKeyDown} tabIndex={0} ref={editorElem}>
-            <TreeFunctionDefinitionView node={displayedSelTree.mainDefinition} ctx={treeViewCtx} />
+            <TreeFunctionDefinitionView node={displayedSelTree.mainDef} ctx={treeViewCtx} />
             {state.editing && (() => {
               const chooserTreeViewCtx: TreeViewContext = {
                 ...treeViewCtx,
                 setSelectedNode: () => {},
-                staticEnv: getStaticEnvForSelected(state.editing.initSelTree, state.nativeFunctions),
+                staticEnv: getStaticEnvForSelected(state.editing.initSelTree, state.globalFunctions),
                 focusSelected: false,
               };
 
               return (
                 <div className="Editor-chooser-positioner" style={{position: 'absolute'}}>
-                  <Chooser key={state.editing.sessionId} initSelTree={state.editing.initSelTree} nativeFunctions={state.nativeFunctions} dispatch={dispatch} compileError={state.editing.compileError} infixMode={state.editing.infixMode} treeViewCtx={chooserTreeViewCtx} />
+                  <Chooser key={state.editing.sessionId} initSelTree={state.editing.initSelTree} globalFunctions={state.globalFunctions} dispatch={dispatch} compileError={state.editing.compileError} infixMode={state.editing.infixMode} treeViewCtx={chooserTreeViewCtx} />
                 </div>
               );
             })()}

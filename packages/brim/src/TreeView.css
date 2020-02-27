@@ -1,7 +1,18 @@
 .TreeView-node {
   border: 1px solid transparent;
-  border-radius: 0.5em;
   width: max-content;
+}
+
+.TreeView-node:focus {
+  outline: none;
+}
+
+.TreeView-node.TreeView-selected {
+  border: 1px solid black;
+}
+
+.TreeView-rounded-node {
+  border-radius: 0.5em;
 }
 
 .TreeView-simple-node {
@@ -36,17 +47,14 @@
   margin-bottom: 0.1em;
 }
 
-.TreeView-tree-function-definition-inner > * {
-  box-shadow: inset 0 0 2px 0 rgba(0,0,0,0.5);
+.TreeView-tree-function-definition-iface-spec {
+  background-color: #ddd;
   padding: 0.5em;
 }
 
-/* NOTE: This is awkward that we reference Editor classes, but don't know a nice way to fix */
-.TreeView-selected, .ExpressionChooser-input:focus {
-  /* outline: black solid 2px;
-  outline-offset: -2px; */
-  border: 1px solid black;
-  outline: none;
+.TreeView-tree-function-definition-body {
+  box-shadow: inset 0 0 2px 0 rgba(0,0,0,0.5);
+  padding: 0.5em;
 }
 
 .TreeView-referent {

@@ -1,6 +1,6 @@
 import genuid from './uid';
 import { State, ProgramInfo, SelTree } from './State';
-import { StreamID, FunctionID, generateStreamId, generateFunctionId, NodeKind, Node, TreeFunctionDefinitionNode, FunctionDefinitionNode, isFunctionDefinitionNode, StreamExpressionNode, NativeFunctionDefinitionNode, isStreamExpressionNode, UndefinedLiteralNode, BodyExpressionNode, generateApplicationId, NameNode, StreamParameterNode, ArrayLiteralNode, TreeFunctionBodyNode } from './Tree';
+import { StreamID, FunctionID, generateStreamId, NodeKind, Node, FunctionDefinitionNode, StreamExpressionNode, isStreamExpressionNode, UndefinedLiteralNode, BodyExpressionNode, generateApplicationId, NameNode, ArrayLiteralNode, TreeFunctionDefinitionNode, isFunctionDefinitionNode, generateFunctionId } from './Tree';
 import { CompiledDefinition } from './CompiledDefinition';
 import { compileGlobalTreeDefinition, CompilationError } from './Compiler';
 import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
@@ -8,6 +8,7 @@ import { createLiveFunction } from './LiveFunction';
 import Environment from './Environment';
 import { iterChildren, visitChildren, replaceChild, transformChildren } from './Traversal';
 import globalNativeFunctions from './globalNatives';
+import { parseStringTextualInterfaceSpec } from './FunctionInterface';
 
 // We don't make a discriminated union of specific actions, but maybe we could
 interface Action {
@@ -155,17 +156,18 @@ function firstUndefinedNode(node: Node, after: Path | undefined = undefined): [N
 interface ExprStreamDefinition {
   kind: 'expr';
   sid: StreamID;
-  name: NameNode;
+  name: string | undefined;
 
+  nameNode: NameNode;
   expr: StreamExpressionNode;
 }
 
 interface ParamStreamDefinition {
   kind: 'param';
   sid: StreamID;
-  name: NameNode;
+  name: string | undefined;
 
-  param: StreamParameterNode;
+  // param: StreamParameterNode;
 }
 
 export type StreamDefinition = ExprStreamDefinition | ParamStreamDefinition;
@@ -188,19 +190,24 @@ export function initStaticEnv(globalFunctions: ReadonlyArray<FunctionDefinitionN
 }
 
 export function extendStaticEnv(outer: StaticEnvironment, def: TreeFunctionDefinitionNode): StaticEnvironment {
+  if (def.iface.kind !== 'strtext') {
+    throw new Error();
+  }
+
+  const treeSig = parseStringTextualInterfaceSpec(def.iface.spec).treeSig;
+
   const streamEnv: Environment<StreamID, StreamDefinition> = new Environment(outer.streamEnv);
   const functionEnv: Environment<FunctionID, FunctionDefinitionNode> = new Environment(outer.functionEnv);
 
-  def.sparams.forEach(sparam => {
-    const {sid, name} = sparam;
+  def.spids.forEach((sid, idx) => {
     if (streamEnv.has(sid)) {
       throw new Error();
     }
+    const sigParam = treeSig.streamParams[idx];
     streamEnv.set(sid, {
       kind: 'param',
       sid,
-      name,
-      param: sparam,
+      name: sigParam.name,
     });
   });
 
@@ -215,7 +222,8 @@ export function extendStaticEnv(outer: StaticEnvironment, def: TreeFunctionDefin
             streamEnv.set(out.sid, {
               kind: 'expr',
               sid: out.sid,
-              name: out.name,
+              name: out.name.text,
+              nameNode: out.name,
               expr: node,
             });
           }
@@ -233,7 +241,7 @@ export function extendStaticEnv(outer: StaticEnvironment, def: TreeFunctionDefin
     }
   };
 
-  visitChildren(def.body, visit, undefined);
+  visitChildren(def, visit, undefined);
 
   return {
     streamEnv,
@@ -241,7 +249,7 @@ export function extendStaticEnv(outer: StaticEnvironment, def: TreeFunctionDefin
   };
 }
 
-export function getStaticEnvForSelected(selTree: SelTree, nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>): StaticEnvironment {
+export function getStaticEnvForSelected(selTree: SelTree, globalFunctions: ReadonlyArray<FunctionDefinitionNode>): StaticEnvironment {
   let selectedNodeEnv: StaticEnvironment | undefined;
 
   const visit = (node: Node, env: StaticEnvironment): void => {
@@ -259,7 +267,7 @@ export function getStaticEnvForSelected(selTree: SelTree, nativeFunctions: Reado
     visitChildren(node, visit, newEnv);
   };
 
-  visit(selTree.mainDefinition, initStaticEnv(nativeFunctions));
+  visit(selTree.mainDef, initStaticEnv(globalFunctions));
 
   if (!selectedNodeEnv) {
     throw new Error();
@@ -268,8 +276,8 @@ export function getStaticEnvForSelected(selTree: SelTree, nativeFunctions: Reado
   return selectedNodeEnv;
 }
 
-export function getReferentNameNodeOfSelected(selTree: SelTree, nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>): NameNode | undefined {
-  const selectedEnv = getStaticEnvForSelected(selTree, nativeFunctions);
+export function getReferentNameNodeOfSelected(selTree: SelTree, globalFunctions: ReadonlyArray<FunctionDefinitionNode>): NameNode | undefined {
+  const selectedEnv = getStaticEnvForSelected(selTree, globalFunctions);
 
   const node = selTree.selectedNode;
   if (node.kind === NodeKind.StreamReference) {
@@ -280,10 +288,10 @@ export function getReferentNameNodeOfSelected(selTree: SelTree, nativeFunctions:
 
     switch (streamDef.kind) {
       case 'expr':
-        return streamDef.name;
+        return streamDef.nameNode;
 
       case 'param':
-        return streamDef.name;
+        return undefined;
 
       default: {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -342,7 +350,7 @@ function deleteNodeSubtree(node: Node, parentLookup: Map<Node, Node>): SelTree |
         throw new Error();
       }
       return {
-        mainDefinition: newRoot,
+        mainDef: newRoot,
         selectedNode: newNode,
       };
     } else if (parent.kind === NodeKind.ArrayLiteral) {
@@ -356,21 +364,21 @@ function deleteNodeSubtree(node: Node, parentLookup: Map<Node, Node>): SelTree |
         throw new Error();
       }
       return {
-        mainDefinition: newRoot,
+        mainDef: newRoot,
         selectedNode: newSibSel || newParent,
       };
-    } else if (parent.kind === NodeKind.TreeFunctionBody) {
-      const [newExprs, newSibSel] = deleteFromArr(node, parent.exprs);
-      const newParent: TreeFunctionBodyNode = {
+    } else if (parent.kind === NodeKind.TreeFunctionDefinition) {
+      const [newExprs, newSibSel] = deleteFromArr(node, parent.bodyExprs);
+      const newParent: TreeFunctionDefinitionNode = {
         ...parent,
-        exprs: newExprs,
+        bodyExprs: newExprs,
       };
       const newRoot = replaceNode(parent, newParent, parentLookup);
       if (newRoot.kind !== NodeKind.TreeFunctionDefinition) {
         throw new Error();
       }
       return {
-        mainDefinition: newRoot,
+        mainDef: newRoot,
         selectedNode: newSibSel || newParent,
       };
     } else {
@@ -435,7 +443,7 @@ function arrInsertBeforeAfter<T>(arr: ReadonlyArray<T>, idx: number, before: boo
 }
 
 function attemptInsertBeforeAfter(state: State, before: boolean): State {
-  const parentLookup = computeParentLookup(state.stableSelTree.mainDefinition); // TODO: memoize
+  const parentLookup = computeParentLookup(state.stableSelTree.mainDef); // TODO: memoize
 
   let n: Node = state.stableSelTree.selectedNode;
   while (true) {
@@ -450,7 +458,7 @@ function attemptInsertBeforeAfter(state: State, before: boolean): State {
         kind: NodeKind.UndefinedLiteral,
         sid: generateStreamId(),
       };
-      const newArrNode = {
+      const newArrNode: ArrayLiteralNode = {
         ...parent,
         elems: arrInsertBeforeAfter(parent.elems, idx, before, newElem),
       };
@@ -458,8 +466,8 @@ function attemptInsertBeforeAfter(state: State, before: boolean): State {
       if (newMain.kind !== NodeKind.TreeFunctionDefinition) {
         throw new Error();
       }
-      const initSelTree = {
-        mainDefinition: newMain,
+      const initSelTree: SelTree = {
+        mainDef: newMain,
         selectedNode: newElem,
       };
       return {
@@ -473,22 +481,22 @@ function attemptInsertBeforeAfter(state: State, before: boolean): State {
           infixMode: false,
         },
       };
-    } else if (parent.kind === NodeKind.TreeFunctionBody) {
-      const idx = parent.exprs.indexOf(n as BodyExpressionNode);
+    } else if (parent.kind === NodeKind.TreeFunctionDefinition) {
+      const idx = parent.bodyExprs.indexOf(n as BodyExpressionNode);
       const newElem: UndefinedLiteralNode = {
         kind: NodeKind.UndefinedLiteral,
         sid: generateStreamId(),
       };
-      const newBodyNode = {
+      const newTreeDef: TreeFunctionDefinitionNode = {
         ...parent,
-        exprs: arrInsertBeforeAfter(parent.exprs, idx, before, newElem),
+        bodyExprs: arrInsertBeforeAfter(parent.bodyExprs, idx, before, newElem),
       };
-      const newMain = replaceNode(parent, newBodyNode, parentLookup);
+      const newMain = replaceNode(parent, newTreeDef, parentLookup);
       if (newMain.kind !== NodeKind.TreeFunctionDefinition) {
         throw new Error();
       }
-      const initSelTree = {
-        mainDefinition: newMain,
+      const initSelTree: SelTree = {
+        mainDef: newMain,
         selectedNode: newElem,
       };
       return {
@@ -515,8 +523,8 @@ function pushUndo(state: State): State {
   };
 }
 
-function fixupDanglingRefs(selTree: SelTree, nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>): SelTree {
-  const globalEnv = initStaticEnv(nativeFunctions);
+function fixupDanglingRefs(selTree: SelTree, globalFunctions: ReadonlyArray<FunctionDefinitionNode>): SelTree {
+  const globalEnv = initStaticEnv(globalFunctions);
 
   const oldNodeToNew: Map<Node, Node> = new Map();
 
@@ -548,7 +556,7 @@ function fixupDanglingRefs(selTree: SelTree, nativeFunctions: ReadonlyArray<Nati
     return newNewNode;
   };
 
-  const newMain = transform(selTree.mainDefinition, globalEnv);
+  const newMain = transform(selTree.mainDef, globalEnv);
   if (newMain.kind !== NodeKind.TreeFunctionDefinition) {
     throw new Error();
   }
@@ -559,20 +567,20 @@ function fixupDanglingRefs(selTree: SelTree, nativeFunctions: ReadonlyArray<Nati
   // console.log('fixupDanglingRefs', 'tree changed?', newMain !== selTree.mainDefinition, 'selnode changed?', newSelectedNode !== selTree.selectedNode);
 
   return {
-    mainDefinition: newMain,
+    mainDef: newMain,
     selectedNode: newSelectedNode,
   };
 }
 
 // NOTE: May throw a compiler exception
-function compileSelTree(selTree: SelTree, nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode>): CompiledDefinition {
+function compileSelTree(selTree: SelTree, globalFunctions: ReadonlyArray<FunctionDefinitionNode>): CompiledDefinition {
   // NOTE: We could avoid repeating this work, but this is sort of temporary anyways
   const globalFunctionEnvironment: Environment<FunctionID, FunctionDefinitionNode> = new Environment();
-  for (const nf of nativeFunctions) {
-    globalFunctionEnvironment.set(nf.fid, nf);
+  for (const gf of globalFunctions) {
+    globalFunctionEnvironment.set(gf.fid, gf);
   }
 
-  return compileGlobalTreeDefinition(selTree.mainDefinition, globalFunctionEnvironment);
+  return compileGlobalTreeDefinition(selTree.mainDef, globalFunctionEnvironment);
 }
 
 function updateExecution(state: State, newCompiledDefinition: CompiledDefinition): State {
@@ -605,11 +613,11 @@ function updateExecution(state: State, newCompiledDefinition: CompiledDefinition
 // If the given seltree compiles, make it the new stable one and update execution. Otherwise keep current stable one.
 // Also, end any edit.
 function attemptCommitEdit(state: State, newSelTree: SelTree): State {
-  const fixedSelTree = fixupDanglingRefs(newSelTree, state.nativeFunctions);
+  const fixedSelTree = fixupDanglingRefs(newSelTree, state.globalFunctions);
 
   let compiledDefinition: CompiledDefinition | undefined;
   try {
-    compiledDefinition = compileSelTree(fixedSelTree, state.nativeFunctions);
+    compiledDefinition = compileSelTree(fixedSelTree, state.globalFunctions);
   } catch (e) {
     if (e instanceof CompilationError) {
       compiledDefinition = undefined;
@@ -652,8 +660,8 @@ function findNextHoleUnder(node: Node): Node | undefined {
 
 function attemptChainEdit(state: State, tryInsert: boolean): State {
   const editNode = (node: Node): State => {
-    const editSelTree = {
-      mainDefinition: state.stableSelTree.mainDefinition,
+    const editSelTree: SelTree = {
+      mainDef: state.stableSelTree.mainDef,
       selectedNode: node,
     };
     return {
@@ -673,7 +681,7 @@ function attemptChainEdit(state: State, tryInsert: boolean): State {
     throw new Error(); // shouldn't be
   }
 
-  const parentLookup = computeParentLookup(state.stableSelTree.mainDefinition);
+  const parentLookup = computeParentLookup(state.stableSelTree.mainDef);
 
   const under = findNextHoleUnder(state.stableSelTree.selectedNode);
   if (under) {
@@ -686,7 +694,7 @@ function attemptChainEdit(state: State, tryInsert: boolean): State {
     if (!parent) {
       return state; // reached root, do nothing
     }
-    if ((parent.kind === NodeKind.ArrayLiteral) || (parent.kind === NodeKind.TreeFunctionBody)) {
+    if ((parent.kind === NodeKind.ArrayLiteral) || (parent.kind === NodeKind.TreeFunctionDefinition)) {
       if (tryInsert) {
         return attemptInsertBeforeAfter(state, false);
       } else {
@@ -728,7 +736,7 @@ export function reducer(state: State, action: Action): State {
     }
     state.execution.context.terminate();
 
-    return initialStateFromDefinition(action.newProgram.mainDefinition, action.newProgram.info as ProgramInfo);
+    return initialStateFromDefinition(action.newProgram.mainDef, action.newProgram.info as ProgramInfo);
   } else if (action.type === 'SET_PROGRAM_NAME') {
     return {
       ...state,
@@ -797,18 +805,18 @@ export function reducer(state: State, action: Action): State {
     if (!state.editing) {
       throw new Error();
     }
-    const parentLookup = computeParentLookup(state.editing.initSelTree.mainDefinition); // TODO: memoize
+    const parentLookup = computeParentLookup(state.editing.initSelTree.mainDef); // TODO: memoize
     const newMain = replaceNode(state.editing.initSelTree.selectedNode, action.newNode!, parentLookup);
     if (newMain.kind !== NodeKind.TreeFunctionDefinition) {
       throw new Error();
     }
 
-    const fixedSelTree = fixupDanglingRefs({mainDefinition: newMain, selectedNode: action.newNode!}, state.nativeFunctions);
+    const fixedSelTree = fixupDanglingRefs({mainDef: newMain, selectedNode: action.newNode!}, state.globalFunctions);
 
     // Check if tentative tree compiles
     let compileError: string | undefined;
     try {
-      compileSelTree(fixedSelTree, state.nativeFunctions);
+      compileSelTree(fixedSelTree, state.globalFunctions);
       compileError = undefined;
     } catch (e) {
       if (e instanceof CompilationError) {
@@ -853,7 +861,7 @@ export function reducer(state: State, action: Action): State {
     }
   }
 
-  const parentLookup = computeParentLookup(state.stableSelTree.mainDefinition); // TODO: memoize
+  const parentLookup = computeParentLookup(state.stableSelTree.mainDef); // TODO: memoize
   const handleEditActionResult = handleInstantEditAction(action, state.stableSelTree, parentLookup);
   if (handleEditActionResult) {
     const newSelTree = handleEditActionResult;
@@ -895,27 +903,29 @@ export function reducer(state: State, action: Action): State {
 const nativeFunctionEnvironment: Environment<FunctionID, Function> = new Environment();
 nativeFunctionEnvironment.set('id', (x: any) => x);
 nativeFunctionEnvironment.set('Array_of', Array.of);
-globalNativeFunctions.forEach(([id, , , jsFunc]) => {
+globalNativeFunctions.forEach(([id, , jsFunc]) => {
   nativeFunctionEnvironment.set(id, jsFunc);
 });
 
-function initialStateFromDefinition(mainDefinition: TreeFunctionDefinitionNode, programInfo: ProgramInfo): State {
-  const nativeFunctions: ReadonlyArray<NativeFunctionDefinitionNode> = globalNativeFunctions.map(([fid, ui, signature, ]) => ({
+function initialStateFromDefinition(mainDef: TreeFunctionDefinitionNode, programInfo: ProgramInfo): State {
+  const globalFunctions: ReadonlyArray<FunctionDefinitionNode> = globalNativeFunctions.map(([fid, ifaceSpecStr, ]): FunctionDefinitionNode => ({
     kind: NodeKind.NativeFunctionDefinition,
     fid,
-    sig: signature,
-    ui: (typeof ui === 'string') ? {kind: 'tmplstr', tmplStr: ui} : {kind: 'none'},
+    iface: {
+      kind: 'strtext',
+      spec: ifaceSpecStr,
+    },
   }));
 
-  const initSelTree = {mainDefinition, selectedNode: mainDefinition};
+  const initSelTree: SelTree = {mainDef, selectedNode: mainDef};
 
-  const compiledDefinition = compileSelTree(initSelTree, nativeFunctions);
+  const compiledDefinition = compileSelTree(initSelTree, globalFunctions);
 
   return updateExecution({
     programInfo,
     stableSelTree: initSelTree,
     editing: null,
-    nativeFunctions,
+    globalFunctions,
     undoStack: [],
     clipboardStack: [],
     execution: null,
@@ -926,94 +936,72 @@ const mdId = generateStreamId();
 const INITIAL_MAIN: TreeFunctionDefinitionNode = {
   kind: NodeKind.TreeFunctionDefinition,
   fid: generateFunctionId(),
-  sig: {
-    kind: NodeKind.Signature,
-    streamParams: [],
-    funcParams: [],
-    yields: [],
-    returnedIdx: undefined,
+  iface: {
+    kind: 'strtext',
+    spec: 'main => void',
   },
-  ui: {kind: 'none'},
-  sparams: [],
-  fparams: [],
-  body: {
-    kind: NodeKind.TreeFunctionBody,
-    exprs: [
-      {
-        kind: NodeKind.Application,
-        aid: generateApplicationId(),
-        outs: [{sid: mdId, name: {kind: NodeKind.Name, text: 'md'}}],
-        func: {
-          kind: NodeKind.FunctionReference,
-          ref: 'bind',
+  spids: [],
+  fpids: [],
+  bodyExprs: [
+    {
+      kind: NodeKind.Application,
+      aid: generateApplicationId(),
+      outs: [{sid: mdId, name: {kind: NodeKind.Name, text: 'md'}}],
+      fid: 'bind',
+      sargs: [
+        {
+          kind: NodeKind.Application,
+          aid: generateApplicationId(),
+          outs: [{sid: generateStreamId(), name: null}],
+          fid: 'mouseDown',
+          sargs: [],
+          fargs: [],
         },
-        sargs: [
-          {
-            kind: NodeKind.Application,
-            aid: generateApplicationId(),
-            outs: [{sid: generateStreamId(), name: null}],
-            func: {
-              kind: NodeKind.FunctionReference,
-              ref: 'mouseDown',
+      ],
+      fargs: [],
+    },
+    {
+      kind: NodeKind.Application,
+      aid: generateApplicationId(),
+      outs: [],
+      fid: 'showString',
+      sargs: [
+        {
+          kind: NodeKind.Application,
+          aid: generateApplicationId(),
+          outs: [{sid: generateStreamId(), name: null}],
+          fid: 'ifte',
+          sargs: [
+            {
+              kind: NodeKind.StreamReference,
+              ref: mdId,
             },
-            sargs: [],
-            fargs: [],
-          },
-        ],
-        fargs: [],
-      },
-      {
-        kind: NodeKind.Application,
-        aid: generateApplicationId(),
-        outs: [],
-        func: {
-          kind: NodeKind.FunctionReference,
-          ref: 'showString',
-        },
-        sargs: [
-          {
-            kind: NodeKind.Application,
-            aid: generateApplicationId(),
-            outs: [{sid: generateStreamId(), name: null}],
-            func: {
-              kind: NodeKind.FunctionReference,
-              ref: 'ifte',
-            },
-            sargs: [
-              {
-                kind: NodeKind.StreamReference,
-                ref: mdId,
-              },
-              {
-                kind: NodeKind.Application,
-                aid: generateApplicationId(),
-                outs: [{sid: generateStreamId(), name: null}],
-                func: {
-                  kind: NodeKind.FunctionReference,
-                  ref: 'cos',
+            {
+              kind: NodeKind.Application,
+              aid: generateApplicationId(),
+              outs: [{sid: generateStreamId(), name: null}],
+              fid: 'cos',
+              sargs: [
+                {
+                  kind: NodeKind.NumberLiteral,
+                  sid: generateStreamId(),
+                  val: 10,
                 },
-                sargs: [
-                  {
-                    kind: NodeKind.NumberLiteral,
-                    sid: generateStreamId(),
-                    val: 10,
-                  },
-                ],
-                fargs: [],
-              },
-              {
-                kind: NodeKind.NumberLiteral,
-                sid: generateStreamId(),
-                val: 20,
-              },
-            ],
-            fargs: [],
-          },
-        ],
-        fargs: [],
-      },
-    ],
-  }
+              ],
+              fargs: [],
+            },
+            {
+              kind: NodeKind.NumberLiteral,
+              sid: generateStreamId(),
+              val: 20,
+            },
+          ],
+          fargs: [],
+        },
+      ],
+      fargs: [],
+    },
+  ],
 };
 
 export const initialState: State = initialStateFromDefinition(INITIAL_MAIN, {id: genuid(), name: 'my program'});

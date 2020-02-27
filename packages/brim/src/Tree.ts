@@ -1,5 +1,5 @@
 import genuid from './uid';
-import { FunctionUI } from './FunctionUI';
+import { FunctionInterfaceSpec } from './FunctionInterface';
 
 /**
  * IDS
@@ -44,17 +44,9 @@ export enum NodeKind {
   ArrayLiteral = 'arr',
   StreamReference = 'sref',
   Application = 'app',
-  FunctionReference = 'fref',
-  SignatureStreamParameter = 'sig-sparam',
-  SignatureFunctionParameter = 'sig-fparam',
-  SignatureYield = 'sig-yield',
-  Signature = 'sig',
+  NativeFunctionDefinition = 'nfdef',
   YieldExpression = 'yield',
-  StreamParameter = 'sparam',
-  FunctionParameter = 'fparam',
-  TreeFunctionBody = 'tbody',
-  TreeFunctionDefinition = 'tdef',
-  NativeFunctionDefinition = 'ndef',
+  TreeFunctionDefinition = 'tfdef',
 }
 
 /**
@@ -113,13 +105,16 @@ export interface ApplicationOut {
   readonly name: NameNode | null; // if this output was given a local name
 }
 
+export type ApplicationSettings = any;
+
 export interface ApplicationNode {
   readonly kind: NodeKind.Application;
   readonly aid: ApplicationID;
   readonly outs: ReadonlyArray<ApplicationOut>; // array since there can be multiple yields
-  readonly func: FunctionExpressionNode; // function being applied
+  readonly fid: FunctionID; // function being applied
   readonly sargs: ReadonlyArray<StreamExpressionNode>;
-  readonly fargs: ReadonlyArray<FunctionExpressionNode>;
+  readonly fargs: ReadonlyArray<FunctionDefinitionNode>;
+  readonly settings?: ApplicationSettings;
 }
 
 // Stream parameter definitions (on the "inside" of a function def) are _not_ expressions.
@@ -132,100 +127,39 @@ export function isStreamExpressionNode(node: Node): node is StreamExpressionNode
  * FUNCTION NODES
  */
 
-export interface SignatureStreamParameterNode {
-  readonly kind: NodeKind.SignatureStreamParameter;
-  // eventually, type info will go here
-}
 
-// When we auto-generate a function as an argument for this function-parameter,
-//  prefill its (internal) parameter/yield names as such.
-export interface SignatureFunctionParameterTemplateNames {
-  readonly streamParams: ReadonlyArray<string>;
-  readonly funcParams: ReadonlyArray<string>;
-  readonly yields: ReadonlyArray<string>;
-}
+export interface NativeFunctionDefinitionNode {
+  readonly kind: NodeKind.NativeFunctionDefinition;
+  readonly fid: FunctionID;
+  readonly iface: FunctionInterfaceSpec;
 
-export interface SignatureFunctionParameterNode {
-  readonly kind: NodeKind.SignatureFunctionParameter;
-  readonly sig: SignatureNode;
-  readonly templateNames: SignatureFunctionParameterTemplateNames;
-}
-
-export interface SignatureYieldNode {
-  readonly kind: NodeKind.SignatureYield;
-  // eventually, type info will go here
-}
-
-export interface SignatureNode {
-  readonly kind: NodeKind.Signature;
-  readonly streamParams: ReadonlyArray<SignatureStreamParameterNode>;
-  readonly funcParams: ReadonlyArray<SignatureFunctionParameterNode>;
-  readonly yields: ReadonlyArray<SignatureYieldNode>;
-  readonly returnedIdx: number | undefined; // which of the yields (if any) is returned to the tree-parent
+  // TODO: JS code as string?
 }
 
 export interface YieldExpressionNode {
   readonly kind: NodeKind.YieldExpression;
   readonly idx: number;
-  readonly name: NameNode;
   readonly expr: StreamExpressionNode;
 }
 
-export type BodyExpressionNode = StreamExpressionNode | FunctionExpressionNode | YieldExpressionNode;
+export type BodyExpressionNode = StreamExpressionNode | FunctionDefinitionNode | YieldExpressionNode;
 export function isBodyExpressionNode(node: Node): node is BodyExpressionNode {
-  return isStreamExpressionNode(node) || isFunctionExpressionNode(node) || (node.kind === NodeKind.YieldExpression);
-}
-
-export interface TreeFunctionBodyNode {
-  readonly kind: NodeKind.TreeFunctionBody;
-  readonly exprs: ReadonlyArray<BodyExpressionNode>;
-}
-
-export interface StreamParameterNode {
-  readonly kind: NodeKind.StreamParameter;
-  readonly sid: StreamID;
-  readonly name: NameNode;
-}
-
-export interface FunctionParameterNode {
-  readonly kind: NodeKind.FunctionParameter;
-  readonly fid: FunctionID;
-  readonly name: NameNode;
+  return isStreamExpressionNode(node) || isFunctionDefinitionNode(node) || (node.kind === NodeKind.YieldExpression);
 }
 
 export interface TreeFunctionDefinitionNode {
   readonly kind: NodeKind.TreeFunctionDefinition;
   readonly fid: FunctionID;
-  readonly sig: SignatureNode;
-  readonly ui: FunctionUI;
+  readonly iface: FunctionInterfaceSpec;
 
-  readonly sparams: ReadonlyArray<StreamParameterNode>;
-  readonly fparams: ReadonlyArray<FunctionParameterNode>;
-  readonly body: TreeFunctionBodyNode;
+  readonly spids: ReadonlyArray<StreamID>;
+  readonly fpids: ReadonlyArray<FunctionID>;
+  readonly bodyExprs: ReadonlyArray<BodyExpressionNode>;
 }
 
-export interface NativeFunctionDefinitionNode {
-  readonly kind: NodeKind.NativeFunctionDefinition;
-  readonly fid: FunctionID;
-  readonly sig: SignatureNode;
-  readonly ui: FunctionUI;
-
-  // TODO: JS code as string?
-}
-
-export type FunctionDefinitionNode = TreeFunctionDefinitionNode | NativeFunctionDefinitionNode;
+export type FunctionDefinitionNode = NativeFunctionDefinitionNode | TreeFunctionDefinitionNode;
 export function isFunctionDefinitionNode(node: Node): node is FunctionDefinitionNode {
-  return (node.kind === NodeKind.TreeFunctionDefinition) || (node.kind === NodeKind.NativeFunctionDefinition);
+  return (node.kind === NodeKind.NativeFunctionDefinition) || (node.kind === NodeKind.TreeFunctionDefinition);
 }
 
-export interface FunctionReferenceNode {
-  readonly kind: NodeKind.FunctionReference;
-  readonly ref: FunctionID; // the function id we are referencing
-}
-
-export type FunctionExpressionNode = FunctionReferenceNode | FunctionDefinitionNode;
-export function isFunctionExpressionNode(node: Node): node is FunctionExpressionNode {
-  return (node.kind === NodeKind.FunctionReference) || isFunctionDefinitionNode(node);
-}
-
-export type Node = NameNode | SignatureNode | StreamParameterNode | FunctionParameterNode | TreeFunctionBodyNode | BodyExpressionNode | SignatureStreamParameterNode | SignatureFunctionParameterNode | SignatureYieldNode;
+export type Node = NameNode | BodyExpressionNode;

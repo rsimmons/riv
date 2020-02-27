@@ -1,4 +1,4 @@
-import { NodeKind, StreamID, FunctionID, StreamExpressionNode, FunctionExpressionNode } from './Tree';
+import { NodeKind, StreamID, StreamExpressionNode } from './Tree';
 
 export function streamExprReturnedId(node: StreamExpressionNode): StreamID | undefined {
   switch (node.kind) {
@@ -22,23 +22,6 @@ export function streamExprReturnedId(node: StreamExpressionNode): StreamID | und
         }
       }
       return undefined;
-
-    default: {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const exhaustive: never = node; // this will cause a type error if we haven't handled all cases
-      throw new Error();
-    }
-  }
-}
-
-export function functionExprId(node: FunctionExpressionNode): FunctionID {
-  switch (node.kind) {
-    case NodeKind.FunctionReference:
-      return node.ref;
-
-    case NodeKind.TreeFunctionDefinition:
-    case NodeKind.NativeFunctionDefinition:
-      return node.fid;
 
     default: {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars

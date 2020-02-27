@@ -1,10 +1,11 @@
 import React, { useState, useRef, useLayoutEffect } from 'react';
-import { Node, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, isFunctionExpressionNode, FunctionExpressionNode, isFunctionDefinitionNode, StreamReferenceNode, NameNode, ApplicationNode, ArrayLiteralNode } from './Tree';
+import { Node, FunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, StreamReferenceNode, NameNode, ApplicationNode, ArrayLiteralNode, TreeFunctionDefinitionNode, isFunctionDefinitionNode } from './Tree';
 import './TreeView.css';
 import { StaticEnvironment, extendStaticEnv } from './EditReducer';
-import { parseTemplateString } from './SyntaxTemplate';
+import { TextualSyntaxTemplate, parseTemplateString } from './TextualSyntaxTemplate';
 import quotesIcon from './icons/quotes.svg';
 import booleanIcon from './icons/boolean.svg';
+import { parseStringTextualInterfaceSpec, TreeSignature, TreeSignatureYield } from './FunctionInterface';
 
 const BOUND_NAME_BOX_COLOR = '#d1e6ff';
 const STREAM_REFERENCE_BOX_COLOR = '#a1cdff';
@@ -24,15 +25,30 @@ export interface TreeViewContext {
 interface UseSelectableResult {
   classes: ReadonlyArray<string>;
   handlers: {
-    onClick: (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => void,
-    onMouseOver: (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => void,
-    onMouseOut: (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => void,
-    tabIndex: number,
+    onClick?: (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => void,
+    onMouseOver?: (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => void,
+    onMouseOut?: (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => void,
+    tabIndex?: number,
   };
 }
 
-function useSelectable(node: Node, ref: React.RefObject<HTMLDivElement>, ctx: TreeViewContext): UseSelectableResult {
+function useSelectable(node: Node | undefined, ref: React.RefObject<HTMLDivElement>, ctx: TreeViewContext): UseSelectableResult {
   const [isHovered, setIsHovered] = useState(false);
+  const isSelected = node && (ctx.markedNodes.selected === node);
+  const isReferent = node && (ctx.markedNodes.referentName === node);
+
+  useLayoutEffect(() => {
+    if (ctx.focusSelected && isSelected && ref.current) {
+      ref.current.focus();
+    }
+  });
+
+  if (!node) {
+    return {
+      classes: [],
+      handlers: {},
+    };
+  }
 
   const handleClick = (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
     if ((e.target as Element).tagName !== 'INPUT') {
@@ -52,8 +68,6 @@ function useSelectable(node: Node, ref: React.RefObject<HTMLDivElement>, ctx: Tr
 
   const classes: Array<string> = [];
 
-  const isSelected = (ctx.markedNodes.selected === node);
-  const isReferent = (ctx.markedNodes.referentName === node);
   if (isSelected) {
     classes.push('TreeView-selected');
   }
@@ -64,12 +78,6 @@ function useSelectable(node: Node, ref: React.RefObject<HTMLDivElement>, ctx: Tr
     classes.push('TreeView-hovered');
   }
   // TODO: handle clipboard-top, clipboard-rest?
-
-  useLayoutEffect(() => {
-    if (ctx.focusSelected && isSelected && ref.current) {
-      ref.current.focus();
-    }
-  });
 
   return {
     classes,
@@ -92,7 +100,7 @@ const SimpleNodeView: React.FC<{treeNode: Node, content: string, icon?: [string,
   const ref = useRef<HTMLDivElement>(null);
   const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(treeNode, ref, ctx);
   return (
-  <div ref={ref} className={selectionClasses.concat(['TreeView-node', 'TreeView-simple-node']).join(' ')} {...selectionHandlers} style={{background: bgColor}}>{icon && <img className="TreeView-simple-node-icon" src={icon[0]} alt={icon[1]} /> }{content}</div>
+    <div ref={ref} className={selectionClasses.concat(['TreeView-node', 'TreeView-rounded-node', 'TreeView-simple-node']).join(' ')} {...selectionHandlers} style={{background: bgColor}}>{icon && <img className="TreeView-simple-node-icon" src={icon[0]} alt={icon[1]} /> }{content}</div>
   );
 };
 
@@ -129,9 +137,9 @@ interface RowLayoutRow {
 
 type RowLayout = ReadonlyArray<RowLayoutRow>;
 
-const RowView: React.FC<{node: Node, layout: RowLayout, groupingLines: boolean, ctx: TreeViewContext}> = ({node, layout, groupingLines, ctx}) => {
+const RowView: React.FC<{selectionNode: Node | undefined, outwardNode: Node, layout: RowLayout, groupingLines: boolean, ctx: TreeViewContext}> = ({selectionNode, outwardNode, layout, groupingLines, ctx}) => {
   const ref = useRef<HTMLDivElement>(null);
-  const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node, ref, ctx);
+  const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(selectionNode, ref, ctx);
 
   interface SelectionRecord {
     ref: React.RefObject<HTMLElement>,
@@ -168,7 +176,7 @@ const RowView: React.FC<{node: Node, layout: RowLayout, groupingLines: boolean, 
             if (e.key === 'ArrowLeft') {
               e.stopPropagation();
               if (itemIdx === 0) {
-                ctx.setSelectedNode(node);
+                ctx.setSelectedNode(outwardNode);
               } else {
                 const newItemIdx = itemIdx - 1;
                 ctx.setSelectedNode(selectionRows[rowIdx][newItemIdx].treeNode);
@@ -181,7 +189,7 @@ const RowView: React.FC<{node: Node, layout: RowLayout, groupingLines: boolean, 
               }
             } else if ((e.key === 'ArrowUp') && (rowIdx === 0)) {
               e.stopPropagation();
-              ctx.setSelectedNode(node);
+              ctx.setSelectedNode(outwardNode);
             } else if ((e.key === 'ArrowDown') && (rowIdx === (selectionRows.length - 1))) {
               // Ignore, maybe ancestor will handle
             } else if ((e.key === 'ArrowUp') || (e.key === 'ArrowDown')) {
@@ -196,7 +204,7 @@ const RowView: React.FC<{node: Node, layout: RowLayout, groupingLines: boolean, 
   };
 
   return (
-    <div ref={ref} className={selectionClasses.concat(['TreeView-row-view TreeView-node']).join(' ')} {...selectionHandlers} onKeyDown={onKeyDown}>
+    <div ref={ref} className={selectionClasses.concat(['TreeView-row-view TreeView-rounded-node TreeView-node']).join(' ')} {...selectionHandlers} onKeyDown={onKeyDown}>
       {layout.map((row, rowIdx) => {
         const selectionRow: Array<SelectionRecord> = [];
         const itemElems: Array<React.ReactNode> = [];
@@ -217,7 +225,7 @@ const RowView: React.FC<{node: Node, layout: RowLayout, groupingLines: boolean, 
               });
             }
 
-            const key = item.treeNode ? objKey(item.treeNode) : itemIdx;
+            const key = item.treeNode ? ('obj' + objKey(item.treeNode)) : itemIdx;
 
             itemElems.push(
               <div ref={ref} key={key}>{item.sizedReactNode.reactNode}</div>
@@ -246,7 +254,7 @@ const RowView: React.FC<{node: Node, layout: RowLayout, groupingLines: boolean, 
   );
 }
 
-const sizedRowView = ({node, layout, groupingLines, ctx}: {node: Node, layout: RowLayout, groupingLines: boolean, ctx: TreeViewContext}): SizedReactNode => {
+const sizedRowView = ({selectionNode, outwardNode, layout, groupingLines, ctx}: {selectionNode: Node | undefined, outwardNode: Node, layout: RowLayout, groupingLines: boolean, ctx: TreeViewContext}): SizedReactNode => {
   // Determine size
   let singleLineWidth: number | undefined = undefined;
   if (layout.length === 1) {
@@ -274,11 +282,11 @@ const sizedRowView = ({node, layout, groupingLines, ctx}: {node: Node, layout: R
 
   return {
     singleLineWidth,
-    reactNode: <RowView node={node} layout={layout} groupingLines={groupingLines} ctx={ctx} />
+    reactNode: <RowView selectionNode={selectionNode} outwardNode={outwardNode} layout={layout} groupingLines={groupingLines} ctx={ctx} />
   };
 }
 
-const sizedTemplateView = ({node, template, nodeMap, groupingLines, ctx}: {node: Node, template: string, nodeMap: Map<string, TreeAndSizedNodes>, groupingLines: boolean, ctx: TreeViewContext}): SizedReactNode => {
+const sizedTemplateView = ({selectionNode, outwardNode, template, nodeMap, groupingLines, ctx}: {selectionNode: Node, outwardNode: Node, template: TextualSyntaxTemplate, nodeMap: Map<string, TreeAndSizedNodes>, groupingLines: boolean, ctx: TreeViewContext}): SizedReactNode => {
   const MAX_WIDTH = 30;
 
   const createLayout = (trySingleLine: boolean): [RowLayout, number | undefined] => {
@@ -298,9 +306,9 @@ const sizedTemplateView = ({node, template, nodeMap, groupingLines, ctx}: {node:
       accumLength = 0;
     };
 
-    for (const piece of parseTemplateString(template)) {
-      if (piece.kind === 'wildcard') {
-        const nodes = nodeMap.get(piece.key);
+    for (const segment of template) {
+      if (segment.kind === 'wildcard') {
+        const nodes = nodeMap.get(segment.key);
         if (!nodes) {
           throw new Error();
         }
@@ -319,21 +327,21 @@ const sizedTemplateView = ({node, template, nodeMap, groupingLines, ctx}: {node:
           });
           totalWidth = undefined;
         }
-      } else if (piece.kind === 'linebreak') {
+      } else if (segment.kind === 'linebreak') {
         if (!trySingleLine) {
           emitAccumItems();
           totalWidth = undefined;
         }
-      } else if (piece.kind === 'text') {
+      } else if (segment.kind === 'text') {
         const ellipsis = (accumItems.length === 0) && (layout.length > 0);
-        accumItems.push((ellipsis ? '…' : '') + piece.text);
-        accumLength += piece.text.length;
+        accumItems.push((ellipsis ? '…' : '') + segment.text);
+        accumLength += segment.text.length;
         if (totalWidth !== undefined) {
-          totalWidth += piece.text.length;
+          totalWidth += segment.text.length;
         }
       } else {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const exhaustive: never = piece; // this will cause a type error if we haven't handled all cases
+        const exhaustive: never = segment; // this will cause a type error if we haven't handled all cases
         throw new Error();
       }
     }
@@ -346,13 +354,13 @@ const sizedTemplateView = ({node, template, nodeMap, groupingLines, ctx}: {node:
   if ((singleLineWidth !== undefined) && (singleLineWidth <= MAX_WIDTH)) {
     return {
       singleLineWidth,
-      reactNode: <RowView node={node} layout={singleLayout} groupingLines={groupingLines} ctx={ctx} />,
+      reactNode: <RowView selectionNode={selectionNode} outwardNode={outwardNode} layout={singleLayout} groupingLines={groupingLines} ctx={ctx} />,
     };
   } else {
     const [multiLayout, ] = createLayout(false);
     return {
       singleLineWidth: undefined,
-      reactNode: <RowView node={node} layout={multiLayout} groupingLines={groupingLines} ctx={ctx} />,
+      reactNode: <RowView selectionNode={selectionNode} outwardNode={outwardNode} layout={multiLayout} groupingLines={groupingLines} ctx={ctx} />,
     };
   }
 }
@@ -367,7 +375,7 @@ const sizedStreamReferenceView = ({node, ctx}: {node: StreamReferenceNode, ctx: 
     throw new Error();
   }
 
-  return sizedSimpleNodeView({treeNode: node, content: streamDef.name.text || '\xa0\xa0\xa0\xa0', bgColor: STREAM_REFERENCE_BOX_COLOR, ctx});
+  return sizedSimpleNodeView({treeNode: node, content: streamDef.name || '\xa0\xa0\xa0\xa0', bgColor: STREAM_REFERENCE_BOX_COLOR, ctx});
 };
 
 const sizedArrayLiteralView = ({node, ctx}: {node: ArrayLiteralNode, ctx: TreeViewContext}): SizedReactNode => {
@@ -384,7 +392,7 @@ const sizedArrayLiteralView = ({node, ctx}: {node: ArrayLiteralNode, ctx: TreeVi
       items: [
         {
           treeNode: elem,
-          sizedReactNode: sizedBodyExpressionView({node: elem, ctx}),
+          sizedReactNode: sizedStreamExpressionView({node: elem, ctx}),
         },
       ],
     });
@@ -395,16 +403,12 @@ const sizedArrayLiteralView = ({node, ctx}: {node: ArrayLiteralNode, ctx: TreeVi
     items: [']'],
   });
 
-  return sizedRowView({node, layout, groupingLines: true, ctx});
+  return sizedRowView({selectionNode: node, outwardNode: node, layout, groupingLines: true, ctx});
 }
 
 const sizedApplicationView = ({node, ctx}: {node: ApplicationNode, ctx: TreeViewContext}): SizedReactNode => {
-  if (node.func.kind !== NodeKind.FunctionReference) {
-    throw new Error('unimplemented');
-  }
-
-  const functionNode = ctx.staticEnv.functionEnv.get(node.func.ref);
-  if (!functionNode) {
+  const funcDef = ctx.staticEnv.functionEnv.get(node.fid);
+  if (!funcDef) {
     throw new Error();
   }
 
@@ -419,34 +423,45 @@ const sizedApplicationView = ({node, ctx}: {node: ApplicationNode, ctx: TreeView
   node.fargs.forEach((farg, idx) => {
     nodeMap.set('f' + idx, {
       treeNode: farg,
-      sizedReactNode: sizedFunctionExpressionView({node: farg, ctx}),
+      sizedReactNode: sizedFunctionDefinitionView({node: farg, ctx}),
     });
   });
   node.outs.forEach((out, idx) => {
     if (out.name) {
-      nodeMap.set('o' + idx, {
+      nodeMap.set('y' + idx, {
         treeNode: out.name,
         sizedReactNode: sizedNameView({node: out.name, ctx}),
       });
     }
   });
 
-  switch (functionNode.ui.kind) {
-    case 'none':
-      throw new Error();
-
-    case 'tmplstr':
+  switch (funcDef.iface.kind) {
+    case 'strtext':
+      const tifspec = parseStringTextualInterfaceSpec(funcDef.iface.spec);
       return sizedTemplateView({
-        node,
-        template: functionNode.ui.tmplStr || ('empty template string for ' + functionNode.fid),
+        selectionNode: node,
+        outwardNode: node,
+        template: tifspec.tmpl,
         nodeMap,
         groupingLines: true,
         ctx,
       });
 
+    case 'dtext': {
+      const tifspec = funcDef.iface.getIface(node.settings);
+      return sizedTemplateView({
+        selectionNode: node,
+        outwardNode: node,
+        template: tifspec.tmpl,
+        nodeMap,
+        groupingLines: true,
+        ctx,
+      });
+    }
+
     default: {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const exhaustive: never = functionNode.ui; // this will cause a type error if we haven't handled all cases
+      const exhaustive: never = funcDef.iface; // this will cause a type error if we haven't handled all cases
       throw new Error();
     }
   }
@@ -488,20 +503,22 @@ export const StreamExpressionView: React.FC<{node: StreamExpressionNode, ctx: Tr
   return <>{reactNode}</> // empty angle brackets are to make types work
 }
 
-const sizedBodyExpressionView = ({node, ctx}: {node: BodyExpressionNode, ctx: TreeViewContext}): SizedReactNode => {
+const sizedBodyExpressionView = ({node, sigYields, ctx}: {node: BodyExpressionNode, sigYields: ReadonlyArray<TreeSignatureYield>, ctx: TreeViewContext}): SizedReactNode => {
   if (isStreamExpressionNode(node)) {
     return sizedStreamExpressionView({node, ctx});
-  } else if (isFunctionExpressionNode(node)) {
+  } else if (isFunctionDefinitionNode(node)) {
     throw new Error('unimplemented');
   } else if (node.kind === NodeKind.YieldExpression) {
+    const displayedName = sigYields[node.idx].name === undefined ? node.idx.toString() : sigYields[node.idx].name;
     return sizedTemplateView({
-      node,
-      template: '$name ← $expr',
+      selectionNode: node,
+      outwardNode: node,
+      template: parseTemplateString(displayedName + ' ← $expr'),
       nodeMap: new Map([
-        ['name', {
-          treeNode: node.name,
-          sizedReactNode: sizedNameView({node: node.name, ctx}),
-        }],
+        // ['name', {
+        //   treeNode: node.name,
+        //   sizedReactNode: sizedNameView({node: node.name, ctx}),
+        // }],
         ['expr', {
           treeNode: node.expr,
           sizedReactNode: sizedStreamExpressionView({node: node.expr, ctx}),
@@ -517,7 +534,7 @@ const sizedBodyExpressionView = ({node, ctx}: {node: BodyExpressionNode, ctx: Tr
   }
 };
 
-const sizedTreeFunctionDefinitionView = ({node, ctx}: {node: TreeFunctionDefinitionNode, ctx: TreeViewContext}): SizedReactNode => {
+export const TreeFunctionDefinitionView: React.FC<{node: TreeFunctionDefinitionNode, ctx: TreeViewContext}> = ({ node, ctx }) => {
   const layout: Array<RowLayoutRow> = [];
 
   const newCtx: TreeViewContext = {
@@ -525,57 +542,75 @@ const sizedTreeFunctionDefinitionView = ({node, ctx}: {node: TreeFunctionDefinit
     staticEnv: extendStaticEnv(ctx.staticEnv, node),
   };
 
-  if ((node.sparams.length > 0) || (node.fparams.length > 0)) {
-    // Some parameters
-    layout.push({indent: false, items: [
-      'given',
-    ]});
+  let ifaceReactNode: React.ReactNode;
+  let treeSig: TreeSignature;
+  switch (node.iface.kind) {
+    case 'strtext':
+      treeSig = parseStringTextualInterfaceSpec(node.iface.spec).treeSig;
+      ifaceReactNode = (
+        <div>ƒ {node.iface.spec}</div>
+      );
+      break;
 
-    node.sparams.forEach(sparam => {
-      layout.push({
-        indent: true,
-        items: [{
-          treeNode: sparam.name,
-          sizedReactNode: sizedNameView({node: sparam.name, ctx: newCtx}),
-        }],
-      });
-    });
+    case 'dtext':
+      throw new Error('unsupported');
 
-    node.fparams.forEach(fparam => {
-      layout.push({
-        indent: true,
-        items: [{
-          treeNode: fparam.name,
-          sizedReactNode: sizedNameView({node: fparam.name, ctx: newCtx}),
-        }],
-      });
-    });
+    default: {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const exhaustive: never = node.iface; // this will cause a type error if we haven't handled all cases
+      throw new Error('unreachable');
+    }
   }
 
-  for (const bodyExpr of node.body.exprs) {
+  for (const bodyExpr of node.bodyExprs) {
     layout.push({
       indent: false,
       items: [
         {
           treeNode: bodyExpr,
-          sizedReactNode: sizedBodyExpressionView({node: bodyExpr, ctx: newCtx}),
+          sizedReactNode: sizedBodyExpressionView({node: bodyExpr, sigYields: treeSig.yields, ctx: newCtx}),
         },
       ],
     });
   }
 
-  const {singleLineWidth, reactNode} = sizedRowView({node, layout, groupingLines: false, ctx: newCtx});
-  return {
-    singleLineWidth,
-    reactNode: (
-      <div className="TreeView-tree-function-definition-inner">{reactNode}</div>
-    ),
-  };
-};
+  const {reactNode: bodyReactNode} = sizedRowView({
+    selectionNode: undefined,
+    outwardNode: node,
+    layout,
+    groupingLines: false,
+    ctx: newCtx,
+  });
 
-const sizedFunctionDefinitionView = ({node, ctx}: {node: FunctionDefinitionNode, ctx: TreeViewContext}): SizedReactNode => {
+  const ref = useRef<HTMLDivElement>(null);
+  const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node, ref, ctx);
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.getModifierState('Alt') ||
+      e.getModifierState('Control') ||
+      e.getModifierState('Meta') ||
+      e.getModifierState('Shift')) {
+      return;
+    }
+    if ((e.key === 'ArrowRight') && (ref.current === e.target)) {
+      if (node.bodyExprs.length > 0) {
+        e.stopPropagation();
+        ctx.setSelectedNode(node.bodyExprs[0]);
+      }
+    }
+  };
+
+  return (
+    <div ref={ref} className={selectionClasses.concat(['TreeView-node', 'TreeView-tree-function-definition']).join(' ')} {...selectionHandlers} onKeyDown={onKeyDown}>
+      <div className="TreeView-tree-function-definition-iface-spec">{ifaceReactNode}</div>
+      <div className="TreeView-tree-function-definition-body">{bodyReactNode}</div>
+    </div>
+  );
+}
+
+export const FunctionDefinitionView: React.FC<{node: FunctionDefinitionNode, ctx: TreeViewContext}> = ({ node, ctx }) => {
   if (node.kind === NodeKind.TreeFunctionDefinition) {
-    return sizedTreeFunctionDefinitionView({node, ctx});
+    return <TreeFunctionDefinitionView node={node} ctx={ctx} />;
   } else if (node.kind === NodeKind.NativeFunctionDefinition) {
     throw new Error('unimplemented');
   } else {
@@ -583,21 +618,11 @@ const sizedFunctionDefinitionView = ({node, ctx}: {node: FunctionDefinitionNode,
     const exhaustive: never = node; // this will cause a type error if we haven't handled all cases
     throw new Error('unreachable');
   }
-};
-
-const sizedFunctionExpressionView = ({node, ctx}: {node: FunctionExpressionNode, ctx: TreeViewContext}): SizedReactNode => {
-  if (node.kind === NodeKind.FunctionReference) {
-    throw new Error('unimplemented');
-  } else if (isFunctionDefinitionNode(node)) {
-    return sizedFunctionDefinitionView({node, ctx});
-  } else {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const exhaustive: never = node; // this will cause a type error if we haven't handled all cases
-    throw new Error('unreachable');
-  }
-};
-
-export const TreeFunctionDefinitionView: React.FC<{node: TreeFunctionDefinitionNode, ctx: TreeViewContext}> = ({ node, ctx }) => {
-  const {reactNode} = sizedTreeFunctionDefinitionView({node, ctx});
-  return <>{reactNode}</> // empty angle brackets are to make types work
 }
+
+const sizedFunctionDefinitionView = ({node, ctx}: {node: FunctionDefinitionNode, ctx: TreeViewContext}): SizedReactNode => {
+  return {
+    singleLineWidth: undefined,
+    reactNode: <FunctionDefinitionView node={node} ctx={ctx} />,
+  };
+};

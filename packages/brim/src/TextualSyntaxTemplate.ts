@@ -12,11 +12,11 @@ interface Text {
   text: string;
 }
 
-type TemplateSegment = Wildcard | LineBreak | Text;
+export type TemplateSegment = Wildcard | LineBreak | Text;
 
-type Template = ReadonlyArray<TemplateSegment>;
+export type TextualSyntaxTemplate = ReadonlyArray<TemplateSegment>;
 
-export function parseTemplateString(s: string): Template {
+export function parseTemplateString(s: string): TextualSyntaxTemplate {
   const splits = s.split(/(\$[a-z0-9]+|\|)/).map(s => s.trim()).filter(s => s);
   const result: Array<TemplateSegment> = [];
 
@@ -41,7 +41,7 @@ export function parseTemplateString(s: string): Template {
   return result;
 }
 
-export function templateToPlainText(template: Template): string {
+export function templateToPlainText(template: TextualSyntaxTemplate): string {
   const resultPieces: Array<string> = [];
 
   for (const piece of template) {

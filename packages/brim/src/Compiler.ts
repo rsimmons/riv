@@ -1,5 +1,5 @@
-import { StreamID, FunctionID, Node, FunctionDefinitionNode, TreeFunctionDefinitionNode, StreamExpressionNode, NodeKind, isFunctionDefinitionNode, isStreamExpressionNode } from './Tree';
-import { streamExprReturnedId, functionExprId } from './TreeUtil';
+import { StreamID, FunctionID, Node, FunctionDefinitionNode, StreamExpressionNode, NodeKind, isStreamExpressionNode, TreeFunctionDefinitionNode, isFunctionDefinitionNode } from './Tree';
+import { streamExprReturnedId } from './TreeUtil';
 import { CompiledDefinition, ConstStreamSpec, LocalFunctionDefinition, AppSpec } from './CompiledDefinition';
 import Environment from './Environment';
 import { visitChildren } from './Traversal';
@@ -12,7 +12,7 @@ export class CompilationError extends Error {
 type CompilationStreamEnvironment = Environment<StreamID, StreamExpressionNode | null>;
 type CompilationFunctionEnvironment = Environment<FunctionID, FunctionDefinitionNode>;
 
-function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStreamEnvironment: CompilationStreamEnvironment, outerFunctionEnvironment: CompilationFunctionEnvironment): [CompiledDefinition, Set<StreamID>] {
+function compileTreeFuncDef(def: TreeFunctionDefinitionNode, outerStreamEnvironment: CompilationStreamEnvironment, outerFunctionEnvironment: CompilationFunctionEnvironment): [CompiledDefinition, Set<StreamID>] {
   const streamEnvironment: CompilationStreamEnvironment = new Environment(outerStreamEnvironment);
   const functionEnvironment: CompilationFunctionEnvironment = new Environment(outerFunctionEnvironment);
   const localStreamIds: Set<StreamID> = new Set();
@@ -21,7 +21,7 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
   // TODO: verify that internal parameters (sparams, fparams) match the signature
 
   // Identify locally defined stream and function ids
-  definition.sparams.forEach(({sid}) => {
+  def.spids.forEach(sid => {
     if (streamEnvironment.has(sid)) {
       throw new Error('must be unique');
     }
@@ -80,7 +80,7 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
       visitChildren(node, visitToFindLocals, undefined);
     }
   };
-  visitChildren(definition.body, visitToFindLocals, undefined);
+  visitChildren(def, visitToFindLocals, undefined);
 
   const constStreams: Array<ConstStreamSpec> = [];
   const apps: Array<AppSpec> = [];
@@ -95,7 +95,7 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
       throw new Error();
     }
     if (funcDef.kind === NodeKind.TreeFunctionDefinition) {
-      const [innerCompiledDef, ] = compileTreeDefinition(funcDef, streamEnvironment, functionEnvironment);
+      const [innerCompiledDef, ] = compileTreeFuncDef(funcDef, streamEnvironment, functionEnvironment);
       localDefs.push({fid, def: innerCompiledDef});
     }
   }
@@ -172,7 +172,7 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
         break;
 
       case NodeKind.Application: {
-        const functionNode = functionEnvironment.get(functionExprId(node.func));
+        const functionNode = functionEnvironment.get(node.fid);
         if (!functionNode) {
           throw new CompilationError();
         }
@@ -193,16 +193,10 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
           streamArgIds.push(sargRetSid);
         }
 
-        for (const farg of node.fargs) {
-          const fid = functionExprId(farg);
-          const funcDef = functionEnvironment.get(fid);
-          if (!funcDef) {
-            throw new Error();
-          }
-
+        for (const funcDef of node.fargs) {
           /*
           if (funcDef.kind === NodeKind.TreeFunctionDefinition) {
-            const compiledContainedDef = compileTreeDefinition(funcDef, streamEnvironment, functionEnvironment);
+            const compiledContainedDef = compileTreeFuncImpl(funcDef, streamEnvironment, functionEnvironment);
 
             compiledContainedDef.externalReferencedStreamIds.forEach((sid) => {
               compiledDefinition.externalReferencedStreamIds.add(sid);
@@ -228,7 +222,7 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
           }
           */
 
-          funcArgIds.push(fid);
+          funcArgIds.push(funcDef.fid);
         }
 
         temporaryMarked.delete(node);
@@ -236,7 +230,7 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
         apps.push({
           sids: node.outs.map(out => out.sid),
           appId: node.aid,
-          funcId: functionExprId(node.func),
+          funcId: node.fid,
           sargIds: streamArgIds,
           fargIds: funcArgIds,
         });
@@ -253,7 +247,7 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
     permanentMarked.add(node);
   }
 
-  for (const node of definition.body.exprs) {
+  for (const node of def.bodyExprs) {
     if (node.kind === NodeKind.YieldExpression) {
       traverseStreamExpr(node.expr);
 
@@ -273,8 +267,8 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
   // TODO: verify that yieldIds doesn't have any "holes" and matches signature
 
   const compiledDefinition: CompiledDefinition = {
-    streamParamIds: definition.sparams.map(({sid}) => sid),
-    funcParamIds: definition.fparams.map(({fid}) => fid),
+    streamParamIds: def.spids,
+    funcParamIds: def.fpids,
     constStreams,
     apps,
     localDefs,
@@ -284,7 +278,7 @@ function compileTreeDefinition(definition: TreeFunctionDefinitionNode, outerStre
   return [compiledDefinition, externalReferencedStreamIds];
 }
 
-export function compileGlobalTreeDefinition(definition: TreeFunctionDefinitionNode, globalFunctionEnvironment: Environment<FunctionID, FunctionDefinitionNode>): CompiledDefinition {
+export function compileGlobalTreeDefinition(def: TreeFunctionDefinitionNode, globalFunctionEnvironment: Environment<FunctionID, FunctionDefinitionNode>): CompiledDefinition {
   const streamEnv: CompilationStreamEnvironment = new Environment();
 
   const compGlobalFuncEnv: CompilationFunctionEnvironment = new Environment();
@@ -293,7 +287,7 @@ export function compileGlobalTreeDefinition(definition: TreeFunctionDefinitionNo
   });
   const funcEnv: CompilationFunctionEnvironment = new Environment(compGlobalFuncEnv);
 
-  const [compiledDefinition, externalReferencedStreamIds] = compileTreeDefinition(definition, streamEnv, funcEnv);
+  const [compiledDefinition, externalReferencedStreamIds] = compileTreeFuncDef(def, streamEnv, funcEnv);
 
   if (externalReferencedStreamIds.size > 0) {
     throw new Error();
