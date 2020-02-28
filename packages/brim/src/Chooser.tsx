@@ -1,22 +1,28 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import './Chooser.css';
-import { Node, generateStreamId, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, generateFunctionId, StreamExpressionNode, generateApplicationId, ApplicationOut, UndefinedLiteralNode, ArrayLiteralNode, NameNode, StreamID } from './Tree';
+import { Node, generateStreamId, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, generateFunctionId, StreamExpressionNode, generateApplicationId, ApplicationOut, UndefinedLiteralNode, ArrayLiteralNode, NameNode, StreamID, isFunctionDefinitionNode } from './Tree';
 import Fuse from 'fuse.js';
 import { computeParentLookup } from './EditReducer';
 import { SelTree } from './State';
-import { StreamExpressionView, TreeViewContext } from './TreeView';
+import { StreamExpressionView, TreeViewContext, FunctionDefinitionView } from './TreeView';
 import { functionUIAsPlainText, treeSignatureFromInterfaceSpec, TreeSignatureFuncParam } from './FunctionInterface';
 
 interface Choice {
-  node: StreamExpressionNode;
+  node: StreamExpressionNode | FunctionDefinitionNode;
 }
 
 const FLOAT_REGEX = /^[-+]?(?:\d*\.?\d+|\d+\.?\d*)(?:[eE][-+]?\d+)?$/;
 
 const ChoiceView: React.FC<{choice: Choice, treeViewCtx: TreeViewContext}> = ({ choice, treeViewCtx }) => {
-  return (
-    <StreamExpressionView node={choice.node} ctx={treeViewCtx} />
-  );
+  if (isStreamExpressionNode(choice.node)) {
+    return <StreamExpressionView node={choice.node} ctx={treeViewCtx} />
+  } else if (isFunctionDefinitionNode(choice.node)) {
+    return <FunctionDefinitionView node={choice.node} ctx={treeViewCtx} />
+  } else {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const exhaustive: never = choice.node; // this will cause a type error if we haven't handled all cases
+    throw new Error();
+  }
 }
 
 interface DropdownState {
@@ -283,6 +289,47 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any)
             },
           ],
           fargs: [],
+        },
+      });
+
+      choices.push({
+        /*
+        node: {
+          kind: NodeKind.TreeFunctionDefinition,
+          fid: generateFunctionId(),
+          iface: {
+            kind: 'strtext',
+            spec: text.trim() + ' => void',
+          },
+          spids: [],
+          fpids: [],
+          bodyExprs: [
+            {
+              kind: NodeKind.UndefinedLiteral,
+              sid: generateStreamId(),
+            },
+          ],
+        },
+        */
+        node: {
+          kind: NodeKind.TreeFunctionDefinition,
+          fid: generateFunctionId(),
+          iface: {
+            kind: 'strtext',
+            spec: text.trim() + ' {0:param} => {:output}',
+          },
+          spids: [generateStreamId()],
+          fpids: [],
+          bodyExprs: [
+            {
+              kind: NodeKind.YieldExpression,
+              idx: 0,
+              expr: {
+                kind: NodeKind.UndefinedLiteral,
+                sid: generateStreamId(),
+              },
+            },
+          ],
         },
       });
     }

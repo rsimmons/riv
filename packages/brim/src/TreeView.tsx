@@ -508,7 +508,7 @@ const sizedBodyExpressionView = ({node, sigYields, ctx}: {node: BodyExpressionNo
   if (isStreamExpressionNode(node)) {
     return sizedStreamExpressionView({node, ctx});
   } else if (isFunctionDefinitionNode(node)) {
-    throw new Error('unimplemented');
+    return sizedFunctionDefinitionView({node, ctx});
   } else if (node.kind === NodeKind.YieldExpression) {
     const displayedName = sigYields[node.idx].name === undefined ? node.idx.toString() : sigYields[node.idx].name;
     return sizedTemplateView({

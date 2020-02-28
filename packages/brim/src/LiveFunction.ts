@@ -32,6 +32,12 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerS
         streamEnv.set(sid, val);
       }
 
+      for (const {fid, def} of currentDefinition.localDefs) {
+        const [sf, updateDef] = createLiveFunction(def, streamEnv, funcEnv);
+        funcEnv.set(fid, sf);
+        updateLocalDef.set(fid, updateDef);
+      }
+
       for (const {appId, funcId} of currentDefinition.apps) {
         const func = funcEnv.get(funcId);
         if (!func) {
@@ -39,12 +45,6 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerS
         }
         const context = new ExecutionContext(func, requestUpdate);
         applicationContexts.set(appId, context);
-      }
-
-      for (const {fid, def} of currentDefinition.localDefs) {
-        const [sf, updateDef] = createLiveFunction(def, streamEnv, funcEnv);
-        funcEnv.set(fid, sf);
-        updateLocalDef.set(fid, updateDef);
       }
 
       return {

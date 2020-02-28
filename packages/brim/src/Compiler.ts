@@ -258,8 +258,9 @@ function compileTreeFuncDef(def: TreeFunctionDefinitionNode, outerStreamEnvironm
       yieldIds[node.idx] = exprRetSid;
     } else if (isStreamExpressionNode(node)) {
       traverseStreamExpr(node);
+    } else if (isFunctionDefinitionNode(node)) {
+      // don't need to traverse here?
     } else {
-      // TODO: this could also be a function expression
       throw new Error();
     }
   }
