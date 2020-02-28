@@ -49,13 +49,6 @@ const CATCH_IN_INPUTS = [
 const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
   const [state, dispatch] = useReducer(reducer, initialState);
 
-  const editorElem = useRef<HTMLDivElement>(null);
-
-  const firstRender = useRef(true);
-  useEffect(() => {
-    firstRender.current = false;
-  }, []);
-
   // TODO: memoize generation of this
   const handlers: {[key: string]: (keyEvent?: KeyboardEvent | undefined) => void} = {};
   for (const k of Object.keys(keyMap)) {
@@ -88,6 +81,15 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
 
   const referentNameNode = getReferentNameNodeOfSelected(displayedSelTree, state.globalFunctions);
 
+  // Determine if we should focus the selected node. This is hacky, but don't know better way to handle.
+  const editorElem = useRef<HTMLDivElement>(null);
+  const firstRender = useRef(true);
+  const previouslyEditing = useRef<boolean>(false);
+  const focusWasUnderEditor: boolean = !!editorElem.current && editorElem.current.contains(document.activeElement);
+  const focusSelected: boolean = (autoFocus && firstRender.current) || (!state.editing && (focusWasUnderEditor || previouslyEditing.current));
+  previouslyEditing.current = !!state.editing;
+  firstRender.current = false;
+
   const treeViewCtx: TreeViewContext = {
     markedNodes: {
       selected: displayedSelTree.selectedNode,
@@ -102,7 +104,7 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
         newNode: node,
       });
     },
-    focusSelected: !state.editing && (autoFocus || !firstRender.current),
+    focusSelected,
   };
 
   const positionedForEditSessionId: React.MutableRefObject<string | undefined> = useRef();
@@ -133,7 +135,7 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
       </div>
       <HotKeys keyMap={keyMap} handlers={handlers}>
         <ObserveKeys only={CATCH_IN_INPUTS}>
-          <div className="Editor-workspace" onKeyDown={onKeyDown} tabIndex={0} ref={editorElem}>
+          <div className="Editor-workspace" onKeyDown={onKeyDown} ref={editorElem}>
             <TreeFunctionDefinitionView node={displayedSelTree.mainDef} ctx={treeViewCtx} />
             {state.editing && (() => {
               const chooserTreeViewCtx: TreeViewContext = {
