@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import './Chooser.css';
-import { generateStreamId, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, generateFunctionId, StreamExpressionNode, generateApplicationId, ApplicationOut, UndefinedLiteralNode, ArrayLiteralNode, NameNode, StreamID } from './Tree';
+import { Node, generateStreamId, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, generateFunctionId, StreamExpressionNode, generateApplicationId, ApplicationOut, UndefinedLiteralNode, ArrayLiteralNode, NameNode, StreamID } from './Tree';
 import Fuse from 'fuse.js';
 import { computeParentLookup } from './EditReducer';
 import { SelTree } from './State';
@@ -105,147 +105,169 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, globalFunctions: Readon
       });
     }
 
-    // SEARCH OVER STREAMS
-    const streamEnv = treeViewCtx.staticEnv.streamEnv;
+    // SEARCH
 
-    interface EnvStreamSearchItem {
-      name: string;
-      sid: StreamID;
+    // actual node that we will add
+    interface SearchItemNodeData {
+      kind: 'node';
+      node: StreamExpressionNode;
     }
-    const envStreamSearchItems: Array<EnvStreamSearchItem> = [];
+
+    // function node that we will make an _application_ of
+    interface SearchItemFuncData {
+      kind: 'func';
+      def: FunctionDefinitionNode;
+    }
+
+    type SearchItemData = SearchItemNodeData | SearchItemFuncData;
+
+    interface SearchItem {
+      name: string;
+      data: SearchItemData;
+    }
+
+    const searchItems: Array<SearchItem> = [];
+
+    const streamEnv = treeViewCtx.staticEnv.streamEnv;
     streamEnv.forEach((sdef, ) => {
       const selfRef = (sdef.kind === 'expr') && (sdef.expr === initNode);
       if (!selfRef) {
-        envStreamSearchItems.push({
+        searchItems.push({
           name: sdef.name || ' ',
-          sid: sdef.sid,
+          data: {
+            kind: 'node',
+            node: {
+              kind: NodeKind.StreamReference,
+              ref: sdef.sid,
+            },
+          },
         });
       }
     });
 
-    const envStreamSearchOptions: Fuse.FuseOptions<EnvStreamSearchItem> = {
-      keys: ['name'],
-    };
-    const envStreamSearchResults = (new Fuse(envStreamSearchItems, envStreamSearchOptions)).search<EnvStreamSearchItem, false, false>(text);
-
-    for (const result of envStreamSearchResults) {
-      choices.push({
-        node: {
-          kind: NodeKind.StreamReference,
-          ref: result.sid,
-        },
-      });
-    }
-
-    // SEARCH OVER FUNCTIONS
     const functionEnv = treeViewCtx.staticEnv.functionEnv;
-
-    interface EnvFuncSearchItem {
-      name: string;
-      def: FunctionDefinitionNode;
-    }
-    const envFuncSearchItems: Array<EnvFuncSearchItem> = [];
-
     functionEnv.forEach(defNode => {
       const defAsText = functionUIAsPlainText(defNode.iface);
       if (atRoot) {
-        envFuncSearchItems.push({
+        searchItems.push({
           name: defAsText,
-          def: defNode,
+          data: {
+            kind: 'func',
+            def: defNode,
+          },
         });
       } else {
         const sig = treeSignatureFromInterfaceSpec(defNode.iface, undefined);
         if (sig.returnedIdx !== undefined) {
-          envFuncSearchItems.push({
+          searchItems.push({
             name: defAsText,
-            def: defNode,
+            data: {
+              kind: 'func',
+              def: defNode,
+            },
           });
         }
       }
     });
 
-    const envFuncSearchOptions: Fuse.FuseOptions<EnvFuncSearchItem> = {
-      keys: ['name'],
-    };
-    const envFuncSearchResults = (new Fuse(envFuncSearchItems, envFuncSearchOptions)).search<EnvFuncSearchItem, false, false>(text);
-
-    for (const result of envFuncSearchResults) {
-      const funcDefNode = result.def;
-      const sig = treeSignatureFromInterfaceSpec(funcDefNode.iface, undefined);
-
-      const outs: ReadonlyArray<ApplicationOut> = sig.yields.map((_, idx) => {
-        const thisYieldReturned = (idx === sig.returnedIdx);
-        return {
-          sid: generateStreamId(),
-          name: thisYieldReturned ? null : {
-            kind: NodeKind.Name,
-            text: '',
-          },
-        };
-      });
-
-      const sargs: ReadonlyArray<StreamExpressionNode> = sig.streamParams.map((_, idx) => (
-        (infixMode && (idx === 0))
-        ? initNode
-        : {
-          kind: NodeKind.UndefinedLiteral,
-          sid: generateStreamId(),
-        }
-      ));
-
-      const fargs: ReadonlyArray<FunctionDefinitionNode> = sig.funcParams.map((fparam: TreeSignatureFuncParam): FunctionDefinitionNode => {
-        const fparamSig = treeSignatureFromInterfaceSpec(fparam.ifaceSpec, undefined);
-
-        return {
-          kind: NodeKind.TreeFunctionDefinition,
-          fid: generateFunctionId(),
-          iface: fparam.ifaceSpec,
-          spids: fparamSig.streamParams.map(() => generateStreamId()),
-          fpids: fparamSig.funcParams.map(() => generateFunctionId()),
-          bodyExprs: fparamSig.yields.map((_, idx) => ({
-            kind: NodeKind.YieldExpression,
-            idx,
-            expr: {
-              kind: NodeKind.UndefinedLiteral,
-              sid: generateStreamId(),
-            },
-          })),
-        };
-      });
-
-      const n: ApplicationNode = {
-        kind: NodeKind.Application,
-        aid: generateApplicationId(),
-        outs,
-        fid: funcDefNode.fid,
-        sargs,
-        fargs,
-      };
-
-      choices.push({
-        node: n,
-      });
-    }
-
     for (const bv of [true, false]) {
-      if ((text.length > 0) && bv.toString().startsWith(text)) {
-        choices.push({
+      searchItems.push({
+        name: bv.toString(),
+        data: {
+          kind: 'node',
           node: {
             kind: NodeKind.BooleanLiteral,
             sid: generateStreamId(),
             val: bv,
           },
-        });
-      }
+        },
+      })
     }
 
-    choices.push({
-      node: {
-        kind: NodeKind.TextLiteral,
-        sid: generateStreamId(),
-        val: text,
-      },
-    });
+    const searchOptions: Fuse.FuseOptions<SearchItem> = {
+      keys: ['name'],
+      includeScore: true,
+    };
+    const envStreamSearchResults = (new Fuse(searchItems, searchOptions)).search<SearchItem, true, false>(text);
+
+    for (const result of envStreamSearchResults) {
+      // cut off scores worse than this
+      if (result.score > 0.25) {
+        break;
+      }
+
+      switch (result.item.data.kind) {
+        case 'node':
+          choices.push({node: result.item.data.node});
+          break;
+
+        case 'func': {
+          const funcDefNode = result.item.data.def;
+          const sig = treeSignatureFromInterfaceSpec(funcDefNode.iface, undefined);
+
+          const outs: ReadonlyArray<ApplicationOut> = sig.yields.map((_, idx) => {
+            const thisYieldReturned = (idx === sig.returnedIdx);
+            return {
+              sid: generateStreamId(),
+              name: thisYieldReturned ? null : {
+                kind: NodeKind.Name,
+                text: '',
+              },
+            };
+          });
+
+          const sargs: ReadonlyArray<StreamExpressionNode> = sig.streamParams.map((_, idx) => (
+            (infixMode && (idx === 0))
+            ? initNode
+            : {
+              kind: NodeKind.UndefinedLiteral,
+              sid: generateStreamId(),
+            }
+          ));
+
+          const fargs: ReadonlyArray<FunctionDefinitionNode> = sig.funcParams.map((fparam: TreeSignatureFuncParam): FunctionDefinitionNode => {
+            const fparamSig = treeSignatureFromInterfaceSpec(fparam.ifaceSpec, undefined);
+
+            return {
+              kind: NodeKind.TreeFunctionDefinition,
+              fid: generateFunctionId(),
+              iface: fparam.ifaceSpec,
+              spids: fparamSig.streamParams.map(() => generateStreamId()),
+              fpids: fparamSig.funcParams.map(() => generateFunctionId()),
+              bodyExprs: fparamSig.yields.map((_, idx) => ({
+                kind: NodeKind.YieldExpression,
+                idx,
+                expr: {
+                  kind: NodeKind.UndefinedLiteral,
+                  sid: generateStreamId(),
+                },
+              })),
+            };
+          });
+
+          const n: ApplicationNode = {
+            kind: NodeKind.Application,
+            aid: generateApplicationId(),
+            outs,
+            fid: funcDefNode.fid,
+            sargs,
+            fargs,
+          };
+
+          choices.push({
+            node: n,
+          });
+
+          break;
+        }
+
+        default: {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const exhaustive: never = result.item.data; // this will cause a type error if we haven't handled all cases
+          throw new Error();
+        }
+      }
+    }
 
     if (atRoot && text.trim() !== '') {
       choices.push({
@@ -264,6 +286,14 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, globalFunctions: Readon
         },
       });
     }
+
+    choices.push({
+      node: {
+        kind: NodeKind.TextLiteral,
+        sid: generateStreamId(),
+        val: text,
+      },
+    });
 
     if (choices.length === 0) {
       choices.push({
