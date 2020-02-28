@@ -137,7 +137,7 @@ interface RowLayoutRow {
 
 type RowLayout = ReadonlyArray<RowLayoutRow>;
 
-const RowView: React.FC<{selectionNode: Node | undefined, outwardNode: Node, layout: RowLayout, groupingLines: boolean, ctx: TreeViewContext}> = ({selectionNode, outwardNode, layout, groupingLines, ctx}) => {
+const RowView: React.FC<{selectionNode: Node | undefined, outwardNode: Node, layout: RowLayout, tightGrouping: boolean, ctx: TreeViewContext}> = ({selectionNode, outwardNode, layout, tightGrouping, ctx}) => {
   const ref = useRef<HTMLDivElement>(null);
   const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(selectionNode, ref, ctx);
 
@@ -204,7 +204,7 @@ const RowView: React.FC<{selectionNode: Node | undefined, outwardNode: Node, lay
   };
 
   return (
-    <div ref={ref} className={selectionClasses.concat(['TreeView-row-view TreeView-rounded-node TreeView-node']).join(' ')} {...selectionHandlers} onKeyDown={onKeyDown}>
+    <div ref={ref} className={selectionClasses.concat(['TreeView-row-view', 'TreeView-rounded-node', 'TreeView-node']).join(' ')} {...selectionHandlers} onKeyDown={onKeyDown}>
       {layout.map((row, rowIdx) => {
         const selectionRow: Array<SelectionRecord> = [];
         const itemElems: Array<React.ReactNode> = [];
@@ -239,11 +239,12 @@ const RowView: React.FC<{selectionNode: Node | undefined, outwardNode: Node, lay
 
         const classes = ['TreeView-row-view-row'];
         if (row.indent) {
-          if (groupingLines && (rowIdx < (layout.length-1))) {
-            classes.push('TreeView-row-view-row-indented-with-line');
-          } else {
-            classes.push('TreeView-row-view-row-indented-without-line');
-          }
+          classes.push('TreeView-row-view-row-indented');
+        }
+        if (tightGrouping) {
+          classes.push('TreeView-row-view-row-tight');
+        } else {
+          classes.push('TreeView-row-view-row-loose');
         }
 
         return (
@@ -254,7 +255,7 @@ const RowView: React.FC<{selectionNode: Node | undefined, outwardNode: Node, lay
   );
 }
 
-const sizedRowView = ({selectionNode, outwardNode, layout, groupingLines, ctx}: {selectionNode: Node | undefined, outwardNode: Node, layout: RowLayout, groupingLines: boolean, ctx: TreeViewContext}): SizedReactNode => {
+const sizedRowView = ({selectionNode, outwardNode, layout, tightGrouping, ctx}: {selectionNode: Node | undefined, outwardNode: Node, layout: RowLayout, tightGrouping: boolean, ctx: TreeViewContext}): SizedReactNode => {
   // Determine size
   let singleLineWidth: number | undefined = undefined;
   if (layout.length === 1) {
@@ -282,11 +283,11 @@ const sizedRowView = ({selectionNode, outwardNode, layout, groupingLines, ctx}: 
 
   return {
     singleLineWidth,
-    reactNode: <RowView selectionNode={selectionNode} outwardNode={outwardNode} layout={layout} groupingLines={groupingLines} ctx={ctx} />
+    reactNode: <RowView selectionNode={selectionNode} outwardNode={outwardNode} layout={layout} tightGrouping={tightGrouping} ctx={ctx} />
   };
 }
 
-const sizedTemplateView = ({selectionNode, outwardNode, template, nodeMap, groupingLines, ctx}: {selectionNode: Node, outwardNode: Node, template: TextualSyntaxTemplate, nodeMap: Map<string, TreeAndSizedNodes>, groupingLines: boolean, ctx: TreeViewContext}): SizedReactNode => {
+const sizedTemplateView = ({selectionNode, outwardNode, template, nodeMap, tightGrouping, ctx}: {selectionNode: Node, outwardNode: Node, template: TextualSyntaxTemplate, nodeMap: Map<string, TreeAndSizedNodes>, tightGrouping: boolean, ctx: TreeViewContext}): SizedReactNode => {
   const MAX_WIDTH = 30;
 
   const createLayout = (trySingleLine: boolean): [RowLayout, number | undefined] => {
@@ -354,13 +355,13 @@ const sizedTemplateView = ({selectionNode, outwardNode, template, nodeMap, group
   if ((singleLineWidth !== undefined) && (singleLineWidth <= MAX_WIDTH)) {
     return {
       singleLineWidth,
-      reactNode: <RowView selectionNode={selectionNode} outwardNode={outwardNode} layout={singleLayout} groupingLines={groupingLines} ctx={ctx} />,
+      reactNode: <RowView selectionNode={selectionNode} outwardNode={outwardNode} layout={singleLayout} tightGrouping={tightGrouping} ctx={ctx} />,
     };
   } else {
     const [multiLayout, ] = createLayout(false);
     return {
       singleLineWidth: undefined,
-      reactNode: <RowView selectionNode={selectionNode} outwardNode={outwardNode} layout={multiLayout} groupingLines={groupingLines} ctx={ctx} />,
+      reactNode: <RowView selectionNode={selectionNode} outwardNode={outwardNode} layout={multiLayout} tightGrouping={tightGrouping} ctx={ctx} />,
     };
   }
 }
@@ -403,7 +404,7 @@ const sizedArrayLiteralView = ({node, ctx}: {node: ArrayLiteralNode, ctx: TreeVi
     items: [']'],
   });
 
-  return sizedRowView({selectionNode: node, outwardNode: node, layout, groupingLines: true, ctx});
+  return sizedRowView({selectionNode: node, outwardNode: node, layout, tightGrouping: false, ctx});
 }
 
 const sizedApplicationView = ({node, ctx}: {node: ApplicationNode, ctx: TreeViewContext}): SizedReactNode => {
@@ -443,7 +444,7 @@ const sizedApplicationView = ({node, ctx}: {node: ApplicationNode, ctx: TreeView
         outwardNode: node,
         template: tifspec.tmpl,
         nodeMap,
-        groupingLines: true,
+        tightGrouping: true,
         ctx,
       });
 
@@ -454,7 +455,7 @@ const sizedApplicationView = ({node, ctx}: {node: ApplicationNode, ctx: TreeView
         outwardNode: node,
         template: tifspec.tmpl,
         nodeMap,
-        groupingLines: true,
+        tightGrouping: true,
         ctx,
       });
     }
@@ -524,7 +525,7 @@ const sizedBodyExpressionView = ({node, sigYields, ctx}: {node: BodyExpressionNo
           sizedReactNode: sizedStreamExpressionView({node: node.expr, ctx}),
         }],
       ]),
-      groupingLines: true,
+      tightGrouping: true,
       ctx,
     });
   } else {
@@ -578,7 +579,7 @@ export const TreeFunctionDefinitionView: React.FC<{node: TreeFunctionDefinitionN
     selectionNode: undefined,
     outwardNode: node,
     layout,
-    groupingLines: false,
+    tightGrouping: false,
     ctx: newCtx,
   });
 

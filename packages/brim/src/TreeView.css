@@ -1,5 +1,4 @@
 .TreeView-node {
-  border: 1px solid transparent;
   width: max-content;
 }
 
@@ -8,7 +7,7 @@
 }
 
 .TreeView-node.TreeView-selected {
-  border: 1px solid black;
+  box-shadow: 0 0 0 1px black;
 }
 
 .TreeView-rounded-node {
@@ -33,18 +32,16 @@
   align-items: center;
 }
 
-.TreeView-row-view-row-indented-without-line {
+.TreeView-row-view-row-indented {
   margin-left: 1.5em;
 }
 
-.TreeView-row-view-row-indented-with-line {
-  padding-left: 0.75em;
-  border-left: 1px solid #ccc;
-  margin-left: 0.75em;
+.TreeView-row-view-row-tight:not(:last-child) {
+  margin-bottom: 0.1em;
 }
 
-.TreeView-row-view-row:not(:last-child) {
-  margin-bottom: 0.1em;
+.TreeView-row-view-row-loose:not(:last-child) {
+  margin-bottom: 0.5em;
 }
 
 .TreeView-tree-function-definition-iface-spec {
@@ -58,9 +55,9 @@
 }
 
 .TreeView-referent {
-  border: 1px solid rgb(135, 135, 255);
+  box-shadow: 0 0 0 1px rgb(135, 135, 255);
 }
 
 .TreeView-hovered {
-  border: 1px dashed black;
+  box-shadow: 0 0 0 1px #aaa;
 }
