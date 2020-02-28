@@ -24,7 +24,7 @@ interface DropdownState {
   index: number;
 }
 
-const ExpressionChooser: React.FC<{initSelTree: SelTree, globalFunctions: ReadonlyArray<FunctionDefinitionNode>, dispatch: (action: any) => void, compileError: string | undefined, infixMode: boolean, treeViewCtx: TreeViewContext}> = ({ initSelTree, globalFunctions, dispatch, compileError, infixMode, treeViewCtx }) => {
+const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any) => void, compileError: string | undefined, infixMode: boolean, treeViewCtx: TreeViewContext}> = ({ initSelTree, dispatch, compileError, infixMode, treeViewCtx }) => {
   const parentLookup = useMemo(() => computeParentLookup(initSelTree.mainDef), [initSelTree.mainDef]);
   const parent = parentLookup.get(initSelTree.selectedNode);
   if (!parent) {
@@ -471,11 +471,11 @@ const NameChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any) => vo
   );
 }
 
-const Chooser: React.FC<{initSelTree: SelTree, globalFunctions: ReadonlyArray<FunctionDefinitionNode>, dispatch: (action: any) => void, compileError: string | undefined, infixMode: boolean, treeViewCtx: TreeViewContext}> = ({ initSelTree, globalFunctions, dispatch, compileError, infixMode, treeViewCtx }) => {
+const Chooser: React.FC<{initSelTree: SelTree, dispatch: (action: any) => void, compileError: string | undefined, infixMode: boolean, treeViewCtx: TreeViewContext}> = ({ initSelTree, dispatch, compileError, infixMode, treeViewCtx }) => {
   if (initSelTree.selectedNode.kind === NodeKind.Name) {
     return <NameChooser initSelTree={initSelTree} dispatch={dispatch} />
   } else if (isStreamExpressionNode(initSelTree.selectedNode)) {
-    return <ExpressionChooser initSelTree={initSelTree} globalFunctions={globalFunctions} dispatch={dispatch} compileError={compileError} infixMode={infixMode} treeViewCtx={treeViewCtx} />
+    return <ExpressionChooser initSelTree={initSelTree} dispatch={dispatch} compileError={compileError} infixMode={infixMode} treeViewCtx={treeViewCtx} />
   } else {
     throw new Error();
   }

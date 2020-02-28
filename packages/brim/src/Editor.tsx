@@ -147,7 +147,7 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
 
               return (
                 <div className="Editor-chooser-positioner" style={{position: 'absolute'}}>
-                  <Chooser key={state.editing.sessionId} initSelTree={state.editing.initSelTree} globalFunctions={state.globalFunctions} dispatch={dispatch} compileError={state.editing.compileError} infixMode={state.editing.infixMode} treeViewCtx={chooserTreeViewCtx} />
+                  <Chooser key={state.editing.sessionId} initSelTree={state.editing.initSelTree} dispatch={dispatch} compileError={state.editing.compileError} infixMode={state.editing.infixMode} treeViewCtx={chooserTreeViewCtx} />
                 </div>
               );
             })()}
