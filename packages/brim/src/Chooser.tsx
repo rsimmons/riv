@@ -11,8 +11,6 @@ interface Choice {
   node: StreamExpressionNode | FunctionDefinitionNode;
 }
 
-const FLOAT_REGEX = /^[-+]?(?:\d*\.?\d+|\d+\.?\d*)(?:[eE][-+]?\d+)?$/;
-
 const ChoiceView: React.FC<{choice: Choice, treeViewCtx: TreeViewContext}> = ({ choice, treeViewCtx }) => {
   if (isStreamExpressionNode(choice.node)) {
     return <StreamExpressionView node={choice.node} ctx={treeViewCtx} />
@@ -101,12 +99,13 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any)
       });
     }
 
-    if (FLOAT_REGEX.test(text)) {
+    const textAsNumber = Number(text);
+    if (!Number.isNaN(textAsNumber)) {
       choices.push({
         node:  {
           kind: NodeKind.NumberLiteral,
           sid: generateStreamId(),
-          val: Number(text),
+          val: textAsNumber,
         },
       });
     }
