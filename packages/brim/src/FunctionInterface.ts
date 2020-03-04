@@ -40,10 +40,24 @@ interface StringTextualFunctionInterfaceSpec {
   spec: string;
 }
 
+type DynamicTextualFunctionInterfaceAction = 'insert-before' | 'insert-after' | 'delete';
+
+type DynamicTextualFunctionInterfaceActionHandlerResult = {
+  readonly newSettings: ApplicationSettings;
+  readonly remap: {
+    // for each of these, the array is of indexes into the old params/yields
+    streamParams: ReadonlyArray<number>;
+    funcParams: ReadonlyArray<number>;
+    yields: ReadonlyArray<number>;
+  }
+}
+
 // This IS stored in saved code. (or well, should be once we fix it)
 interface DynamicTextualFunctionInterfaceSpec {
   kind: 'dtext';
-  getIface: (settings: ApplicationSettings) => TextualFunctionInterface; // TODO: this should be a JS code string so we can store it
+  // TODO: these funcs should be in a JS code string, props on one object, so we can store them?
+  getIface: (settings: ApplicationSettings) => TextualFunctionInterface;
+  handleAction: (action: DynamicTextualFunctionInterfaceAction, groupId: string, settings: ApplicationSettings) => DynamicTextualFunctionInterfaceActionHandlerResult;
 }
 
 interface CustomFunctionInterfaceSpec {

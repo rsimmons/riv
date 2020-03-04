@@ -903,29 +903,20 @@ export function reducer(state: State, action: Action): State {
 const nativeFunctionEnvironment: Environment<FunctionID, Function> = new Environment();
 nativeFunctionEnvironment.set('id', (x: any) => x);
 nativeFunctionEnvironment.set('Array_of', Array.of);
-globalNativeFunctions.forEach(([id, , jsFunc]) => {
-  nativeFunctionEnvironment.set(id, jsFunc);
+globalNativeFunctions.forEach(def => {
+  nativeFunctionEnvironment.set(def.fid, def.impl);
 });
 
 function initialStateFromDefinition(mainDef: TreeFunctionDefinitionNode, programInfo: ProgramInfo): State {
-  const globalFunctions: ReadonlyArray<FunctionDefinitionNode> = globalNativeFunctions.map(([fid, ifaceSpecStr, ]): FunctionDefinitionNode => ({
-    kind: NodeKind.NativeFunctionDefinition,
-    fid,
-    iface: {
-      kind: 'strtext',
-      spec: ifaceSpecStr,
-    },
-  }));
-
   const initSelTree: SelTree = {mainDef, selectedNode: mainDef};
 
-  const compiledDefinition = compileSelTree(initSelTree, globalFunctions);
+  const compiledDefinition = compileSelTree(initSelTree, globalNativeFunctions);
 
   return updateExecution({
     programInfo,
     stableSelTree: initSelTree,
     editing: null,
-    globalFunctions,
+    globalFunctions: globalNativeFunctions,
     undoStack: [],
     clipboardStack: [],
     execution: null,

@@ -1,4 +1,7 @@
 import { useCallbackReducer } from 'riv-runtime';
+import { NodeKind, NativeFunctionDefinitionNode, ApplicationSettings } from './Tree';
+import { TreeSignatureStreamParam } from './FunctionInterface';
+import { TemplateSegment } from './TextualSyntaxTemplate';
 const { showString, animationTime, mouseDown, changeCount, streamMap, audioDriver, random, mouseClickEvts, redCircle, mousePosition } = require('riv-demo-lib');
 const { h, renderDOMIntoSelector } = require('riv-snabbdom');
 
@@ -26,7 +29,7 @@ function vec2sqgrid(count: number, size: number) {
   return vecs;
 }
 
-const nativeFunctions: Array<[string, string, Function]> = [
+const strtextNativeFunctions: Array<[string, string, Function]> = [
   // simple
   ['bind', '{y0} = {0} => void', (v: any) => v],
   ['ifte', 'if {0} | then {1} | otherwise {2} => {}', (cond: any, _then: any, _else: any) => (cond ? _then : _else)],
@@ -61,6 +64,7 @@ const nativeFunctions: Array<[string, string, Function]> = [
 
   // misc
   ['text2num', 'text {0:text} as a number => {:number}', (text: string) => Number(text)],
+  ['jsonStringify', 'JSON serialize {0:value} => {:JSON}', (value: any) => JSON.stringify(value)],
 
   // snabbdom
   ['snabbdom.renderDOMIntoSelector', 'render HTML {0} | into selector {1} => void', renderDOMIntoSelector],
@@ -87,4 +91,74 @@ const nativeFunctions: Array<[string, string, Function]> = [
   ['audioDriver', 'play audio with {f0::{0:audio time} {1:next sample} {2:sample rate} => {y0:sample}} => void', audioDriver],
 ];
 
-export default nativeFunctions;
+const globalNativeFunctions: Array<NativeFunctionDefinitionNode> = [];
+
+strtextNativeFunctions.forEach(([fid, ifaceSpecStr, jsImpl]) => {
+  globalNativeFunctions.push({
+    kind: NodeKind.NativeFunctionDefinition,
+    fid,
+    iface: {
+      kind: 'strtext',
+      spec: ifaceSpecStr,
+    },
+    impl: jsImpl,
+  });
+});
+
+globalNativeFunctions.push(
+  {
+    kind: NodeKind.NativeFunctionDefinition,
+    fid: 'dynArray',
+    iface: {
+      kind: 'dtext',
+      getIface: (settings) => {
+        if ((settings !== undefined) && (typeof settings !== 'number')) {
+          throw new Error();
+        }
+        const size: number = (settings === undefined) ? 1 : settings;
+
+        const streamParams: Array<TreeSignatureStreamParam> = [];
+        const tmpl: Array<TemplateSegment> = [];
+
+        tmpl.push({kind: 'text', text: 'array ['});
+        for (let i = 0; i < size; i++) {
+          streamParams.push({name: undefined});
+          tmpl.push({kind: 'wildcard', key: 's' + i});
+        }
+        tmpl.push({kind: 'text', text: ']'});
+
+        return {
+          treeSig: {
+            streamParams,
+            funcParams: [],
+            yields: [{name: undefined}],
+            returnedIdx: 0,
+          },
+          tmpl,
+        };
+      },
+      handleAction: (action, groupId, settings) => {
+        return {
+          newSettings: undefined,
+          remap: {
+            streamParams: [],
+            funcParams: [],
+            yields: [],
+          },
+        }
+      },
+    },
+    impl: (settings: ApplicationSettings, streamArgs: ReadonlyArray<any>) => {
+      if ((settings !== undefined) && (typeof settings !== 'number')) {
+        throw new Error();
+      }
+      const size: number = (settings === undefined) ? 1 : settings;
+      if (streamArgs.length !== size) {
+        throw new Error();
+      }
+      return [[...streamArgs]]; // I'm pretty sure we don't need to clone the input array, but just to be safe
+    },
+  },
+);
+
+export default globalNativeFunctions;

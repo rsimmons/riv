@@ -1,8 +1,9 @@
 import { StreamID, FunctionID, Node, FunctionDefinitionNode, StreamExpressionNode, NodeKind, isStreamExpressionNode, TreeFunctionDefinitionNode, isFunctionDefinitionNode } from './Tree';
 import { streamExprReturnedId } from './TreeUtil';
-import { CompiledDefinition, ConstStreamSpec, LocalFunctionDefinition, AppSpec } from './CompiledDefinition';
+import { CompiledDefinition, ConstStreamSpec, LocalFunctionDefinition, AppSpec, CallingConvention } from './CompiledDefinition';
 import Environment from './Environment';
 import { visitChildren } from './Traversal';
+import { FunctionInterfaceSpec } from './FunctionInterface';
 
 export class CompilationError extends Error {
 };
@@ -10,13 +11,13 @@ export class CompilationError extends Error {
 // A stream id can be defined by either a stream expression or a parameter. If a stream id was
 // created by a parameter, then it maps to null (because we don't need to traverse from the param).
 type CompilationStreamEnvironment = Environment<StreamID, StreamExpressionNode | null>;
-type CompilationFunctionEnvironment = Environment<FunctionID, FunctionDefinitionNode>;
+type CompilationFunctionEnvironment = Environment<FunctionID, FunctionInterfaceSpec>;
 
 function compileTreeFuncDef(def: TreeFunctionDefinitionNode, outerStreamEnvironment: CompilationStreamEnvironment, outerFunctionEnvironment: CompilationFunctionEnvironment): [CompiledDefinition, Set<StreamID>] {
   const streamEnvironment: CompilationStreamEnvironment = new Environment(outerStreamEnvironment);
   const functionEnvironment: CompilationFunctionEnvironment = new Environment(outerFunctionEnvironment);
   const localStreamIds: Set<StreamID> = new Set();
-  const localFunctionIds: Set<FunctionID> = new Set();
+  const localFunctionMap: Map<FunctionID, FunctionDefinitionNode> = new Map();
 
   // TODO: verify that internal parameters (sparams, fparams) match the signature
 
@@ -71,8 +72,8 @@ function compileTreeFuncDef(def: TreeFunctionDefinitionNode, outerStreamEnvironm
       if (functionEnvironment.has(node.fid)) {
         throw new Error('must be unique');
       }
-      functionEnvironment.set(node.fid, node);
-      localFunctionIds.add(node.fid);
+      functionEnvironment.set(node.fid, node.iface);
+      localFunctionMap.set(node.fid, node);
     }
 
     if (!isFunctionDefinitionNode(node)) {
@@ -89,14 +90,12 @@ function compileTreeFuncDef(def: TreeFunctionDefinitionNode, outerStreamEnvironm
   const externalReferencedStreamIds: Set<StreamID> = new Set();
 
   // Compile local tree function definitions
-  for (const fid of localFunctionIds) {
-    const funcDef = functionEnvironment.get(fid);
-    if (!funcDef) {
-      throw new Error();
-    }
+  for (const [fid, funcDef] of localFunctionMap.entries()) {
     if (funcDef.kind === NodeKind.TreeFunctionDefinition) {
       const [innerCompiledDef, ] = compileTreeFuncDef(funcDef, streamEnvironment, functionEnvironment);
       localDefs.push({fid, def: innerCompiledDef});
+    } else {
+      throw new Error();
     }
   }
 
@@ -146,6 +145,7 @@ function compileTreeFuncDef(def: TreeFunctionDefinitionNode, outerStreamEnvironm
           funcId: 'Array_of',
           sargIds: streamArgIds,
           fargIds: [],
+          callConv: CallingConvention.Raw,
         });
 
         break;
@@ -172,8 +172,8 @@ function compileTreeFuncDef(def: TreeFunctionDefinitionNode, outerStreamEnvironm
         break;
 
       case NodeKind.Application: {
-        const functionNode = functionEnvironment.get(node.fid);
-        if (!functionNode) {
+        const functionIfaceSpec = functionEnvironment.get(node.fid);
+        if (!functionIfaceSpec) {
           throw new CompilationError();
         }
 
@@ -227,12 +227,31 @@ function compileTreeFuncDef(def: TreeFunctionDefinitionNode, outerStreamEnvironm
 
         temporaryMarked.delete(node);
 
+        let callConv: CallingConvention;
+        switch (functionIfaceSpec.kind) {
+          case 'strtext':
+            callConv = CallingConvention.Raw;
+            break;
+
+          case 'dtext':
+            callConv = CallingConvention.SettingsStructured;
+            break;
+
+          default: {
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const exhaustive: never = functionIfaceSpec; // this will cause a type error if we haven't handled all cases
+            throw new Error();
+          }
+        }
+
         apps.push({
           sids: node.outs.map(out => out.sid),
           appId: node.aid,
           funcId: node.fid,
           sargIds: streamArgIds,
           fargIds: funcArgIds,
+          callConv,
+          settings: node.settings,
         });
         break;
       }
@@ -284,7 +303,7 @@ export function compileGlobalTreeDefinition(def: TreeFunctionDefinitionNode, glo
 
   const compGlobalFuncEnv: CompilationFunctionEnvironment = new Environment();
   globalFunctionEnvironment.forEach((defNode, fid) => {
-    compGlobalFuncEnv.set(fid, defNode);
+    compGlobalFuncEnv.set(fid, defNode.iface);
   });
   const funcEnv: CompilationFunctionEnvironment = new Environment(compGlobalFuncEnv);
 

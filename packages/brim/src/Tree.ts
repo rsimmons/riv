@@ -134,6 +134,7 @@ export interface NativeFunctionDefinitionNode {
   readonly iface: FunctionInterfaceSpec;
 
   // TODO: JS code as string?
+  readonly impl: Function;
 }
 
 export interface YieldExpressionNode {

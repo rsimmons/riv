@@ -1,5 +1,5 @@
 import { ExecutionContext, useVar, useInitialize, useRequestUpdate } from 'riv-runtime';
-import { CompiledDefinition, AppSpec } from './CompiledDefinition';
+import { CompiledDefinition, AppSpec, CallingConvention } from './CompiledDefinition';
 import { StreamID, FunctionID, ApplicationID } from './Tree';
 import Environment from './Environment';
 
@@ -78,7 +78,7 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerS
       streamEnv.set(sid, args[idx]);
     });
 
-    for (const {sids, appId, funcId, sargIds, fargIds} of currentDefinition.apps) {
+    for (const {sids, appId, funcId, sargIds, fargIds, callConv, settings} of currentDefinition.apps) {
       const appFunc = funcEnv.getExisting(funcId);
       const sargVals = sargIds.map(sid => streamEnv.getExisting(sid));
       const fargVals = fargIds.map(fid => funcEnv.getExisting(fid));
@@ -93,19 +93,49 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerS
       let retval: any;
       let error: boolean;
       try {
-        retval = context.update(...sargVals, ...fargVals);
+        switch (callConv) {
+          case CallingConvention.Raw:
+            retval = context.update(...sargVals, ...fargVals);
+            break;
+
+          case CallingConvention.SettingsStructured:
+            retval = context.update(settings, sargVals, fargVals);
+            break;
+
+          default: {
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const exhaustive: never = callConv; // this will cause a type error if we haven't handled all cases
+            throw new Error();
+          }
+        }
         error = false;
       } catch (e) {
         console.log('application error', e);
         error = true;
       }
 
-      if (sids.length === 1) {
-        streamEnv.set(sids[0], error ? undefined : retval);
-      } else if (sids.length > 1) {
-        sids.forEach((sid, idx) => {
-          streamEnv.set(sid, error ? undefined : retval[idx]);
-        });
+      switch (callConv) {
+        case CallingConvention.Raw:
+          if (sids.length === 1) {
+            streamEnv.set(sids[0], error ? undefined : retval);
+          } else if (sids.length > 1) {
+            sids.forEach((sid, idx) => {
+              streamEnv.set(sid, error ? undefined : retval[idx]);
+            });
+          }
+          break;
+
+        case CallingConvention.SettingsStructured:
+          sids.forEach((sid, idx) => {
+            streamEnv.set(sid, error ? undefined : retval[idx]);
+          });
+          break;
+
+        default: {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const exhaustive: never = callConv; // this will cause a type error if we haven't handled all cases
+          throw new Error();
+        }
       }
     }
 

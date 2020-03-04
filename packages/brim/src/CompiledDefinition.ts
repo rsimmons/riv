@@ -5,12 +5,19 @@ export interface ConstStreamSpec {
   readonly val: any;
 }
 
+export enum CallingConvention {
+  Raw = 'raw',
+  SettingsStructured = 'ss',
+};
+
 export interface AppSpec {
   readonly sids: ReadonlyArray<StreamID>;
   readonly appId: ApplicationID;
   readonly funcId: FunctionID;
   readonly sargIds: ReadonlyArray<StreamID>;
   readonly fargIds: ReadonlyArray<FunctionID>;
+  readonly callConv: CallingConvention;
+  readonly settings?: any;
 }
 
 export interface LocalFunctionDefinition {
