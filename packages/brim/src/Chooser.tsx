@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import './Chooser.css';
-import { generateStreamId, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, generateFunctionId, StreamExpressionNode, generateApplicationId, ApplicationOut, UndefinedLiteralNode, ArrayLiteralNode, NameNode, isFunctionDefinitionNode } from './Tree';
+import { generateStreamId, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, generateFunctionId, StreamExpressionNode, generateApplicationId, ApplicationOut, NameNode, isFunctionDefinitionNode } from './Tree';
 import Fuse from 'fuse.js';
 import { computeParentLookup } from './EditReducer';
 import { SelTree } from './State';
@@ -72,7 +72,6 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any)
         case NodeKind.BooleanLiteral:
           return initNode.val.toString();
 
-        case NodeKind.ArrayLiteral:
         case NodeKind.StreamReference:
         case NodeKind.Application:
           return ''; // Don't prefill with text
@@ -385,26 +384,8 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any)
   const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newText = e.target.value;
 
-    if (newText === '[') {
-      // This is a special case, we bypass the normal dropdown/choice stuff
-      const initElemNode: UndefinedLiteralNode = {
-        kind: NodeKind.UndefinedLiteral,
-        sid: generateStreamId(),
-      };
-      const newArrNode: ArrayLiteralNode = {
-        kind: NodeKind.ArrayLiteral,
-        aid: generateApplicationId(),
-        sid: generateStreamId(),
-        elems: [initElemNode],
-      };
-      dispatch({type: 'UPDATE_EDITING_NODE', newNode: newArrNode});
-      dispatch({type: 'TOGGLE_EDIT'});
-      dispatch({type: 'SET_SELECTED_NODE', newNode: initElemNode});
-      dispatch({type: 'TOGGLE_EDIT'});
-    } else {
-      setText(newText);
-      setDropdownState(recomputeDropdownChoices(newText));
-    }
+    setText(newText);
+    setDropdownState(recomputeDropdownChoices(newText));
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {

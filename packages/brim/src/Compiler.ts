@@ -39,7 +39,6 @@ function compileTreeFuncDef(def: TreeFunctionDefinitionNode, outerStreamEnvironm
         case NodeKind.NumberLiteral:
         case NodeKind.TextLiteral:
         case NodeKind.BooleanLiteral:
-        case NodeKind.ArrayLiteral:
           if (streamEnvironment.has(node.sid)) {
             throw new Error('must be unique');
           }
@@ -122,34 +121,6 @@ function compileTreeFuncDef(def: TreeFunctionDefinitionNode, outerStreamEnvironm
       case NodeKind.BooleanLiteral:
         constStreams.push({sid: node.sid, val: node.val});
         break;
-
-      case NodeKind.ArrayLiteral: {
-        const streamArgIds: Array<StreamID> = [];
-
-        temporaryMarked.add(node);
-
-        for (const elem of node.elems) {
-          traverseStreamExpr(elem);
-          const elemRetSid = streamExprReturnedId(elem);
-          if (!elemRetSid) {
-            throw new Error();
-          }
-          streamArgIds.push(elemRetSid);
-        }
-
-        temporaryMarked.delete(node);
-
-        apps.push({
-          sids: [node.sid],
-          appId: node.aid,
-          funcId: 'Array_of',
-          sargIds: streamArgIds,
-          fargIds: [],
-          callConv: CallingConvention.Raw,
-        });
-
-        break;
-      }
 
       case NodeKind.StreamReference:
         if (localStreamIds.has(node.ref)) {

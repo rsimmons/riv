@@ -108,7 +108,7 @@ strtextNativeFunctions.forEach(([fid, ifaceSpecStr, jsImpl]) => {
 globalNativeFunctions.push(
   {
     kind: NodeKind.NativeFunctionDefinition,
-    fid: 'dynArray',
+    fid: 'array',
     iface: {
       kind: 'dtext',
       getIface: (settings) => {
@@ -120,7 +120,7 @@ globalNativeFunctions.push(
         const streamParams: Array<TreeSignatureStreamParam> = [];
         const tmpl: Array<TemplateGroup> = [];
 
-        tmpl.push({segments: [{kind: 'text', text: 'array ['}]});
+        tmpl.push({segments: [{kind: 'text', text: '['}]});
         for (let i = 0; i < size; i++) {
           streamParams.push({name: undefined});
           tmpl.push({

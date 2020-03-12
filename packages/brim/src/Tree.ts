@@ -41,7 +41,6 @@ export enum NodeKind {
   NumberLiteral = 'num',
   TextLiteral = 'str',
   BooleanLiteral = 'bool',
-  ArrayLiteral = 'arr',
   StreamReference = 'sref',
   Application = 'app',
   NativeFunctionDefinition = 'nfdef',
@@ -88,13 +87,6 @@ export function isSimpleLiteralNode(node: Node): node is SimpleLiteralNode {
   return (node.kind === NodeKind.UndefinedLiteral) || (node.kind === NodeKind.NumberLiteral) || (node.kind === NodeKind.TextLiteral) || (node.kind === NodeKind.BooleanLiteral);
 }
 
-export interface ArrayLiteralNode {
-  readonly kind: NodeKind.ArrayLiteral;
-  readonly aid: ApplicationID;
-  readonly sid: StreamID;
-  readonly elems: ReadonlyArray<StreamExpressionNode>;
-}
-
 export interface StreamReferenceNode {
   readonly kind: NodeKind.StreamReference;
   readonly ref: StreamID; // the stream id we are referencing
@@ -118,9 +110,9 @@ export interface ApplicationNode {
 }
 
 // Stream parameter definitions (on the "inside" of a function def) are _not_ expressions.
-export type StreamExpressionNode = SimpleLiteralNode | ArrayLiteralNode | StreamReferenceNode | ApplicationNode;
+export type StreamExpressionNode = SimpleLiteralNode | StreamReferenceNode | ApplicationNode;
 export function isStreamExpressionNode(node: Node): node is StreamExpressionNode {
-  return isSimpleLiteralNode(node) || (node.kind === NodeKind.ArrayLiteral) || (node.kind === NodeKind.StreamReference) || (node.kind === NodeKind.Application);
+  return isSimpleLiteralNode(node) || (node.kind === NodeKind.StreamReference) || (node.kind === NodeKind.Application);
 }
 
 /**

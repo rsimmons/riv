@@ -22,10 +22,6 @@ export function* iterChildren(node: Node) {
       // no children
       break;
 
-    case NodeKind.ArrayLiteral:
-      yield* node.elems;
-      break;
-
     case NodeKind.Application:
       for (const out of node.outs) {
         if (out.name) {
@@ -87,9 +83,6 @@ export function visitChildren<N, C>(node: Node, visit: (node: Node, ctx: C) => N
     case NodeKind.StreamReference:
       // no children
       return;
-
-    case NodeKind.ArrayLiteral:
-      return visitArray(node.elems, visit, ctx);
 
     case NodeKind.Application:
       return visitOuts(node.outs, visit, ctx) || visitArray(node.sargs, visit, ctx) || visitArray(node.fargs, visit, ctx);
@@ -205,17 +198,6 @@ export function transformChildren<T>(node: Node, transform: (node: Node, ctx: T)
     case NodeKind.StreamReference:
       // no children to transform
       return node;
-
-    case NodeKind.ArrayLiteral:
-      const newElems = xStreamExprArr(node.elems);
-      if (newElems === node.elems) {
-        return node;
-      } else {
-        return {
-          ...node,
-          elems: newElems,
-        };
-      }
 
     case NodeKind.Application: {
       const newOuts = xOuts(node.outs);
@@ -356,12 +338,6 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
     case NodeKind.BooleanLiteral:
     case NodeKind.StreamReference:
       throw new Error('no children to replace');
-
-    case NodeKind.ArrayLiteral:
-      return {
-        ...node,
-        elems: replaceStreamExprArr(node.elems),
-      };
 
     case NodeKind.Application:
       return {

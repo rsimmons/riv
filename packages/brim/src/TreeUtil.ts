@@ -6,7 +6,6 @@ export function streamExprReturnedId(node: StreamExpressionNode): StreamID | und
     case NodeKind.NumberLiteral:
     case NodeKind.TextLiteral:
     case NodeKind.BooleanLiteral:
-    case NodeKind.ArrayLiteral:
       return node.sid;
 
     case NodeKind.StreamReference:

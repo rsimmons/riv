@@ -1,6 +1,6 @@
 import genuid from './uid';
 import { State, ProgramInfo, SelTree } from './State';
-import { StreamID, FunctionID, generateStreamId, NodeKind, Node, FunctionDefinitionNode, StreamExpressionNode, isStreamExpressionNode, UndefinedLiteralNode, BodyExpressionNode, generateApplicationId, NameNode, ArrayLiteralNode, TreeFunctionDefinitionNode, isFunctionDefinitionNode, generateFunctionId } from './Tree';
+import { StreamID, FunctionID, generateStreamId, NodeKind, Node, FunctionDefinitionNode, StreamExpressionNode, isStreamExpressionNode, UndefinedLiteralNode, BodyExpressionNode, generateApplicationId, NameNode, TreeFunctionDefinitionNode, isFunctionDefinitionNode, generateFunctionId } from './Tree';
 import { CompiledDefinition } from './CompiledDefinition';
 import { compileGlobalTreeDefinition, CompilationError } from './Compiler';
 import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
@@ -354,20 +354,6 @@ function deleteNodeSubtree(node: Node, parentLookup: Map<Node, Node>): SelTree |
         mainDef: newRoot,
         selectedNode: newNode,
       };
-    } else if (parent.kind === NodeKind.ArrayLiteral) {
-      const [newElems, newSibSel] = deleteFromArr(node, parent.elems);
-      const newParent: ArrayLiteralNode = {
-        ...parent,
-        elems: newElems,
-      };
-      const newRoot = replaceNode(parent, newParent, parentLookup);
-      if (newRoot.kind !== NodeKind.TreeFunctionDefinition) {
-        throw new Error();
-      }
-      return {
-        mainDef: newRoot,
-        selectedNode: newSibSel || newParent,
-      };
     } else if (parent.kind === NodeKind.TreeFunctionDefinition) {
       const [newExprs, newSibSel] = deleteFromArr(node, parent.bodyExprs);
       const newParent: TreeFunctionDefinitionNode = {
@@ -453,36 +439,7 @@ function attemptInsertBeforeAfter(state: State, before: boolean): State {
       return state;
     }
 
-    if (parent.kind === NodeKind.ArrayLiteral) {
-      const idx = parent.elems.indexOf(n as StreamExpressionNode);
-      const newElem: UndefinedLiteralNode = {
-        kind: NodeKind.UndefinedLiteral,
-        sid: generateStreamId(),
-      };
-      const newArrNode: ArrayLiteralNode = {
-        ...parent,
-        elems: arrInsertBeforeAfter(parent.elems, idx, before, newElem),
-      };
-      const newMain = replaceNode(parent, newArrNode, parentLookup);
-      if (newMain.kind !== NodeKind.TreeFunctionDefinition) {
-        throw new Error();
-      }
-      const initSelTree: SelTree = {
-        mainDef: newMain,
-        selectedNode: newElem,
-      };
-      return {
-        ...state,
-        editing: {
-          sessionId: genuid(),
-          initSelTree,
-          curSelTree: initSelTree,
-          compileError: undefined, // TODO: assumed, not sure if guaranteed safe
-          isInsert: true,
-          infixMode: false,
-        },
-      };
-    } else if (parent.kind === NodeKind.TreeFunctionDefinition) {
+    if (parent.kind === NodeKind.TreeFunctionDefinition) {
       const idx = parent.bodyExprs.indexOf(n as BodyExpressionNode);
       const newElem: UndefinedLiteralNode = {
         kind: NodeKind.UndefinedLiteral,
@@ -695,7 +652,7 @@ function attemptChainEdit(state: State, tryInsert: boolean): State {
     if (!parent) {
       return state; // reached root, do nothing
     }
-    if ((parent.kind === NodeKind.ArrayLiteral) || (parent.kind === NodeKind.TreeFunctionDefinition)) {
+    if (parent.kind === NodeKind.TreeFunctionDefinition) {
       if (tryInsert) {
         return attemptInsertBeforeAfter(state, false);
       } else {
@@ -920,8 +877,6 @@ export function reducer(state: State, action: Action): State {
 }
 
 const nativeFunctionEnvironment: Environment<FunctionID, Function> = new Environment();
-nativeFunctionEnvironment.set('id', (x: any) => x);
-nativeFunctionEnvironment.set('Array_of', Array.of);
 globalNativeFunctions.forEach(def => {
   nativeFunctionEnvironment.set(def.fid, def.impl);
 });
