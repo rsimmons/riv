@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import './Chooser.css';
-import { Node, generateStreamId, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, generateFunctionId, StreamExpressionNode, generateApplicationId, ApplicationOut, UndefinedLiteralNode, ArrayLiteralNode, NameNode, StreamID, isFunctionDefinitionNode } from './Tree';
+import { generateStreamId, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, generateFunctionId, StreamExpressionNode, generateApplicationId, ApplicationOut, UndefinedLiteralNode, ArrayLiteralNode, NameNode, isFunctionDefinitionNode } from './Tree';
 import Fuse from 'fuse.js';
 import { computeParentLookup } from './EditReducer';
 import { SelTree } from './State';

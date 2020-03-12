@@ -1,4 +1,4 @@
-import React, { useReducer, useRef, useEffect, useLayoutEffect } from 'react';
+import React, { useReducer, useRef, useLayoutEffect } from 'react';
 import { HotKeys, ObserveKeys } from "react-hotkeys";
 import { initialState, reducer, getReferentNameNodeOfSelected, initStaticEnv, getStaticEnvForSelected } from './EditReducer';
 import { StoragePanel } from './StoragePanel';
@@ -102,6 +102,13 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
       dispatch({
         type: 'SET_SELECTED_NODE',
         newNode: node,
+      });
+    },
+    updateNode: (node: Node, newNode: Node) => {
+      dispatch({
+        type: 'UPDATE_NODE',
+        node,
+        newNode,
       });
     },
     focusSelected,

@@ -1,7 +1,7 @@
 import { useCallbackReducer } from 'riv-runtime';
 import { NodeKind, NativeFunctionDefinitionNode, ApplicationSettings } from './Tree';
-import { TreeSignatureStreamParam } from './FunctionInterface';
-import { TemplateSegment } from './TextualSyntaxTemplate';
+import { TreeSignatureStreamParam, DynamicTextualFunctionInterfaceActionHandlerResult } from './FunctionInterface';
+import { TemplateGroup } from './TemplateLayout';
 const { showString, animationTime, mouseDown, changeCount, streamMap, audioDriver, random, mouseClickEvts, redCircle, mousePosition } = require('riv-demo-lib');
 const { h, renderDOMIntoSelector } = require('riv-snabbdom');
 
@@ -118,14 +118,21 @@ globalNativeFunctions.push(
         const size: number = (settings === undefined) ? 1 : settings;
 
         const streamParams: Array<TreeSignatureStreamParam> = [];
-        const tmpl: Array<TemplateSegment> = [];
+        const tmpl: Array<TemplateGroup> = [];
 
-        tmpl.push({kind: 'text', text: 'array ['});
+        tmpl.push({segments: [{kind: 'text', text: 'array ['}]});
         for (let i = 0; i < size; i++) {
           streamParams.push({name: undefined});
-          tmpl.push({kind: 'wildcard', key: 's' + i});
+          tmpl.push({
+            segments: [{kind: 'placeholder', key: 's' + i}],
+            editable: {
+              insertBefore: true,
+              insertAfter: true,
+              delete: true,
+            },
+          });
         }
-        tmpl.push({kind: 'text', text: ']'});
+        tmpl.push({segments: [{kind: 'text', text: ']'}]});
 
         return {
           treeSig: {
@@ -137,15 +144,63 @@ globalNativeFunctions.push(
           tmpl,
         };
       },
-      handleAction: (action, groupId, settings) => {
-        return {
-          newSettings: undefined,
-          remap: {
-            streamParams: [],
-            funcParams: [],
-            yields: [],
-          },
+      onEdit: (action, groupId, settings): DynamicTextualFunctionInterfaceActionHandlerResult => {
+        console.log('array onEdit', action, groupId, settings);
+        if ((settings !== undefined) && (typeof settings !== 'number')) {
+          throw new Error();
         }
+        const size: number = (settings === undefined) ? 1 : settings;
+
+        const insertAt = (idx: number): DynamicTextualFunctionInterfaceActionHandlerResult => {
+          const streamParams: Array<number | undefined> = [];
+          for (let i = 0; i < idx; i++) {
+            streamParams.push(i);
+          }
+          streamParams.push(undefined);
+          for (let i = idx; i < size; i++) {
+            streamParams.push(i);
+          }
+          return {
+            newSettings: size+1,
+            remap: {
+              streamParams,
+              funcParams: [],
+              yields: [],
+            },
+            newSelectedKey: 's' + idx,
+          }
+        };
+
+        const editIdx = groupId - 1;
+        switch (action) {
+          case 'insert-before':
+            return insertAt(editIdx);
+
+          case 'insert-after':
+            return insertAt(editIdx+1);
+
+          case 'delete':
+            if (size < 1) {
+              throw new Error();
+            }
+            const streamParams: Array<number> = [];
+            for (let i = 0; i < editIdx; i++) {
+              streamParams.push(i);
+            }
+            for (let i = editIdx+1; i < size; i++) {
+              streamParams.push(i);
+            }
+            return {
+              newSettings: size-1,
+              remap: {
+                streamParams,
+                funcParams: [],
+                yields: [],
+              },
+              newSelectedKey: (size === 1) ? undefined : ((editIdx === (size - 1)) ? ('s' + (size - 2)) : ('s' + editIdx)),
+            };
+        }
+        throw new Error();
       },
     },
     impl: (settings: ApplicationSettings, streamArgs: ReadonlyArray<any>) => {

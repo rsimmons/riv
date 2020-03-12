@@ -14,6 +14,7 @@ import { parseStringTextualInterfaceSpec } from './FunctionInterface';
 interface Action {
   type: string;
   char?: string;
+  node?: Node;
   newNode?: Node;
   newName?: string;
   newProgram?: any;
@@ -834,6 +835,24 @@ export function reducer(state: State, action: Action): State {
         compileError,
       },
     };
+  } else if (action.type === 'UPDATE_NODE') {
+    if (state.editing) {
+      throw new Error();
+    }
+    const parentLookup = computeParentLookup(state.stableSelTree.mainDef); // TODO: memoize
+    const newMain = replaceNode(action.node!, action.newNode!, parentLookup);
+    if (newMain.kind !== NodeKind.TreeFunctionDefinition) {
+      throw new Error();
+    }
+
+    const fixedSelTree = fixupDanglingRefs({mainDef: newMain, selectedNode: action.newNode!}, state.globalFunctions);
+
+    const compiledDefinition = compileSelTree(fixedSelTree, state.globalFunctions);
+
+    return updateExecution({
+      ...state,
+      stableSelTree: fixedSelTree,
+    }, compiledDefinition);
   } else if (action.type === 'UNDO') {
     if (state.undoStack.length > 0) {
       const newSelTree = state.undoStack[state.undoStack.length-1];

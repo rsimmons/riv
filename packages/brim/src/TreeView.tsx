@@ -1,11 +1,11 @@
 import React, { useState, useRef, useLayoutEffect } from 'react';
-import { Node, FunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, StreamReferenceNode, NameNode, ApplicationNode, ArrayLiteralNode, TreeFunctionDefinitionNode, isFunctionDefinitionNode } from './Tree';
+import { Node, FunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, StreamReferenceNode, NameNode, ApplicationNode, ArrayLiteralNode, TreeFunctionDefinitionNode, isFunctionDefinitionNode, generateStreamId } from './Tree';
 import './TreeView.css';
 import { StaticEnvironment, extendStaticEnv } from './EditReducer';
-import { TextualSyntaxTemplate, parseTemplateString } from './TextualSyntaxTemplate';
+import { TemplateLayout, TextSegment, GroupEditable } from './TemplateLayout';
 import quotesIcon from './icons/quotes.svg';
 import booleanIcon from './icons/boolean.svg';
-import { parseStringTextualInterfaceSpec, TreeSignature, TreeSignatureYield } from './FunctionInterface';
+import { parseStringTextualInterfaceSpec, TreeSignature, TreeSignatureYield, DynamicTextualFunctionInterfaceAction } from './FunctionInterface';
 
 const BOUND_NAME_BOX_COLOR = '#d1e6ff';
 const STREAM_REFERENCE_BOX_COLOR = '#a1cdff';
@@ -19,6 +19,7 @@ export interface TreeViewContext {
   markedNodes: MarkedNodes;
   staticEnv: StaticEnvironment;
   setSelectedNode: (node: Node) => void;
+  updateNode: (node: Node, newNode: Node) => void;
   focusSelected: boolean;
 };
 
@@ -125,245 +126,231 @@ function objKey(obj: object): number {
   }
 }
 
-interface TreeAndSizedNodes {
-  sizedReactNode: SizedReactNode;
-  treeNode?: Node; // we just use its identity for selection. may be undefined if not selectable
+function keyModifiersEqual(e: React.KeyboardEvent<HTMLDivElement>, mods: ReadonlyArray<string>): boolean {
+  const eventMods: Set<string> = new Set();
+
+  for (const m of ['Alt', 'Control', 'Meta', 'Shift']) {
+    if (e.getModifierState(m)) {
+      eventMods.add(m);
+    }
+  }
+
+  return (eventMods.size === mods.length) && mods.every(m => eventMods.has(m));
 }
 
-interface RowLayoutRow {
-  indent: boolean;
-  items: ReadonlyArray<string | TreeAndSizedNodes>;
+interface NodeSegment {
+  kind: 'nodes';
+  readonly sizedReactNode: SizedReactNode;
+  readonly treeNode?: Node; // we just use its identity for selection. may be undefined if not selectable
 }
 
-type RowLayout = ReadonlyArray<RowLayoutRow>;
+export type LogicalSegment = TextSegment | NodeSegment;
 
-const RowView: React.FC<{selectionNode: Node | undefined, outwardNode: Node, layout: RowLayout, tightGrouping: boolean, ctx: TreeViewContext}> = ({selectionNode, outwardNode, layout, tightGrouping, ctx}) => {
+export interface LogicalGroup {
+  segments: ReadonlyArray<LogicalSegment>;
+  editable?: GroupEditable;
+}
+
+export type LogicalLayout = ReadonlyArray<LogicalGroup>;
+
+const MAX_ROW_WIDTH = 30;
+
+const LogicalTextView: React.FC<{selectionNode: Node | undefined, outwardNode: Node, layout: LogicalLayout, singleLine: boolean, tightGrouping: boolean, ctx: TreeViewContext, onEdit?: (action: DynamicTextualFunctionInterfaceAction, groupId: number) => void}> = ({selectionNode, outwardNode, layout, singleLine, tightGrouping, ctx, onEdit}) => {
   const ref = useRef<HTMLDivElement>(null);
   const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(selectionNode, ref, ctx);
 
-  interface SelectionRecord {
-    ref: React.RefObject<HTMLElement>,
-    treeNode: Node,
-  }
+  let selectionLayoutRowAccum: Array<Node> = [];
+  let selectionLayout: Array<Array<Node>> = [];
+  const emitSelectionRow = (): void => {
+    if (selectionLayoutRowAccum.length > 0) {
+      selectionLayout.push(selectionLayoutRowAccum);
+      selectionLayoutRowAccum = [];
+    }
+  };
 
-  const selectionRows: Array<ReadonlyArray<SelectionRecord>> = [];
-
-  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.getModifierState('Alt') ||
-      e.getModifierState('Control') ||
-      e.getModifierState('Meta') ||
-      e.getModifierState('Shift')) {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>): void => {
+    if (!keyModifiersEqual(e, [])) {
       return;
     }
     if ((e.key === 'ArrowRight') && (ref.current === e.target)) {
-      if (selectionRows.length > 0) {
+      if (selectionLayout.length > 0) {
         e.stopPropagation();
-        ctx.setSelectedNode(selectionRows[0][0].treeNode);
+        ctx.setSelectedNode(selectionLayout[0][0]);
       }
-    } else if ((e.key === 'ArrowLeft') || (e.key === 'ArrowRight') || (e.key === 'ArrowUp') || (e.key === 'ArrowDown')) {
-      let located = false;
-      selectionRows.forEach((row, rowIdx) => {
-        row.forEach((item, itemIdx) => {
-          if (item.ref.current && item.ref.current.contains(e.target as HTMLElement)) {
-            // The event came from this item, with itemIdx within rowIdx
+    }
+  };
 
-            // Sanity check: there should be only one matching child
-            if (located) {
-              throw new Error();
+  const reactNode = (
+    <div ref={ref} className={selectionClasses.concat(['TreeView-node', 'TreeView-rounded-node', 'TreeView-logical', (singleLine ? 'TreeView-logical-horiz' : 'TreeView-logical-vert')]).join(' ')} onKeyDown={handleKeyDown} {...selectionHandlers}>{layout.map((group, groupIdx) => {
+      const groupCompletedRows: Array<React.ReactNode> = [];
+      let rowAccum: Array<React.ReactNode> = [];
+      let rowWidth: number = 0;
+
+      const emitRow = (indent: boolean): void => {
+        if (rowAccum.length > 0) {
+          const classes = ['TreeView-row-view-row'];
+          if (indent) {
+            classes.push('TreeView-row-view-row-indented');
+          }
+          if (tightGrouping) {
+            classes.push('TreeView-row-view-row-tight');
+          } else {
+            classes.push('TreeView-row-view-row-loose');
+          }
+
+          groupCompletedRows.push(
+            <div key={groupCompletedRows.length} className={classes.join(' ')}>{rowAccum}</div>
+          );
+
+          emitSelectionRow();
+        }
+        rowAccum = [];
+        rowWidth = 0;
+      };
+
+      const pushNodeSegment = (segment: NodeSegment, key: string | number) => {
+        let handleNodeKeyDown: ((e: React.KeyboardEvent<HTMLDivElement>) => void) | undefined = undefined;
+        if (segment.treeNode) {
+          const selectionRowIdx = selectionLayout.length;
+          const selectionItemIdx = selectionLayoutRowAccum.length;
+
+          handleNodeKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+            if (!keyModifiersEqual(e, [])) {
+              return;
             }
-            located = true;
-
             if (e.key === 'ArrowLeft') {
               e.stopPropagation();
-              if (itemIdx === 0) {
+              if (selectionItemIdx === 0) {
                 ctx.setSelectedNode(outwardNode);
               } else {
-                const newItemIdx = itemIdx - 1;
-                ctx.setSelectedNode(selectionRows[rowIdx][newItemIdx].treeNode);
+                const newItemIdx = selectionItemIdx - 1;
+                ctx.setSelectedNode(selectionLayout[selectionRowIdx][newItemIdx]);
               }
             } else if (e.key === 'ArrowRight') {
-              if (itemIdx < (row.length - 1)) {
+              if (selectionItemIdx < (selectionLayout[selectionRowIdx].length - 1)) {
                 e.stopPropagation();
-                const newItemIdx = itemIdx + 1;
-                ctx.setSelectedNode(selectionRows[rowIdx][newItemIdx].treeNode);
+                const newItemIdx = selectionItemIdx + 1;
+                ctx.setSelectedNode(selectionLayout[selectionRowIdx][newItemIdx]);
               }
-            } else if ((e.key === 'ArrowUp') && (rowIdx === 0)) {
+            } else if ((e.key === 'ArrowUp') && (selectionRowIdx === 0)) {
               e.stopPropagation();
               ctx.setSelectedNode(outwardNode);
-            } else if ((e.key === 'ArrowDown') && (rowIdx === (selectionRows.length - 1))) {
+            } else if ((e.key === 'ArrowDown') && (selectionRowIdx === (selectionLayout.length - 1))) {
               // Ignore, maybe ancestor will handle
             } else if ((e.key === 'ArrowUp') || (e.key === 'ArrowDown')) {
-              const newRowIdx = rowIdx + ((e.key === 'ArrowDown') ? 1 : -1);
+              const newRowIdx = selectionRowIdx + ((e.key === 'ArrowDown') ? 1 : -1);
               e.stopPropagation();
-              ctx.setSelectedNode(selectionRows[newRowIdx][0].treeNode);
+              ctx.setSelectedNode(selectionLayout[newRowIdx][0]);
             }
-          }
-        });
-      });
-    }
-  };
-
-  return (
-    <div ref={ref} className={selectionClasses.concat(['TreeView-row-view', 'TreeView-rounded-node', 'TreeView-node']).join(' ')} {...selectionHandlers} onKeyDown={onKeyDown}>
-      {layout.map((row, rowIdx) => {
-        const selectionRow: Array<SelectionRecord> = [];
-        const itemElems: Array<React.ReactNode> = [];
-
-        row.items.forEach((item, itemIdx) => {
-          if (typeof item === 'string') {
-            const key = itemIdx;
-            itemElems.push(
-              <div className="TreeView-row-view-plain-text" key={key}>{item}</div>
-            );
-          } else {
-            const ref: React.RefObject<HTMLDivElement> = React.createRef();
-
-            if (item.treeNode) {
-              selectionRow.push({
-                ref,
-                treeNode: item.treeNode,
-              });
-            }
-
-            const key = item.treeNode ? ('obj' + objKey(item.treeNode)) : itemIdx;
-
-            itemElems.push(
-              <div ref={ref} key={key}>{item.sizedReactNode.reactNode}</div>
-            );
-          }
-        });
-
-        if (selectionRow.length > 0) {
-          selectionRows.push(selectionRow);
-        }
-
-        const classes = ['TreeView-row-view-row'];
-        if (row.indent) {
-          classes.push('TreeView-row-view-row-indented');
-        }
-        if (tightGrouping) {
-          classes.push('TreeView-row-view-row-tight');
-        } else {
-          classes.push('TreeView-row-view-row-loose');
-        }
-
-        return (
-          <div key={rowIdx} className={classes.join(' ')}>{itemElems}</div>
+          };
+        };
+        const wrappedNode = (
+          <div key={key} onKeyDown={handleNodeKeyDown}>{segment.sizedReactNode.reactNode}</div>
         );
-      })}
-    </div>
-  );
-}
-
-const sizedRowView = ({selectionNode, outwardNode, layout, tightGrouping, ctx}: {selectionNode: Node | undefined, outwardNode: Node, layout: RowLayout, tightGrouping: boolean, ctx: TreeViewContext}): SizedReactNode => {
-  // Determine size
-  let singleLineWidth: number | undefined = undefined;
-  if (layout.length === 1) {
-    if (layout[0].indent) {
-      throw new Error(); // I don't think this makes sense to be indented with one row?
-    }
-
-    singleLineWidth = 0;
-    for (const item of layout[0].items) {
-      if (typeof item === 'string') {
-        if (singleLineWidth !== undefined) {
-          singleLineWidth += item.length;
+        rowAccum.push(wrappedNode);
+        if (segment.treeNode) {
+          selectionLayoutRowAccum.push(segment.treeNode);
         }
-      } else {
-        if (item.sizedReactNode.singleLineWidth === undefined) {
-          singleLineWidth = undefined;
-        } else {
-          if (singleLineWidth !== undefined) {
-            singleLineWidth += item.sizedReactNode.singleLineWidth;
+      };
+
+      group.segments.forEach((segment, segmentIdx) => {
+        if (segment.kind === 'nodes') {
+          const key: string | number = segment.treeNode ? ('obj' + objKey(segment.treeNode)) : segmentIdx;
+          if ((segment.sizedReactNode.singleLineWidth !== undefined) && ((rowWidth + segment.sizedReactNode.singleLineWidth) <= MAX_ROW_WIDTH)) {
+            pushNodeSegment(segment, key);
+            rowWidth += segment.sizedReactNode.singleLineWidth;
+          } else {
+            emitRow(false);
+            pushNodeSegment(segment, key);
+            emitRow(segmentIdx > 0);
           }
-        }
-      }
-    }
-  }
-
-  return {
-    singleLineWidth,
-    reactNode: <RowView selectionNode={selectionNode} outwardNode={outwardNode} layout={layout} tightGrouping={tightGrouping} ctx={ctx} />
-  };
-}
-
-const sizedTemplateView = ({selectionNode, outwardNode, template, nodeMap, tightGrouping, ctx}: {selectionNode: Node, outwardNode: Node, template: TextualSyntaxTemplate, nodeMap: Map<string, TreeAndSizedNodes>, tightGrouping: boolean, ctx: TreeViewContext}): SizedReactNode => {
-  const MAX_WIDTH = 30;
-
-  const createLayout = (trySingleLine: boolean): [RowLayout, number | undefined] => {
-    const layout: Array<RowLayoutRow> = [];
-    let accumItems: Array<string | TreeAndSizedNodes> = [];
-    let accumLength: number = 0;
-    let totalWidth: number | undefined = 0; // this gets set to undefined if we determine that result is not single-line
-
-    const emitAccumItems = () => {
-      if (accumItems.length > 0) {
-        layout.push({
-          indent: false,
-          items: accumItems,
-        });
-      }
-      accumItems = [];
-      accumLength = 0;
-    };
-
-    for (const segment of template) {
-      if (segment.kind === 'wildcard') {
-        const nodes = nodeMap.get(segment.key);
-        if (!nodes) {
+        } else if (segment.kind === 'text') {
+          const ellipsis = false; // TODO: (rowAccum.length === 0) && (layout.length > 0);
+          rowAccum.push(
+            <div key={segmentIdx} className="TreeView-logical-plain-text">{(ellipsis ? '…' : '') + segment.text}</div>
+          );
+          rowWidth += segment.text.length;
+        } else {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const exhaustive: never = segment; // this will cause a type error if we haven't handled all cases
           throw new Error();
         }
+      });
 
-        if ((nodes.sizedReactNode.singleLineWidth !== undefined) && ((accumLength + nodes.sizedReactNode.singleLineWidth) <= MAX_WIDTH)) {
-          accumItems.push(nodes);
-          accumLength += nodes.sizedReactNode.singleLineWidth;
-          if (totalWidth !== undefined) {
-            totalWidth += nodes.sizedReactNode.singleLineWidth;
+      const handleGroupKeyDown = (e: React.KeyboardEvent<HTMLDivElement>): void => {
+        if (group.editable && onEdit) {
+          if (group.editable.insertBefore && ((singleLine && keyModifiersEqual(e, ['Shift']) && (e.key === 'ArrowLeft')) || (!singleLine && keyModifiersEqual(e, ['Shift']) && (e.key === 'ArrowUp')))) {
+            onEdit('insert-before', groupIdx);
+            e.stopPropagation();
+            e.preventDefault();
           }
-        } else {
-          emitAccumItems();
-          layout.push({
-            indent: true,
-            items: [nodes],
-          });
-          totalWidth = undefined;
+          if (group.editable.insertAfter && ((singleLine && keyModifiersEqual(e, ['Shift']) && (e.key === 'ArrowRight')) || (!singleLine && keyModifiersEqual(e, ['Shift']) && (e.key === 'ArrowDown')))) {
+            onEdit('insert-after', groupIdx);
+            e.stopPropagation();
+            e.preventDefault();
+          }
+          if (group.editable.delete && keyModifiersEqual(e, []) && (e.key === 'Backspace')) {
+            onEdit('delete', groupIdx);
+            e.stopPropagation();
+            e.preventDefault();
+          }
         }
-      } else if (segment.kind === 'linebreak') {
-        if (!trySingleLine) {
-          emitAccumItems();
-          totalWidth = undefined;
-        }
-      } else if (segment.kind === 'text') {
-        const ellipsis = (accumItems.length === 0) && (layout.length > 0);
-        accumItems.push((ellipsis ? '…' : '') + segment.text);
-        accumLength += segment.text.length;
-        if (totalWidth !== undefined) {
-          totalWidth += segment.text.length;
-        }
+      };
+
+      if (singleLine) {
+        return (
+          <div key={groupIdx} className="TreeView-logical-group-horiz" onKeyDown={handleGroupKeyDown}>
+            {rowAccum}
+          </div>
+        );
       } else {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const exhaustive: never = segment; // this will cause a type error if we haven't handled all cases
-        throw new Error();
+        emitRow(false);
+        return (
+          <div key={groupIdx} className="TreeView-logical-group-vert" onKeyDown={handleGroupKeyDown}>
+            {groupCompletedRows}
+          </div>
+        );
+      }
+    })}</div>
+  );
+  emitSelectionRow();
+
+  return reactNode;
+}
+
+const sizedLogicalTextView = ({selectionNode, outwardNode, layout, tightGrouping, ctx, onEdit}: {selectionNode: Node | undefined, outwardNode: Node, layout: LogicalLayout, tightGrouping: boolean, ctx: TreeViewContext, onEdit?: (action: DynamicTextualFunctionInterfaceAction, groupId: number) => void}): SizedReactNode => {
+  // Determine how wide it would be if a single line (if possible)
+  let singleLineWidth: number | undefined = 0;
+
+  for (const group of layout) {
+    for (const segment of group.segments) {
+      switch (segment.kind) {
+        case 'nodes':
+          singleLineWidth = (segment.sizedReactNode.singleLineWidth === undefined) ? undefined : (singleLineWidth! + segment.sizedReactNode.singleLineWidth);
+          break;
+
+        case 'text':
+          singleLineWidth! += segment.text.length;
+          break;
+
+        default: {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const exhaustive: never = segment; // this will cause a type error if we haven't handled all cases
+          throw new Error();
+        }
       }
     }
-    emitAccumItems();
-
-    return [layout, totalWidth];
+    if (singleLineWidth === undefined) {
+      break;
+    }
   }
 
-  const [singleLayout, singleLineWidth] = createLayout(true);
-  if ((singleLineWidth !== undefined) && (singleLineWidth <= MAX_WIDTH)) {
-    return {
-      singleLineWidth,
-      reactNode: <RowView selectionNode={selectionNode} outwardNode={outwardNode} layout={singleLayout} tightGrouping={tightGrouping} ctx={ctx} />,
-    };
-  } else {
-    const [multiLayout, ] = createLayout(false);
-    return {
-      singleLineWidth: undefined,
-      reactNode: <RowView selectionNode={selectionNode} outwardNode={outwardNode} layout={multiLayout} tightGrouping={tightGrouping} ctx={ctx} />,
-    };
-  }
+  const singleLine = ((singleLineWidth !== undefined) && (singleLineWidth <= MAX_ROW_WIDTH));
+
+  return {
+    reactNode: <LogicalTextView selectionNode={selectionNode} outwardNode={outwardNode} layout={layout} tightGrouping={tightGrouping} ctx={ctx} singleLine={singleLine} onEdit={onEdit} />,
+    singleLineWidth,
+  };
 }
 
 const sizedNameView = ({node, ctx}: {node: NameNode, ctx: TreeViewContext}): SizedReactNode => {
@@ -380,34 +367,57 @@ const sizedStreamReferenceView = ({node, ctx}: {node: StreamReferenceNode, ctx: 
 };
 
 const sizedArrayLiteralView = ({node, ctx}: {node: ArrayLiteralNode, ctx: TreeViewContext}): SizedReactNode => {
-  const layout: Array<RowLayoutRow> = [];
+  const layout: Array<LogicalGroup> = [];
 
-  layout.push({
-    indent: false,
-    items: ['['],
+  layout.push({segments: [{kind: 'text', text: '['}]});
+  node.elems.forEach((elem, idx) => {
+    layout.push({segments: [{
+      kind: 'nodes',
+      treeNode: elem,
+      sizedReactNode: sizedStreamExpressionView({node: elem, ctx}),
+    }]});
   });
+  layout.push({segments: [{kind: 'text', text: ']'}]});
 
-  for (const elem of node.elems) {
-    layout.push({
-      indent: true,
-      items: [
-        {
-          treeNode: elem,
-          sizedReactNode: sizedStreamExpressionView({node: elem, ctx}),
-        },
-      ],
-    });
-  }
-
-  layout.push({
-    indent: false,
-    items: [']'],
-  });
-
-  return sizedRowView({selectionNode: node, outwardNode: node, layout, tightGrouping: false, ctx});
+  return sizedLogicalTextView({selectionNode: node, outwardNode: node, layout, tightGrouping: true, ctx});
 }
 
 const sizedApplicationView = ({node, ctx}: {node: ApplicationNode, ctx: TreeViewContext}): SizedReactNode => {
+  interface TreeAndSizedNodes {
+    readonly sizedReactNode: SizedReactNode;
+    readonly treeNode?: Node; // we just use its identity for selection. may be undefined if not selectable
+  }
+
+  const templateToLogicalLayout = (template: TemplateLayout, nodeMap: ReadonlyMap<string, TreeAndSizedNodes>): LogicalLayout => {
+    const result: Array<LogicalGroup> = [];
+
+    for (const group of template) {
+      const newSegments: Array<LogicalSegment> = [];
+      for (const segment of group.segments) {
+        if (segment.kind === 'placeholder') {
+          const nodes = nodeMap.get(segment.key);
+          if (!nodes) {
+            throw new Error();
+          }
+          newSegments.push({
+            kind: 'nodes',
+            treeNode: nodes.treeNode,
+            sizedReactNode: nodes.sizedReactNode,
+          });
+        } else {
+          newSegments.push(segment);
+        }
+      }
+
+      result.push({
+        ...group, // copies .editable
+        segments: newSegments,
+      });
+    }
+
+    return result;
+  };
+
   const funcDef = ctx.staticEnv.functionEnv.get(node.fid);
   if (!funcDef) {
     throw new Error();
@@ -439,24 +449,63 @@ const sizedApplicationView = ({node, ctx}: {node: ApplicationNode, ctx: TreeView
   switch (funcDef.iface.kind) {
     case 'strtext':
       const tifspec = parseStringTextualInterfaceSpec(funcDef.iface.spec);
-      return sizedTemplateView({
+      return sizedLogicalTextView({
         selectionNode: node,
         outwardNode: node,
-        template: tifspec.tmpl,
-        nodeMap,
+        layout: templateToLogicalLayout(tifspec.tmpl, nodeMap),
         tightGrouping: true,
         ctx,
       });
 
     case 'dtext': {
-      const tifspec = funcDef.iface.getIface(node.settings);
-      return sizedTemplateView({
+      const iface = funcDef.iface;
+      const tifspec = iface.getIface(node.settings);
+      return sizedLogicalTextView({
         selectionNode: node,
         outwardNode: node,
-        template: tifspec.tmpl,
-        nodeMap,
+        layout: templateToLogicalLayout(tifspec.tmpl, nodeMap),
         tightGrouping: true,
         ctx,
+        onEdit: (action, groupId) => {
+          const {newSettings, remap, newSelectedKey} = iface.onEdit(action, groupId, node.settings);
+
+          const newNode: ApplicationNode = {
+            ...node,
+            settings: newSettings,
+            sargs: remap.streamParams.map(fromIdx => {
+              return (fromIdx !== undefined) ? node.sargs[fromIdx] : {
+                kind: NodeKind.UndefinedLiteral,
+                sid: generateStreamId(),
+              };
+            }),
+            // TODO: remap fargs, yields as well
+          };
+
+          ctx.updateNode(node, newNode);
+          if (newSelectedKey === undefined) {
+            ctx.setSelectedNode(newNode);
+          } else {
+            const newNodeMap: Map<string, Node> = new Map();
+            newNode.sargs.forEach((sarg, idx) => {
+              newNodeMap.set('s' + idx, sarg);
+            });
+            newNode.fargs.forEach((farg, idx) => {
+              newNodeMap.set('f' + idx, farg);
+            });
+            newNode.outs.forEach((out, idx) => {
+              if (out.name) {
+                newNodeMap.set('y' + idx, out.name);
+              }
+            });
+
+            console.log(newNodeMap, newSelectedKey);
+            const newSelNode = newNodeMap.get(newSelectedKey);
+            if (!newSelNode) {
+              throw new Error();
+            }
+            ctx.setSelectedNode(newSelNode);
+          }
+        },
       });
     }
 
@@ -511,20 +560,27 @@ const sizedBodyExpressionView = ({node, sigYields, ctx}: {node: BodyExpressionNo
     return sizedFunctionDefinitionView({node, ctx});
   } else if (node.kind === NodeKind.YieldExpression) {
     const displayedName = sigYields[node.idx].name === undefined ? node.idx.toString() : sigYields[node.idx].name;
-    return sizedTemplateView({
+    return sizedLogicalTextView({
       selectionNode: node,
       outwardNode: node,
-      template: parseTemplateString(displayedName + ' ← $expr'),
-      nodeMap: new Map([
-        // ['name', {
-        //   treeNode: node.name,
-        //   sizedReactNode: sizedNameView({node: node.name, ctx}),
-        // }],
-        ['expr', {
-          treeNode: node.expr,
-          sizedReactNode: sizedStreamExpressionView({node: node.expr, ctx}),
-        }],
-      ]),
+      layout: [{
+        segments: [
+          // {
+          //   kind: 'nodes',
+          //   treeNode: node.name,
+          //   sizedReactNode: sizedNameView({node: node.name, ctx}),
+          // },
+          {
+            kind: 'text',
+            text: displayedName + ' ←',
+          },
+          {
+            kind: 'nodes',
+            treeNode: node.expr,
+            sizedReactNode: sizedStreamExpressionView({node: node.expr, ctx}),
+          },
+        ],
+      }],
       tightGrouping: true,
       ctx,
     });
@@ -536,8 +592,6 @@ const sizedBodyExpressionView = ({node, sigYields, ctx}: {node: BodyExpressionNo
 };
 
 export const TreeFunctionDefinitionView: React.FC<{node: TreeFunctionDefinitionNode, ctx: TreeViewContext}> = ({ node, ctx }) => {
-  const layout: Array<RowLayoutRow> = [];
-
   const newCtx: TreeViewContext = {
     ...ctx,
     staticEnv: extendStaticEnv(ctx.staticEnv, node),
@@ -563,25 +617,19 @@ export const TreeFunctionDefinitionView: React.FC<{node: TreeFunctionDefinitionN
     }
   }
 
-  for (const bodyExpr of node.bodyExprs) {
-    layout.push({
-      indent: false,
-      items: [
-        {
-          treeNode: bodyExpr,
-          sizedReactNode: sizedBodyExpressionView({node: bodyExpr, sigYields: treeSig.yields, ctx: newCtx}),
-        },
-      ],
-    });
-  }
+  const layout: Array<LogicalGroup> = [];
 
-  const {reactNode: bodyReactNode} = sizedRowView({
-    selectionNode: undefined,
-    outwardNode: node,
-    layout,
-    tightGrouping: false,
-    ctx: newCtx,
+  node.bodyExprs.forEach(bodyExpr => {
+    layout.push({
+      segments: [{
+        kind: 'nodes',
+        treeNode: bodyExpr,
+        sizedReactNode: sizedBodyExpressionView({node: bodyExpr, sigYields: treeSig.yields, ctx: newCtx}),
+      }],
+    });
   });
+
+  const {reactNode: bodyReactNode} = sizedLogicalTextView({selectionNode: undefined, outwardNode: node, layout, tightGrouping: false, ctx: newCtx});
 
   const ref = useRef<HTMLDivElement>(null);
   const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node, ref, ctx);

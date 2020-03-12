@@ -1,4 +1,4 @@
-import { TextualSyntaxTemplate, templateToPlainText, TemplateSegment } from './TextualSyntaxTemplate';
+import { TemplateSegment, TemplateGroup, TemplateLayout, templateToPlainText } from './TemplateLayout';
 import { ApplicationSettings } from './Tree';
 const pegParser = require('./parseStringTextualFunctionInterfaceSpec');
 
@@ -31,7 +31,7 @@ export interface TreeSignature {
 // This is NOT stored in saved code. It is derived from a spec.
 interface TextualFunctionInterface {
   treeSig: TreeSignature;
-  tmpl: TextualSyntaxTemplate;
+  tmpl: TemplateLayout;
 }
 
 // This IS stored in saved code.
@@ -40,16 +40,17 @@ interface StringTextualFunctionInterfaceSpec {
   spec: string;
 }
 
-type DynamicTextualFunctionInterfaceAction = 'insert-before' | 'insert-after' | 'delete';
+export type DynamicTextualFunctionInterfaceAction = 'insert-before' | 'insert-after' | 'delete';
 
-type DynamicTextualFunctionInterfaceActionHandlerResult = {
+export type DynamicTextualFunctionInterfaceActionHandlerResult = {
   readonly newSettings: ApplicationSettings;
   readonly remap: {
     // for each of these, the array is of indexes into the old params/yields
-    streamParams: ReadonlyArray<number>;
-    funcParams: ReadonlyArray<number>;
-    yields: ReadonlyArray<number>;
+    streamParams: ReadonlyArray<number | undefined>;
+    funcParams: ReadonlyArray<number | undefined>;
+    yields: ReadonlyArray<number | undefined>;
   }
+  readonly newSelectedKey: string | undefined;
 }
 
 // This IS stored in saved code. (or well, should be once we fix it)
@@ -57,7 +58,7 @@ interface DynamicTextualFunctionInterfaceSpec {
   kind: 'dtext';
   // TODO: these funcs should be in a JS code string, props on one object, so we can store them?
   getIface: (settings: ApplicationSettings) => TextualFunctionInterface;
-  handleAction: (action: DynamicTextualFunctionInterfaceAction, groupId: string, settings: ApplicationSettings) => DynamicTextualFunctionInterfaceActionHandlerResult;
+  onEdit: (action: DynamicTextualFunctionInterfaceAction, groupId: number, settings: ApplicationSettings) => DynamicTextualFunctionInterfaceActionHandlerResult;
 }
 
 interface CustomFunctionInterfaceSpec {
@@ -80,24 +81,32 @@ export function parseStringTextualInterfaceSpec(spec: string): TextualFunctionIn
     throw new InterfaceSpecParseError(e.message);
   }
 
-  const tmplSegs: Array<TemplateSegment> = [];
+  const tmplGroups: Array<TemplateGroup> = [];
+  let groupSegs: Array<TemplateSegment> = [];
 
   const streamParamFromIdx: Map<number, TreeSignatureStreamParam> = new Map();
   const funcParamFromIdx: Map<number, TreeSignatureFuncParam> = new Map();
   const yieldFromIdx: Map<number, TreeSignatureYield> = new Map();
 
+  const emitGroup = () => {
+    tmplGroups.push({
+      segments: groupSegs,
+    });
+    groupSegs = [];
+  };
+
   for (const seg of parseResult.tmplSegs) {
     switch (seg.segKind) {
       case 'text':
-        tmplSegs.push({
+        groupSegs.push({
           kind: 'text',
           text: seg.text,
         });
         break;
 
       case 'placeholder':
-        tmplSegs.push({
-          kind: 'wildcard',
+        groupSegs.push({
+          kind: 'placeholder',
           key: seg.info.pkind + seg.info.idx,
         });
 
@@ -126,15 +135,14 @@ export function parseStringTextualInterfaceSpec(spec: string): TextualFunctionIn
         break;
 
       case 'break':
-        tmplSegs.push({
-          kind: 'linebreak',
-        });
+        emitGroup();
         break;
 
       default:
         throw new Error();
     }
   }
+  emitGroup();
 
   let returnedIdx: number | undefined;
   if (parseResult.ret) {
@@ -194,7 +202,7 @@ export function parseStringTextualInterfaceSpec(spec: string): TextualFunctionIn
       yields,
       returnedIdx,
     },
-    tmpl: tmplSegs,
+    tmpl: tmplGroups,
   };
 }
 

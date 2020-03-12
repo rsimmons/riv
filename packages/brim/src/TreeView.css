@@ -44,6 +44,20 @@
   margin-bottom: 0.5em;
 }
 
+.TreeView-logical-horiz {
+  display: flex;
+  align-items: center;
+}
+
+.TreeView-logical-group-horiz {
+  display: flex;
+  align-items: center;
+}
+
+.TreeView-logical-plain-text {
+  padding: 0.3em;
+}
+
 .TreeView-tree-function-definition-iface-spec {
   background-color: #ddd;
   padding: 0.5em;
