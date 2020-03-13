@@ -1,4 +1,4 @@
-import { useCallbackReducer, ExecutionContext } from 'riv-runtime';
+import { useCallbackReducer, ExecutionContext, useEventEmitter, useRequestUpdate } from 'riv-runtime';
 import { NodeKind, NativeFunctionDefinitionNode, ApplicationSettings } from './Tree';
 import { TreeSignatureStreamParam, DynamicTextualFunctionInterfaceActionHandlerResult, TreeSignatureFuncParam } from './FunctionInterface';
 import { TemplateGroup } from './TemplateLayout';
@@ -81,6 +81,20 @@ const strtextNativeFunctions: Array<[string, string, Function]> = [
       return [
         h('input', {on: {input: inputHandler}, attrs: {value: text}}), // elem
         text // text
+      ];
+    }
+  ],
+  ['snabbdom.button', '<button | text= {0} | clicks→ {y1} | /> => {}',
+    (text: string): any => {
+      const requestUpdate = useRequestUpdate();
+      const [clickEvts, emitClick] = useEventEmitter();
+      const handleClick = (e: any) => {
+        emitClick(e);
+        requestUpdate();
+      };
+      return [
+        h('button', {on: {click: handleClick}}, text), // elem
+        clickEvts
       ];
     }
   ],
