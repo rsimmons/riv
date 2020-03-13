@@ -1,7 +1,8 @@
-import { useCallbackReducer } from 'riv-runtime';
+import { useCallbackReducer, ExecutionContext } from 'riv-runtime';
 import { NodeKind, NativeFunctionDefinitionNode, ApplicationSettings } from './Tree';
-import { TreeSignatureStreamParam, DynamicTextualFunctionInterfaceActionHandlerResult } from './FunctionInterface';
+import { TreeSignatureStreamParam, DynamicTextualFunctionInterfaceActionHandlerResult, TreeSignatureFuncParam } from './FunctionInterface';
 import { TemplateGroup } from './TemplateLayout';
+const { useVar, useEventMultiReceiver } = require('riv-runtime');
 const { showString, animationTime, mouseDown, changeCount, streamMap, audioDriver, random, mouseClickEvts, redCircle, mousePosition } = require('riv-demo-lib');
 const { h, renderDOMIntoSelector } = require('riv-snabbdom');
 
@@ -105,6 +106,13 @@ strtextNativeFunctions.forEach(([fid, ifaceSpecStr, jsImpl]) => {
   });
 });
 
+function runForOneInstant(streamFunc: Function, args: Array<any>): any {
+  const ctx = new ExecutionContext(streamFunc, () => {});
+  const retval = ctx.update(...args);
+  ctx.terminate();
+  return retval;
+}
+
 globalNativeFunctions.push(
   {
     kind: NodeKind.NativeFunctionDefinition,
@@ -145,7 +153,6 @@ globalNativeFunctions.push(
         };
       },
       onEdit: (action, groupId, settings): DynamicTextualFunctionInterfaceActionHandlerResult => {
-        console.log('array onEdit', action, groupId, settings);
         if ((settings !== undefined) && (typeof settings !== 'number')) {
           throw new Error();
         }
@@ -212,6 +219,162 @@ globalNativeFunctions.push(
         throw new Error();
       }
       return [[...streamArgs]]; // I'm pretty sure we don't need to clone the input array, but just to be safe
+    },
+  },
+
+  {
+    kind: NodeKind.NativeFunctionDefinition,
+    fid: 'multireducer',
+    iface: {
+      kind: 'dtext',
+      getIface: (settings) => {
+        if ((settings !== undefined) && (typeof settings !== 'number')) {
+          throw new Error();
+        }
+        const size: number = (settings === undefined) ? 1 : settings;
+
+        const streamParams: Array<TreeSignatureStreamParam> = [];
+        const funcParams: Array<TreeSignatureFuncParam> = [];
+        const tmpl: Array<TemplateGroup> = [];
+
+        tmpl.push({segments: [{kind: 'text', text: 'set'}]});
+        tmpl.push({segments: [{kind: 'text', text: 'initially'}, {kind: 'placeholder', key: 'f0'}]});
+        funcParams.push({name: undefined, ifaceSpec: {kind: 'strtext', spec: 'initialize => {:value}'}});
+        for (let i = 0; i < size; i++) {
+          tmpl.push({
+            segments: [
+              {kind: 'text', text: 'on'},
+              {kind: 'placeholder', key: 's' + i},
+              {kind: 'text', text: 'then'},
+              {kind: 'placeholder', key: 'f' + (i+1)},
+            ],
+            editable: {
+              insertBefore: true,
+              insertAfter: true,
+              delete: true,
+            },
+          });
+
+          streamParams.push({name: undefined});
+          funcParams.push({name: undefined, ifaceSpec: {kind: 'strtext', spec: '{0:previous value} {1: event} => {:new value}'}});
+        }
+
+        return {
+          treeSig: {
+            streamParams,
+            funcParams,
+            yields: [{name: undefined}],
+            returnedIdx: 0,
+          },
+          tmpl,
+        };
+      },
+      onEdit: (action, groupId, settings): DynamicTextualFunctionInterfaceActionHandlerResult => {
+        if ((settings !== undefined) && (typeof settings !== 'number')) {
+          throw new Error();
+        }
+        const size: number = (settings === undefined) ? 1 : settings;
+
+        const insertAt = (idx: number): DynamicTextualFunctionInterfaceActionHandlerResult => {
+          const streamParams: Array<number | undefined> = [];
+          const funcParams: Array<number | undefined> = [0];
+          for (let i = 0; i < idx; i++) {
+            streamParams.push(i);
+            funcParams.push(i+1);
+          }
+          streamParams.push(undefined);
+          funcParams.push(undefined);
+          for (let i = idx; i < size; i++) {
+            streamParams.push(i);
+            funcParams.push(i+1);
+          }
+          return {
+            newSettings: size+1,
+            remap: {
+              streamParams,
+              funcParams,
+              yields: [],
+            },
+            newSelectedKey: 's' + idx,
+          }
+        };
+
+        const editIdx = groupId - 2;
+        switch (action) {
+          case 'insert-before':
+            return insertAt(editIdx);
+
+          case 'insert-after':
+            return insertAt(editIdx+1);
+
+          case 'delete':
+            if (size < 1) {
+              throw new Error();
+            }
+            const streamParams: Array<number> = [];
+            const funcParams: Array<number> = [0];
+            for (let i = 0; i < editIdx; i++) {
+              streamParams.push(i);
+              funcParams.push(i+1);
+            }
+            for (let i = editIdx+1; i < size; i++) {
+              streamParams.push(i);
+              funcParams.push(i+1);
+            }
+            return {
+              newSettings: size-1,
+              remap: {
+                streamParams,
+                funcParams,
+                yields: [],
+              },
+              newSelectedKey: (size === 1) ? undefined : ((editIdx === (size - 1)) ? ('s' + (size - 2)) : ('s' + editIdx)),
+            };
+        }
+        throw new Error();
+      },
+    },
+    impl: (settings: ApplicationSettings, streamArgs: ReadonlyArray<any>, funcArgs: ReadonlyArray<Function>) => {
+      // eslint-disable-next-line react-hooks/rules-of-hooks
+      const state = useVar();
+
+      if ((settings !== undefined) && (typeof settings !== 'number')) {
+        throw new Error();
+      }
+      const size: number = (settings === undefined) ? 1 : settings;
+      if (streamArgs.length !== size) {
+        throw new Error();
+      }
+
+      const definedStreamArgs: Array<[number, any]> = [];
+      streamArgs.forEach((sa, sidx) => {
+        if (sa && sa.subscribe) {
+          definedStreamArgs.push([sidx, sa]);
+        }
+      });
+
+      // eslint-disable-next-line react-hooks/rules-of-hooks
+      const evs = useEventMultiReceiver(definedStreamArgs.map(([, sa]) => sa));
+
+      let anyEvent = false;
+      let idx = 0;
+      for (const ev of evs) {
+        if (ev) {
+          anyEvent = true;
+          const origSargIdx = definedStreamArgs[idx][0];
+          const handlerResult = runForOneInstant(funcArgs[origSargIdx+1], [state.current, ev.value]);
+          if (handlerResult !== undefined) {
+            state.current = handlerResult;
+          }
+          break;
+        }
+        idx++;
+      }
+      if (!anyEvent && (state.current === undefined)) {
+        state.current = runForOneInstant(funcArgs[0], []);
+      }
+
+      return [state.current];
     },
   },
 );

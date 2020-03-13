@@ -390,6 +390,79 @@ export function useEventReceiver<T>(stream: EventStream<T>): {value: T} | undefi
   return retval;
 }
 
+export function useEventMultiReceiver(streams: ReadonlyArray<EventStream<any>>): Array<{value: any} | undefined> {
+  interface StreamData {
+    queue: Array<any>;
+    unsubscribe: (() => void);
+  }
+
+  interface RecordData {
+    streamToData: Map<EventStream<any>, StreamData>;
+  };
+
+  const ctx = getTopUpdatingExecutionContext();
+  const record = ctx._beginHook();
+
+  // Initialize record data if necessary
+  if (!record.data) {
+    const data: RecordData = {
+      streamToData: new Map(),
+    };
+
+    record.data = data;
+
+    record.cleanup = () => {
+      data.streamToData.forEach(sd => {
+        sd.unsubscribe();
+      });
+    };
+  }
+
+  const recordData = <RecordData>record.data;
+
+  let retval: Array<{value: any} | undefined> = [];
+  for (const stream of streams) {
+    let event: {value: any} | undefined = undefined;
+    const sd = recordData.streamToData.get(stream);
+    if (sd) {
+      // This is a stream we're already subscribed to, so check for events
+      if (sd.queue.length) {
+        if (sd.queue.length > 1) {
+          throw new Error('useEventMultiReceiver found more than one enqueued value');
+        }
+        event = {value: sd.queue.pop()};
+      }
+    } else {
+      // Subscribe to this new stream and add it to our tracking
+      const queue: Array<any> = [];
+      const onValue = (v: any): void => {
+        queue.push(v);
+      }
+      recordData.streamToData.set(stream, {
+        queue,
+        unsubscribe: stream.subscribe(onValue),
+      });
+    }
+    retval.push(event);
+  }
+
+  // Remove/unsub streams that were not passed in argument
+  const argStreamsSet: Set<EventStream<any>> = new Set(streams);
+  recordData.streamToData.forEach((sd, stream) => {
+    if (!argStreamsSet.has(stream)) {
+      if (sd.queue.length > 0) {
+        throw new Error('useEventMultiReceiver stream went away, but queue is not empty');
+      }
+      sd.unsubscribe();
+      recordData.streamToData.delete(stream);
+    }
+  });
+
+  ctx._endHook();
+
+  return retval;
+}
+
 /**
  * The streamFunc argument may change, but it should only change to a function that can be safely
  * swapped in (i.e. one that calls the same hooks, etc.). A common case is that streamFunc is a

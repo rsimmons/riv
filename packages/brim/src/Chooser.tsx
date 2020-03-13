@@ -5,7 +5,8 @@ import Fuse from 'fuse.js';
 import { computeParentLookup } from './EditReducer';
 import { SelTree } from './State';
 import { StreamExpressionView, TreeViewContext, FunctionDefinitionView } from './TreeView';
-import { functionUIAsPlainText, treeSignatureFromInterfaceSpec, TreeSignatureFuncParam } from './FunctionInterface';
+import { functionUIAsPlainText, treeSignatureFromInterfaceSpec } from './FunctionInterface';
+import { defaultFunctionArgFromParam } from './TreeUtil';
 
 interface Choice {
   node: StreamExpressionNode | FunctionDefinitionNode;
@@ -229,25 +230,7 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any)
             }
           ));
 
-          const fargs: ReadonlyArray<FunctionDefinitionNode> = sig.funcParams.map((fparam: TreeSignatureFuncParam): FunctionDefinitionNode => {
-            const fparamSig = treeSignatureFromInterfaceSpec(fparam.ifaceSpec, undefined);
-
-            return {
-              kind: NodeKind.TreeFunctionDefinition,
-              fid: generateFunctionId(),
-              iface: fparam.ifaceSpec,
-              spids: fparamSig.streamParams.map(() => generateStreamId()),
-              fpids: fparamSig.funcParams.map(() => generateFunctionId()),
-              bodyExprs: fparamSig.yields.map((_, idx) => ({
-                kind: NodeKind.YieldExpression,
-                idx,
-                expr: {
-                  kind: NodeKind.UndefinedLiteral,
-                  sid: generateStreamId(),
-                },
-              })),
-            };
-          });
+          const fargs: ReadonlyArray<FunctionDefinitionNode> = sig.funcParams.map(defaultFunctionArgFromParam);
 
           const n: ApplicationNode = {
             kind: NodeKind.Application,

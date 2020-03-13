@@ -5,7 +5,8 @@ import { StaticEnvironment, extendStaticEnv } from './EditReducer';
 import { TemplateLayout, TextSegment, GroupEditable } from './TemplateLayout';
 import quotesIcon from './icons/quotes.svg';
 import booleanIcon from './icons/boolean.svg';
-import { parseStringTextualInterfaceSpec, TreeSignature, TreeSignatureYield, DynamicTextualFunctionInterfaceAction } from './FunctionInterface';
+import { parseStringTextualInterfaceSpec, TreeSignature, TreeSignatureYield, DynamicTextualFunctionInterfaceAction, treeSignatureFromInterfaceSpec } from './FunctionInterface';
+import { defaultFunctionArgFromParam } from './TreeUtil';
 
 const BOUND_NAME_BOX_COLOR = '#d1e6ff';
 const STREAM_REFERENCE_BOX_COLOR = '#a1cdff';
@@ -452,6 +453,7 @@ const sizedApplicationView = ({node, ctx}: {node: ApplicationNode, ctx: TreeView
         ctx,
         onEdit: (action, groupId) => {
           const {newSettings, remap, newSelectedKey} = iface.onEdit(action, groupId, node.settings);
+          const newTreeSig = treeSignatureFromInterfaceSpec(iface, newSettings);
 
           const newNode: ApplicationNode = {
             ...node,
@@ -462,7 +464,9 @@ const sizedApplicationView = ({node, ctx}: {node: ApplicationNode, ctx: TreeView
                 sid: generateStreamId(),
               };
             }),
-            // TODO: remap fargs, yields as well
+            fargs: remap.funcParams.map((fromIdx, idx) => {
+              return (fromIdx !== undefined) ? node.fargs[fromIdx] : defaultFunctionArgFromParam(newTreeSig.funcParams[idx]);
+            }),
           };
 
           ctx.updateNode(node, newNode);
