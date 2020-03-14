@@ -46,6 +46,7 @@ const strtextNativeFunctions: Array<[string, string, Function]> = [
   ['div', '{0} / {1} => {}', (a: number, b: number) => a / b],
   ['cos', 'cosine of {0} radians => {}', Math.cos],
   ['sqr', '{0} squared => {}', (v: number) => v*v],
+  ['exp', 'e^ {0} => {}', (v: number) => Math.exp(v)],
 
   // dom/browser
   ['showString', 'show the value {0} => void', showString],
