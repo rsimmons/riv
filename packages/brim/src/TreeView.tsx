@@ -173,7 +173,7 @@ const LogicalTextView: React.FC<{selectionNode: Node | undefined, outwardNode: N
     if (!keyModifiersEqual(e, [])) {
       return;
     }
-    if ((e.key === 'ArrowRight') && (ref.current === e.target)) {
+    if ((e.key === 'ArrowRight') && (ref.current === e.target)) { // TODO: I think? instead we could check if selectionNode && (ctx.markedNodes.selected === selectionNode)
       if (selectionLayout.length > 0) {
         e.stopPropagation();
         ctx.setSelectedNode(selectionLayout[0][0]);
@@ -209,7 +209,7 @@ const LogicalTextView: React.FC<{selectionNode: Node | undefined, outwardNode: N
         rowWidth = 0;
       };
 
-      const pushNodeSegment = (segment: NodeSegment, key: string | number) => {
+      const pushNodeSegment = (segment: NodeSegment, key: string | number, onDeleteSelectedNode: () => boolean) => {
         let handleNodeKeyDown: ((e: React.KeyboardEvent<HTMLDivElement>) => void) | undefined = undefined;
         if (segment.treeNode) {
           const selectionRowIdx = selectionLayout.length;
@@ -242,6 +242,13 @@ const LogicalTextView: React.FC<{selectionNode: Node | undefined, outwardNode: N
               const newRowIdx = selectionRowIdx + ((e.key === 'ArrowDown') ? 1 : -1);
               e.stopPropagation();
               ctx.setSelectedNode(selectionLayout[newRowIdx][0]);
+            } else if ((e.key === 'Backspace')) {
+              if (segment.treeNode && (ctx.markedNodes.selected === segment.treeNode)) {
+                if (onDeleteSelectedNode()) {
+                  e.stopPropagation();
+                  e.preventDefault();
+                }
+              }
             }
           };
         };
@@ -254,15 +261,25 @@ const LogicalTextView: React.FC<{selectionNode: Node | undefined, outwardNode: N
         }
       };
 
+      const handleDeleteSelectedChildNode = (): boolean => {
+        if (group.editable && group.editable.delete && onEdit) {
+          onEdit('delete', groupIdx);
+          return true;
+        } else {
+          console.log('ignoring delete');
+          return false;
+        }
+      };
+
       group.segments.forEach((segment, segmentIdx) => {
         if (segment.kind === 'nodes') {
           const key: string | number = segment.treeNode ? ('obj' + objKey(segment.treeNode)) : segmentIdx;
           if ((segment.sizedReactNode.singleLineWidth !== undefined) && ((rowWidth + segment.sizedReactNode.singleLineWidth) <= MAX_ROW_WIDTH)) {
-            pushNodeSegment(segment, key);
+            pushNodeSegment(segment, key, handleDeleteSelectedChildNode);
             rowWidth += segment.sizedReactNode.singleLineWidth;
           } else {
             emitRow(false);
-            pushNodeSegment(segment, key);
+            pushNodeSegment(segment, key, handleDeleteSelectedChildNode);
             emitRow(segmentIdx > 0);
           }
         } else if (segment.kind === 'text') {
@@ -287,11 +304,6 @@ const LogicalTextView: React.FC<{selectionNode: Node | undefined, outwardNode: N
           }
           if (group.editable.insertAfter && ((singleLine && keyModifiersEqual(e, ['Shift']) && (e.key === 'ArrowRight')) || (!singleLine && keyModifiersEqual(e, ['Shift']) && (e.key === 'ArrowDown')))) {
             onEdit('insert-after', groupIdx);
-            e.stopPropagation();
-            e.preventDefault();
-          }
-          if (group.editable.delete && keyModifiersEqual(e, []) && (e.key === 'Backspace')) {
-            onEdit('delete', groupIdx);
             e.stopPropagation();
             e.preventDefault();
           }
