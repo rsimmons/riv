@@ -3,17 +3,17 @@ import { ApplicationSettings } from './Tree';
 const pegParser = require('./parseStringTextualFunctionInterfaceSpec');
 
 export interface TreeSignatureStreamParam {
-  name: string | undefined;
+  readonly name: string | undefined;
   // eventually, type info will go here
 }
 
 export interface TreeSignatureFuncParam {
-  name: string | undefined;
+  readonly name: string | undefined;
   readonly ifaceSpec: FunctionInterfaceSpec;
 }
 
 export interface TreeSignatureYield {
-  name: string | undefined;
+  readonly name: string | undefined;
   // eventually, type info will go here
 }
 
@@ -30,42 +30,36 @@ export interface TreeSignature {
 
 // This is NOT stored in saved code. It is derived from a spec.
 interface TextualFunctionInterface {
-  treeSig: TreeSignature;
-  tmpl: TemplateLayout;
+  readonly treeSig: TreeSignature;
+  readonly tmpl: TemplateLayout;
 }
 
 // This IS stored in saved code.
 interface StringTextualFunctionInterfaceSpec {
-  kind: 'strtext';
-  spec: string;
+  readonly kind: 'strtext';
+  readonly spec: string;
 }
 
-export type DynamicTextualFunctionInterfaceAction = 'insert-before' | 'insert-after' | 'delete';
+export type DynamicInterfaceEditAction = 'insert-before' | 'insert-after' | 'delete';
 
-export type DynamicTextualFunctionInterfaceActionHandlerResult = {
+export type DynamicInterfaceChange = {
   readonly newSettings: ApplicationSettings;
-  readonly remap: {
+  readonly remap?: {
     // for each of these, the array is of indexes into the old params/yields
     streamParams: ReadonlyArray<number | undefined>;
     funcParams: ReadonlyArray<number | undefined>;
     yields: ReadonlyArray<number | undefined>;
   }
-  readonly newSelectedKey: string | undefined;
+  readonly newSelectedKey?: string | 'parent';
 }
 
 // This IS stored in saved code. (or well, should be once we fix it)
 interface DynamicTextualFunctionInterfaceSpec {
-  kind: 'dtext';
+  readonly kind: 'dtext';
   // TODO: these funcs should be in a JS code string, props on one object, so we can store them?
-  getIface: (settings: ApplicationSettings) => TextualFunctionInterface;
-  onEdit: (action: DynamicTextualFunctionInterfaceAction, groupId: number, settings: ApplicationSettings) => DynamicTextualFunctionInterfaceActionHandlerResult;
-}
-
-interface CustomFunctionInterfaceSpec {
-  kind: 'custom';
-  // TODO:
-  // - JS func to construct UI, under given DOM node, and with given initial settings. also gets a callback to report settings changes. returns shutdown closure
-  // - that also needs to report a TreeSignature somehow
+  readonly getIface: (settings: ApplicationSettings) => TextualFunctionInterface;
+  readonly onEdit?: (action: DynamicInterfaceEditAction, groupId: number, settings: ApplicationSettings) => DynamicInterfaceChange;
+  readonly createCustomUI?: (underNode: HTMLElement, settings: ApplicationSettings, onChange: (change: DynamicInterfaceChange) => void) => (() => void); // returns "shutdown" closure
 }
 
 export type FunctionInterfaceSpec = StringTextualFunctionInterfaceSpec | DynamicTextualFunctionInterfaceSpec;

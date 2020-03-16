@@ -1,6 +1,6 @@
 import { useCallbackReducer, ExecutionContext, useEventEmitter, useRequestUpdate } from 'riv-runtime';
 import { NodeKind, NativeFunctionDefinitionNode, ApplicationSettings } from './Tree';
-import { TreeSignatureStreamParam, DynamicTextualFunctionInterfaceActionHandlerResult, TreeSignatureFuncParam } from './FunctionInterface';
+import { TreeSignatureStreamParam, DynamicInterfaceChange, TreeSignatureFuncParam } from './FunctionInterface';
 import { TemplateGroup } from './TemplateLayout';
 const { useVar, useEventMultiReceiver } = require('riv-runtime');
 const { showString, animationTime, mouseDown, changeCount, streamMap, audioDriver, random, mouseClickEvts, redCircle, mousePosition } = require('riv-demo-lib');
@@ -167,13 +167,13 @@ globalNativeFunctions.push(
           tmpl,
         };
       },
-      onEdit: (action, groupId, settings): DynamicTextualFunctionInterfaceActionHandlerResult => {
+      onEdit: (action, groupId, settings): DynamicInterfaceChange => {
         if ((settings !== undefined) && (typeof settings !== 'number')) {
           throw new Error();
         }
         const size: number = (settings === undefined) ? 1 : settings;
 
-        const insertAt = (idx: number): DynamicTextualFunctionInterfaceActionHandlerResult => {
+        const insertAt = (idx: number): DynamicInterfaceChange => {
           const streamParams: Array<number | undefined> = [];
           for (let i = 0; i < idx; i++) {
             streamParams.push(i);
@@ -219,7 +219,7 @@ globalNativeFunctions.push(
                 funcParams: [],
                 yields: [],
               },
-              newSelectedKey: (size === 1) ? undefined : ((editIdx === (size - 1)) ? ('s' + (size - 2)) : ('s' + editIdx)),
+              newSelectedKey: (size === 1) ? 'parent' : ((editIdx === (size - 1)) ? ('s' + (size - 2)) : ('s' + editIdx)),
             };
         }
         throw new Error();
@@ -284,13 +284,13 @@ globalNativeFunctions.push(
           tmpl,
         };
       },
-      onEdit: (action, groupId, settings): DynamicTextualFunctionInterfaceActionHandlerResult => {
+      onEdit: (action, groupId, settings): DynamicInterfaceChange => {
         if ((settings !== undefined) && (typeof settings !== 'number')) {
           throw new Error();
         }
         const size: number = (settings === undefined) ? 1 : settings;
 
-        const insertAt = (idx: number): DynamicTextualFunctionInterfaceActionHandlerResult => {
+        const insertAt = (idx: number): DynamicInterfaceChange => {
           const streamParams: Array<number | undefined> = [];
           const funcParams: Array<number | undefined> = [0];
           for (let i = 0; i < idx; i++) {
@@ -343,7 +343,7 @@ globalNativeFunctions.push(
                 funcParams,
                 yields: [],
               },
-              newSelectedKey: (size === 1) ? undefined : ((editIdx === (size - 1)) ? ('s' + (size - 2)) : ('s' + editIdx)),
+              newSelectedKey: (size === 1) ? 'parent' : ((editIdx === (size - 1)) ? ('s' + (size - 2)) : ('s' + editIdx)),
             };
         }
         throw new Error();
@@ -390,6 +390,60 @@ globalNativeFunctions.push(
       }
 
       return [state.current];
+    },
+  },
+
+  {
+    kind: NodeKind.NativeFunctionDefinition,
+    fid: 'slider',
+    iface: {
+      kind: 'dtext',
+      getIface: () => {
+        const tmpl: Array<TemplateGroup> = [];
+        tmpl.push({segments: [{kind: 'text', text: 'slider'}]});
+
+        return {
+          treeSig: {
+            streamParams: [],
+            funcParams: [],
+            yields: [{name: undefined}],
+            returnedIdx: 0,
+          },
+          tmpl,
+        };
+      },
+      createCustomUI: (underNode, settings, onChange) => {
+        console.log('SLIDER createCustomUI');
+        if ((settings !== undefined) && (typeof settings !== 'number')) {
+          throw new Error();
+        }
+        const value: number = (settings === undefined) ? 0 : settings;
+
+        const sliderElem = document.createElement('input');
+        sliderElem.type = 'range';
+        sliderElem.value = value.toString();
+        underNode.appendChild(sliderElem);
+
+        sliderElem.addEventListener('input', e => {
+          const newValue = Number((e.target as HTMLInputElement).value);
+          console.log('SLIDER newValue', newValue);
+          onChange({
+            newSettings: Number((e.target as HTMLInputElement).value),
+          });
+        }, false);
+
+        const shutdown = () => {};
+
+        return shutdown;
+      },
+    },
+    impl: (settings: ApplicationSettings) => {
+      if ((settings !== undefined) && (typeof settings !== 'number')) {
+        throw new Error();
+      }
+      const value: number = (settings === undefined) ? 0 : settings;
+
+      return [value];
     },
   },
 );

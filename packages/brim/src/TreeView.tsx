@@ -1,11 +1,11 @@
-import React, { useState, useRef, useLayoutEffect } from 'react';
-import { Node, FunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, StreamReferenceNode, NameNode, ApplicationNode, TreeFunctionDefinitionNode, isFunctionDefinitionNode, generateStreamId } from './Tree';
+import React, { useState, useRef, useLayoutEffect, useEffect } from 'react';
+import { Node, FunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, StreamReferenceNode, NameNode, ApplicationNode, TreeFunctionDefinitionNode, isFunctionDefinitionNode, generateStreamId, ApplicationSettings } from './Tree';
 import './TreeView.css';
 import { StaticEnvironment, extendStaticEnv } from './EditReducer';
 import { TemplateLayout, TextSegment, GroupEditable } from './TemplateLayout';
 import quotesIcon from './icons/quotes.svg';
 import booleanIcon from './icons/boolean.svg';
-import { parseStringTextualInterfaceSpec, TreeSignature, TreeSignatureYield, DynamicTextualFunctionInterfaceAction, treeSignatureFromInterfaceSpec } from './FunctionInterface';
+import { parseStringTextualInterfaceSpec, TreeSignature, TreeSignatureYield, DynamicInterfaceEditAction, treeSignatureFromInterfaceSpec, DynamicInterfaceChange } from './FunctionInterface';
 import { defaultFunctionArgFromParam } from './TreeUtil';
 
 const BOUND_NAME_BOX_COLOR = '#d1e6ff';
@@ -156,7 +156,7 @@ export type LogicalLayout = ReadonlyArray<LogicalGroup>;
 
 const MAX_ROW_WIDTH = 30;
 
-const LogicalTextView: React.FC<{selectionNode: Node | undefined, outwardNode: Node, layout: LogicalLayout, singleLine: boolean, tightGrouping: boolean, ctx: TreeViewContext, onEdit?: (action: DynamicTextualFunctionInterfaceAction, groupId: number) => void}> = ({selectionNode, outwardNode, layout, singleLine, tightGrouping, ctx, onEdit}) => {
+const LogicalTextView: React.FC<{selectionNode: Node | undefined, outwardNode: Node, layout: LogicalLayout, singleLine: boolean, tightGrouping: boolean, ctx: TreeViewContext, onEdit?: (action: DynamicInterfaceEditAction, groupId: number) => void}> = ({selectionNode, outwardNode, layout, singleLine, tightGrouping, ctx, onEdit}) => {
   const ref = useRef<HTMLDivElement>(null);
   const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(selectionNode, ref, ctx);
 
@@ -273,7 +273,7 @@ const LogicalTextView: React.FC<{selectionNode: Node | undefined, outwardNode: N
 
       group.segments.forEach((segment, segmentIdx) => {
         if (segment.kind === 'nodes') {
-          const key: string | number = segment.treeNode ? ('obj' + objKey(segment.treeNode)) : segmentIdx;
+          const key: string | number = segment.treeNode ? (('aid' in segment.treeNode) ? segment.treeNode.aid : ('obj' + objKey(segment.treeNode))) : segmentIdx;
           if ((segment.sizedReactNode.singleLineWidth !== undefined) && ((rowWidth + segment.sizedReactNode.singleLineWidth) <= MAX_ROW_WIDTH)) {
             pushNodeSegment(segment, key, handleDeleteSelectedChildNode);
             rowWidth += segment.sizedReactNode.singleLineWidth;
@@ -331,7 +331,7 @@ const LogicalTextView: React.FC<{selectionNode: Node | undefined, outwardNode: N
   return reactNode;
 }
 
-const sizedLogicalTextView = ({selectionNode, outwardNode, layout, tightGrouping, ctx, onEdit}: {selectionNode: Node | undefined, outwardNode: Node, layout: LogicalLayout, tightGrouping: boolean, ctx: TreeViewContext, onEdit?: (action: DynamicTextualFunctionInterfaceAction, groupId: number) => void}): SizedReactNode => {
+const sizedLogicalTextView = ({selectionNode, outwardNode, layout, tightGrouping, ctx, onEdit}: {selectionNode: Node | undefined, outwardNode: Node, layout: LogicalLayout, tightGrouping: boolean, ctx: TreeViewContext, onEdit?: (action: DynamicInterfaceEditAction, groupId: number) => void}): SizedReactNode => {
   // Determine how wide it would be if a single line (if possible)
   let singleLineWidth: number | undefined = 0;
 
@@ -378,6 +378,28 @@ const sizedStreamReferenceView = ({node, ctx}: {node: StreamReferenceNode, ctx: 
 
   return sizedSimpleNodeView({treeNode: node, content: streamDef.name || '\xa0\xa0\xa0\xa0', bgColor: STREAM_REFERENCE_BOX_COLOR, ctx});
 };
+
+const CustomUIView: React.FC<{logicalReactNode: React.ReactNode, createCustomUI: (underNode: HTMLElement, settings: any, onChange: (change: DynamicInterfaceChange) => void) => () => void, settings: ApplicationSettings, onChange: (change: DynamicInterfaceChange) => void}> = ({logicalReactNode, createCustomUI, settings, onChange}) => {
+  const customRef = useRef<HTMLDivElement>(null);
+
+  // We use this ref because we need to always call the most recent onChange that we've been passed, rather than the first
+  const latestOnChange = useRef<(change: DynamicInterfaceChange) => void>(onChange);
+  latestOnChange.current = onChange;
+
+  useEffect(() => {
+    if (!customRef.current) {
+      throw new Error('custom UI ref unset');
+    }
+    createCustomUI(customRef.current, settings, (change) => { latestOnChange.current(change) });
+  }, []);
+
+  return (
+    <div>
+      {logicalReactNode}
+      <div ref={customRef} />
+    </div>
+  );
+}
 
 const sizedApplicationView = ({node, ctx}: {node: ApplicationNode, ctx: TreeViewContext}): SizedReactNode => {
   interface TreeAndSizedNodes {
@@ -457,19 +479,16 @@ const sizedApplicationView = ({node, ctx}: {node: ApplicationNode, ctx: TreeView
     case 'dtext': {
       const iface = funcDef.iface;
       const tifspec = iface.getIface(node.settings);
-      return sizedLogicalTextView({
-        selectionNode: node,
-        outwardNode: node,
-        layout: templateToLogicalLayout(tifspec.tmpl, nodeMap),
-        tightGrouping: true,
-        ctx,
-        onEdit: (action, groupId) => {
-          const {newSettings, remap, newSelectedKey} = iface.onEdit(action, groupId, node.settings);
-          const newTreeSig = treeSignatureFromInterfaceSpec(iface, newSettings);
+      const ifaceOnEdit = iface.onEdit;
 
-          const newNode: ApplicationNode = {
-            ...node,
-            settings: newSettings,
+      const handleChange = (change: DynamicInterfaceChange): void => {
+        const {newSettings, remap, newSelectedKey} = change;
+        const newTreeSig = treeSignatureFromInterfaceSpec(iface, newSettings);
+
+        const newNode: ApplicationNode = {
+          ...node,
+          settings: newSettings,
+          ...(remap === undefined) ? {} : {
             sargs: remap.streamParams.map(fromIdx => {
               return (fromIdx !== undefined) ? node.sargs[fromIdx] : {
                 kind: NodeKind.UndefinedLiteral,
@@ -479,34 +498,56 @@ const sizedApplicationView = ({node, ctx}: {node: ApplicationNode, ctx: TreeView
             fargs: remap.funcParams.map((fromIdx, idx) => {
               return (fromIdx !== undefined) ? node.fargs[fromIdx] : defaultFunctionArgFromParam(newTreeSig.funcParams[idx]);
             }),
-          };
+          },
+        };
 
-          ctx.updateNode(node, newNode);
-          if (newSelectedKey === undefined) {
-            ctx.setSelectedNode(newNode);
-          } else {
-            const newNodeMap: Map<string, Node> = new Map();
-            newNode.sargs.forEach((sarg, idx) => {
-              newNodeMap.set('s' + idx, sarg);
-            });
-            newNode.fargs.forEach((farg, idx) => {
-              newNodeMap.set('f' + idx, farg);
-            });
-            newNode.outs.forEach((out, idx) => {
-              if (out.name) {
-                newNodeMap.set('y' + idx, out.name);
-              }
-            });
-
-            console.log(newNodeMap, newSelectedKey);
-            const newSelNode = newNodeMap.get(newSelectedKey);
-            if (!newSelNode) {
-              throw new Error();
+        ctx.updateNode(node, newNode);
+        if (newSelectedKey === undefined) {
+          // TODO: we should verify that the selected node is still valid
+        } else if (newSelectedKey === 'parent') {
+          ctx.setSelectedNode(newNode);
+        } else {
+          const newNodeMap: Map<string, Node> = new Map();
+          newNode.sargs.forEach((sarg, idx) => {
+            newNodeMap.set('s' + idx, sarg);
+          });
+          newNode.fargs.forEach((farg, idx) => {
+            newNodeMap.set('f' + idx, farg);
+          });
+          newNode.outs.forEach((out, idx) => {
+            if (out.name) {
+              newNodeMap.set('y' + idx, out.name);
             }
-            ctx.setSelectedNode(newSelNode);
+          });
+
+          const newSelNode = newNodeMap.get(newSelectedKey);
+          if (!newSelNode) {
+            throw new Error();
           }
-        },
+          ctx.setSelectedNode(newSelNode);
+        }
+      };
+
+      const logicalView = sizedLogicalTextView({
+        selectionNode: node,
+        outwardNode: node,
+        layout: templateToLogicalLayout(tifspec.tmpl, nodeMap),
+        tightGrouping: true,
+        ctx,
+        onEdit: ifaceOnEdit ? (action, groupId) => {
+          handleChange(ifaceOnEdit(action, groupId, node.settings));
+        } : undefined,
       });
+
+      const ifaceCreateCustomUI = iface.createCustomUI;
+      if (ifaceCreateCustomUI) {
+        return {
+          reactNode: <CustomUIView logicalReactNode={logicalView.reactNode} createCustomUI={ifaceCreateCustomUI} settings={node.settings} onChange={handleChange} />,
+          singleLineWidth: undefined,
+        };
+      } else {
+        return logicalView;
+      }
     }
 
     default: {
