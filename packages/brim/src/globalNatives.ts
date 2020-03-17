@@ -1,4 +1,4 @@
-import { useCallbackReducer, ExecutionContext, useEventEmitter, useRequestUpdate } from 'riv-runtime';
+import { useCallbackReducer, ExecutionContext, useEventEmitter, useRequestUpdate, useDynamic } from 'riv-runtime';
 import { NodeKind, NativeFunctionDefinitionNode, ApplicationSettings } from './Tree';
 import { TreeSignatureStreamParam, DynamicInterfaceChange, TreeSignatureFuncParam } from './FunctionInterface';
 import { TemplateGroup } from './TemplateLayout';
@@ -29,6 +29,40 @@ function vec2sqgrid(count: number, size: number) {
 
   return vecs;
 }
+
+export function robustIntegral(time: number | undefined, initialValue: number | undefined, integrandFunc: (v: number, t: number) => number | undefined) {
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const accum = useVar();
+
+  if ((accum.current === undefined) && (initialValue !== undefined)) {
+    accum.current = initialValue;
+  }
+
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const prevTime = useVar(time);
+
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const createIntegrandFuncCtx = useDynamic(integrandFunc);
+
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const integrandFuncCtx = useVar();
+
+  if (!integrandFuncCtx.current) {
+    integrandFuncCtx.current = createIntegrandFuncCtx();
+  }
+
+  if ((accum.current !== undefined) && (prevTime.current !== undefined) && (time !== undefined) && (time > prevTime.current)) {
+    const integrand = integrandFuncCtx.current.update(accum.current, prevTime.current);
+    if (integrand !== undefined) {
+      accum.current += (time - prevTime.current)*integrand;
+    }
+  }
+
+  prevTime.current = time;
+
+  return accum.current;
+}
+
 
 const strtextNativeFunctions: Array<[string, string, Function]> = [
   // simple
@@ -105,6 +139,8 @@ const strtextNativeFunctions: Array<[string, string, Function]> = [
     (arr: Array<any>, f: (v: any) => any) => streamMap(f, arr)],
 
   ['audioDriver', 'play audio with {f0::{0:audio time} {1:next sample} {2:sample rate} => {y0:sample}} => void', audioDriver],
+
+  ['integrate', 'integrate | {f0::derivative at value {0:value} time {1:time} => {:derivative}} | over time {0} | from initial value {1} => {}', robustIntegral],
 ];
 
 const globalNativeFunctions: Array<NativeFunctionDefinitionNode> = [];

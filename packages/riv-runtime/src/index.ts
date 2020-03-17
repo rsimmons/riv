@@ -471,7 +471,7 @@ export function useEventMultiReceiver(streams: ReadonlyArray<EventStream<any>>):
  *
  * onRequestUpdate is currently only read on the first call, so changes to it will have no effect.
  */
-export function useDynamic(streamFunc: Function, onRequestUpdate: () => void) {
+export function useDynamic(streamFunc: Function, onRequestUpdate?: () => void) {
   const ctx = getTopUpdatingExecutionContext();
   const record = ctx._beginHook();
 
