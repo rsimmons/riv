@@ -1,4 +1,4 @@
-import { useCallbackReducer, ExecutionContext, useEventEmitter, useRequestUpdate, useDynamic } from 'riv-runtime';
+import { useCallbackReducer, ExecutionContext, useEventEmitter, useRequestUpdate, useDynamic, useInitialize } from 'riv-runtime';
 import { NodeKind, NativeFunctionDefinitionNode, ApplicationSettings } from './Tree';
 import { TreeSignatureStreamParam, DynamicInterfaceChange, TreeSignatureFuncParam } from './FunctionInterface';
 import { TemplateGroup } from './TemplateLayout';
@@ -63,6 +63,74 @@ export function robustIntegral(time: number | undefined, initialValue: number | 
   return accum.current;
 }
 
+function serializeAsyncToStreamFunc<A, R>(argStream: A, worker: (arg: A) => Promise<R>, def: R): R {
+  // console.log('serializeAsyncToStreamFunc entered');
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const requestUpdate = useRequestUpdate();
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const active = useVar(true); // not yet shut down
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const currentResult = useVar(def);
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const currentResultForArgValue = useVar();
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const lastReceivedArgValue = useVar();
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const working = useVar(false);
+
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useInitialize(() => {
+    return () => {
+      active.current = false;
+    };
+  });
+
+  const startWork = (arg: A): void => {
+    working.current = true;
+    worker(arg).then(result => {
+      currentResult.current = result;
+    }).catch(() => {
+      currentResult.current = def;
+    }).finally(() => {
+      working.current = false;
+      currentResultForArgValue.current = arg;
+      if (active.current) {
+        requestUpdate();
+      }
+      maybeStartWork(); // should we do this with setTimeout 0?
+    });
+  };
+
+  lastReceivedArgValue.current = argStream;
+
+  const maybeStartWork = () => {
+    if (!working.current && !Object.is(lastReceivedArgValue.current, currentResultForArgValue.current)) {
+      startWork(lastReceivedArgValue.current);
+    }
+  };
+
+  maybeStartWork();
+
+  return currentResult.current;
+}
+
+interface ArrayLike {
+  readonly length: number;
+  [index: number]: number;
+}
+
+function decodeAudioFileToArray(fileData: any) {
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const audioCtx = useVar(() => new window.AudioContext());
+
+  const worker = async (fd: any) => {
+    const audioBuffer = await (audioCtx.current as AudioContext).decodeAudioData(fd);
+    const sampleArr = audioBuffer.getChannelData(0);
+    return sampleArr;
+  };
+
+  return serializeAsyncToStreamFunc<any, ArrayLike>(fileData, worker, [0]);
+}
 
 const strtextNativeFunctions: Array<[string, string, Function]> = [
   // simple
@@ -101,6 +169,16 @@ const strtextNativeFunctions: Array<[string, string, Function]> = [
   // misc
   ['text2num', 'text {0:text} as a number => {:number}', (text: string) => Number(text)],
   ['jsonStringify', 'JSON serialize {0:value} => {:JSON}', (value: any) => JSON.stringify(value)],
+  ['decodeAudio', 'decode audio file {0} to array => {}', decodeAudioFileToArray],
+  ['arrayElemWrap', 'element at index {0} of array {1} (with wraparound) => {}', (idx: any, arr: any): any => {
+    if ((typeof idx !== 'number') || !arr || (typeof arr.length !== 'number') || (arr.length === 0)) {
+      return undefined;
+    }
+
+    const wrapIdx = ((Math.floor(idx) % arr.length) + arr.length) % arr.length;
+    const elem = arr[wrapIdx];
+    return elem;
+  }],
 
   // snabbdom
   ['snabbdom.renderDOMIntoSelector', 'render HTML {0} | into selector {1} => void', renderDOMIntoSelector],
@@ -478,6 +556,84 @@ globalNativeFunctions.push(
         throw new Error();
       }
       const value: number = (settings === undefined) ? 0 : settings;
+
+      return [value];
+    },
+  },
+
+  {
+    kind: NodeKind.NativeFunctionDefinition,
+    fid: 'fileData',
+    iface: {
+      kind: 'dtext',
+      getIface: () => {
+        const tmpl: Array<TemplateGroup> = [];
+        tmpl.push({segments: [{kind: 'text', text: 'file data'}]});
+
+        return {
+          treeSig: {
+            streamParams: [],
+            funcParams: [],
+            yields: [{name: undefined}],
+            returnedIdx: 0,
+          },
+          tmpl,
+        };
+      },
+      createCustomUI: (underNode, settings, onChange) => {
+        if ((settings !== undefined) && (settings.constructor !== ArrayBuffer)) {
+          throw new Error();
+        }
+        const value: ArrayBuffer = (settings === undefined) ? (new ArrayBuffer(0)) : settings;
+
+        let active = true;
+
+        const fileInputElem = document.createElement('input');
+        fileInputElem.type = 'file';
+        underNode.appendChild(fileInputElem);
+
+        const statusText = document.createTextNode('');
+        underNode.appendChild(statusText);
+
+        fileInputElem.addEventListener('change', e => {
+          const files = (e.target as HTMLInputElement).files;
+          if (files && files.length > 0) {
+            const reader = new FileReader();
+
+            reader.onload = loadEvent => {
+              if (active) {
+                const result = loadEvent.target!.result;
+                if (!result || (result.constructor !== ArrayBuffer)) {
+                  throw new Error();
+                }
+                onChange({
+                  newSettings: result,
+                });
+              }
+            };
+
+            reader.readAsArrayBuffer(files[0]);
+          } else {
+            onChange({
+              newSettings: new ArrayBuffer(0),
+            });
+          }
+        }, false);
+
+        const shutdown = () => {
+          active = false;
+        };
+
+        return shutdown;
+      },
+    },
+    impl: (settings: ApplicationSettings) => {
+      // eslint-disable-next-line react-hooks/rules-of-hooks
+      const defRet = useVar(() => new ArrayBuffer(0)); // save this so identity doesn't change
+      if ((settings !== undefined) && (settings.constructor !== ArrayBuffer)) {
+        throw new Error();
+      }
+      const value: ArrayBuffer = (settings === undefined) ? defRet.current : settings;
 
       return [value];
     },
