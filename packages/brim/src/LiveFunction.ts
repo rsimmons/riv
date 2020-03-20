@@ -149,7 +149,7 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerS
   };
 
   const updateDefinition = (newDefinition: CompiledDefinition): void => {
-    if (JSON.stringify(newDefinition) === JSON.stringify(currentDefinition)) {
+    if (newDefinition === currentDefinition) {
       return;
     }
 
