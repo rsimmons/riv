@@ -31,10 +31,12 @@ function vec2sqgrid(count: number, size: number) {
 }
 
 export function robustIntegral(time: number | undefined, initialValue: number | undefined, integrandFunc: (v: number, t: number) => number | undefined) {
+  const isValidNumber = (v: any): v is number => (typeof v === 'number') && !Number.isNaN(v);
+
   // eslint-disable-next-line react-hooks/rules-of-hooks
   const accum = useVar();
 
-  if ((accum.current === undefined) && (initialValue !== undefined)) {
+  if ((accum.current === undefined) && isValidNumber(initialValue)) {
     accum.current = initialValue;
   }
 
@@ -51,9 +53,9 @@ export function robustIntegral(time: number | undefined, initialValue: number | 
     integrandFuncCtx.current = createIntegrandFuncCtx();
   }
 
-  if ((accum.current !== undefined) && (prevTime.current !== undefined) && (time !== undefined) && (time > prevTime.current)) {
+  if ((accum.current !== undefined) && isValidNumber(prevTime.current) && isValidNumber(time) && (time > prevTime.current)) {
     const integrand = integrandFuncCtx.current.update(accum.current, prevTime.current);
-    if (integrand !== undefined) {
+    if (isValidNumber(integrand)) {
       accum.current += (time - prevTime.current)*integrand;
     }
   }
