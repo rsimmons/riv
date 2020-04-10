@@ -31,7 +31,7 @@ FunctionInterfaceSpec
 
 TemplateSegment
   = placeholder:Placeholder { return {segKind: 'placeholder', info: placeholder}; }
-  / textSeg: TextSegment
+  / textSeg:TextSegment
   / Break { return {segKind: 'break'}; }
 
 Placeholder
@@ -57,11 +57,25 @@ Name
   = name:$([^:}]*) { return name.trim() || undefined; }
 
 Type
-  = FunctionInterfaceSpec
+  = fis:FunctionInterfaceSpec { return {typeKind: 'func', type: fis}; }
+  / st:StreamType { return {typeKind: 'stream', type: st}; }
+
+StreamType
+  = vname:[A-Z] { return {stypeKind: 'var', name: vname }; }
+  / _ ctorId:StreamTypeId _ args:StreamTypeArgs? _ { return {stypeKind: 'app', ctorId: ctorId, args: args || []} }
+
+StreamTypeId
+  = $([^}<>])+
+
+StreamTypeArgs
+  = "<" _ argList:StreamTypeArgList _ ">" { return argList }
+
+StreamTypeArgList
+  = first:StreamType _ "," _ rest:StreamTypeArgList { return [first].concat(rest); }
+  / only:StreamType { return [only]; }
 
 TextSegment
-  = text:$((!Arrow !Break [^{])+) { return {segKind: 'text', text: text.trim()}; }
-
+  = text:$((!Arrow !Break [^{}])+) { return {segKind: 'text', text: text.trim()}; }
 
 Arrow = "=>"
 

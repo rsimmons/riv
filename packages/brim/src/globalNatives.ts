@@ -2,6 +2,7 @@ import { useCallbackReducer, ExecutionContext, useEventEmitter, useRequestUpdate
 import { NodeKind, NativeFunctionDefinitionNode, ApplicationSettings } from './Tree';
 import { TreeSignatureStreamParam, DynamicInterfaceChange, TreeSignatureFuncParam } from './FunctionInterface';
 import { TemplateGroup } from './TemplateLayout';
+import { FunctionType } from './Types';
 const { useVar, useEventMultiReceiver } = require('riv-runtime');
 const { showString, animationTime, mouseDown, changeCount, streamMap, audioDriver, random, mouseClickEvts, redCircle, mousePosition } = require('riv-demo-lib');
 const { h, renderDOMIntoSelector } = require('riv-snabbdom');
@@ -136,30 +137,30 @@ function decodeAudioFileToArray(fileData: any) {
 
 const strtextNativeFunctions: Array<[string, string, Function]> = [
   // simple
-  ['bind', '{y0} = {0} => void', (v: any) => v],
-  ['ifte', 'if {0} | then {1} | otherwise {2} => {}', (cond: any, _then: any, _else: any) => (cond ? _then : _else)],
+  ['bind', '{y0::A} = {0::A} => void', (v: any) => v],
+  ['ifte', 'if {0::boolean} | then {1::A} | otherwise {2::A} => {}', (cond: any, _then: any, _else: any) => (cond ? _then : _else)],
   ['equals', '{0} equals {1} => {}', (a: any, b: any) => Object.is(a, b)],
 
   // events
   ['changeCount', 'number of times {0} has changed => {}', changeCount],
 
   // math
-  ['add', '{0} + {1} => {}', (a: number, b: number) => a + b],
-  ['sub', '{0} - {1} => {}', (a: number, b: number) => a - b],
-  ['mult', '{0} * {1} => {}', (a: number, b: number) => a * b],
-  ['div', '{0} / {1} => {}', (a: number, b: number) => a / b],
-  ['cos', 'cosine of {0} radians => {}', Math.cos],
-  ['sqr', '{0} squared => {}', (v: number) => v*v],
-  ['exp', 'e^ {0} => {}', (v: number) => Math.exp(v)],
+  ['add', '{0::number} + {1::number} => {::number}', (a: number, b: number) => a + b],
+  ['sub', '{0::number} - {1::number} => {::number}', (a: number, b: number) => a - b],
+  ['mult', '{0::number} * {1::number} => {::number}', (a: number, b: number) => a * b],
+  ['div', '{0::number} / {1::number} => {::number}', (a: number, b: number) => a / b],
+  ['cos', 'cosine of {0::number} radians => {::number}', Math.cos],
+  ['sqr', '{0::number} squared => {::number}', (v: number) => v*v],
+  ['exp', 'e^ {0::number} => {::number}', (v: number) => Math.exp(v)],
 
   // dom/browser
   ['showString', 'show the value {0} => void', showString],
-  ['animationTime', 'animation time => {}', animationTime],
-  ['mouseDown', 'mouse button is down => {}', mouseDown],
+  ['animationTime', 'animation time => {::number}', animationTime],
+  ['mouseDown', 'mouse button is down => {::boolean}', mouseDown],
   ['mousePosition', 'mouse position => {}', mousePosition],
   ['mouseClickEvts', 'mouse clicks => {}', mouseClickEvts],
   ['redCircle', 'draw red circle at {0:position} with radius {1:radius} => void', redCircle],
-  ['random', 'random from 0 to 1, | repick on {0} => {}', random],
+  ['random', 'random from 0 to 1, | repick on {0::event<A>} => {::number}', random],
 
   // vec2
   ['vec2zero', 'zero 2d vector => {}', () => ({x: 0, y: 0})],
@@ -169,10 +170,10 @@ const strtextNativeFunctions: Array<[string, string, Function]> = [
   ['vec2sqgrid', 'square grid of 2d vectors, {0} per side, {1} long => {}', vec2sqgrid],
 
   // misc
-  ['text2num', 'text {0:text} as a number => {:number}', (text: string) => Number(text)],
+  ['text2num', 'text {0:text:text} as a number => {:number:number}', (text: string) => Number(text)],
   ['jsonStringify', 'JSON serialize {0:value} => {:JSON}', (value: any) => JSON.stringify(value)],
-  ['decodeAudio', 'decode audio file {0} to array => {}', decodeAudioFileToArray],
-  ['arrayElemWrap', 'element at index {0} of array {1} (with wraparound) => {}', (idx: any, arr: any): any => {
+  ['decodeAudio', 'decode audio file {0:file data:step<bytes>} to array => {::step<list<number>>}', decodeAudioFileToArray],
+  ['arrayElemWrap', 'element at index {0::number} of array {1::list<A>} (with wraparound) => {::A}', (idx: any, arr: any): any => {
     if ((typeof idx !== 'number') || !arr || (typeof arr.length !== 'number') || (arr.length === 0)) {
       return undefined;
     }
@@ -215,12 +216,12 @@ const strtextNativeFunctions: Array<[string, string, Function]> = [
   ],
 
   // higher-order
-  ['streamMap', 'map over {0} with {f0::transform {0:element} => {:new element}} => {}',
+  ['streamMap', 'map over {0::list<A>} with {f0::transform {0:element:A} => {:new element:B}} => {::list<B>}',
     (arr: Array<any>, f: (v: any) => any) => streamMap(f, arr)],
 
-  ['audioDriver', 'play audio with {f0::{0:audio time} {1:next sample} {2:sample rate} => {y0:sample}} => void', audioDriver],
+  ['audioDriver', 'play audio with {f0::{0:audio time:step<number>} {1:next sample:event<nothing>} {2:sample rate:step<number>} => {y0:sample:step<number>}} => void', audioDriver],
 
-  ['integrate', 'integrate | {f0::derivative at value {0:value} time {1:time} => {:derivative}} | over time {0} | from initial value {1} => {}', robustIntegral],
+  ['integrate', 'integrate | {f0::derivative at value {0:value:step<number>} time {1:time:step<number>} => {:derivative:step<number>}} | over time {0:time:number} | from initial value {1:initial value:number} => {::number}', robustIntegral],
 ];
 
 const globalNativeFunctions: Array<NativeFunctionDefinitionNode> = [];
@@ -281,6 +282,21 @@ globalNativeFunctions.push(
             returnedIdx: 0,
           },
           tmpl,
+          declaredType: {
+            sargs: [...Array(size)].map(_ => ({
+              kind: 'qvar',
+              idx: 0,
+            })),
+            fargs: [],
+            yields: [{
+              kind: 'app',
+              ctor: 'list',
+              args: [{
+                kind: 'qvar',
+                idx: 0,
+              }],
+            }],
+          },
         };
       },
       onEdit: (action, groupId, settings): DynamicInterfaceChange => {
@@ -398,6 +414,65 @@ globalNativeFunctions.push(
             returnedIdx: 0,
           },
           tmpl,
+          declaredType: {
+            sargs: [...Array(size)].map((_, i) => ({
+              // i-th stream input
+              kind: 'app',
+              ctor: 'event',
+              args: [{
+                kind: 'qvar',
+                idx: i+1,
+              }],
+            })),
+            fargs: [{
+              // initializer func
+              sargs: [],
+              fargs: [],
+              yields: [{
+                kind: 'qvar',
+                idx: 0,
+              }],
+            } as FunctionType].concat([...Array(size)].map((_, i) => ({
+              // i-th updater
+              sargs: [
+                {
+                  kind: 'app',
+                  ctor: 'step',
+                  args: [{
+                    kind: 'qvar',
+                    idx: 0,
+                  }],
+                },
+                {
+                  kind: 'app',
+                  ctor: 'step',
+                  args: [{
+                    kind: 'qvar',
+                    idx: i+1,
+                  }],
+                },
+              ],
+              fargs: [],
+              yields: [
+                {
+                  kind: 'app',
+                  ctor: 'step',
+                  args: [{
+                    kind: 'qvar',
+                    idx: 0,
+                  }],
+                },
+              ],
+            }))),
+            yields: [{
+              kind: 'app',
+              ctor: 'step',
+              args: [{
+                kind: 'qvar',
+                idx: 0,
+              }],
+            }],
+          },
         };
       },
       onEdit: (action, groupId, settings): DynamicInterfaceChange => {
@@ -526,6 +601,19 @@ globalNativeFunctions.push(
             returnedIdx: 0,
           },
           tmpl,
+          declaredType: {
+            sargs: [],
+            fargs: [],
+            yields: [{
+              kind: 'app',
+              ctor: 'step',
+              args: [{
+                kind: 'app',
+                ctor: 'number',
+                args: [],
+              }],
+            }],
+          },
         };
       },
       createCustomUI: (underNode, settings, onChange) => {
@@ -580,6 +668,19 @@ globalNativeFunctions.push(
             returnedIdx: 0,
           },
           tmpl,
+          declaredType: {
+            sargs: [],
+            fargs: [],
+            yields: [{
+              kind: 'app',
+              ctor: 'step',
+              args: [{
+                kind: 'app',
+                ctor: 'bytes',
+                args: [],
+              }],
+            }],
+          },
         };
       },
       createCustomUI: (underNode, settings, onChange) => {

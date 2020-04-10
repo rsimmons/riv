@@ -1,5 +1,6 @@
 import { TemplateSegment, TemplateGroup, TemplateLayout, templateToPlainText } from './TemplateLayout';
 import { ApplicationSettings } from './Tree';
+import { FunctionType } from './Types';
 const pegParser = require('./parseStringTextualFunctionInterfaceSpec');
 
 export interface TreeSignatureStreamParam {
@@ -32,6 +33,7 @@ export interface TreeSignature {
 interface TextualFunctionInterface {
   readonly treeSig: TreeSignature;
   readonly tmpl: TemplateLayout;
+  readonly declaredType: FunctionType;
 }
 
 // This IS stored in saved code.
@@ -110,11 +112,14 @@ export function parseStringTextualInterfaceSpec(spec: string): TextualFunctionIn
             break;
 
           case 'f':
+            if (seg.info.type.typeKind !== 'func') {
+              throw new Error('function param does not have function type');
+            }
             funcParamFromIdx.set(seg.info.idx, {
               name: seg.info.name,
               ifaceSpec: {
                 kind: 'strtext',
-                spec: seg.info.type.rawText,
+                spec: seg.info.type.type.rawText,
               },
             });
             break;
@@ -197,6 +202,11 @@ export function parseStringTextualInterfaceSpec(spec: string): TextualFunctionIn
       returnedIdx,
     },
     tmpl: tmplGroups,
+    declaredType: { // TODO: fill this out
+      sargs: [],
+      fargs: [],
+      yields: [],
+    },
   };
 }
 
