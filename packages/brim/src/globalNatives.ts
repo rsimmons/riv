@@ -1,6 +1,6 @@
 import { useCallbackReducer, ExecutionContext, useEventEmitter, useRequestUpdate, useDynamic, useInitialize } from 'riv-runtime';
 import { NodeKind, NativeFunctionDefinitionNode, ApplicationSettings } from './Tree';
-import { TreeSignatureStreamParam, DynamicInterfaceChange, TreeSignatureFuncParam } from './FunctionInterface';
+import { DynamicInterfaceChange, parseInterfaceFromString, FunctionInterface, FunctionParam, StreamParam } from './FunctionInterface';
 import { TemplateGroup } from './TemplateLayout';
 import { FunctionType } from './Types';
 const { useVar, useEventMultiReceiver } = require('riv-runtime');
@@ -230,10 +230,7 @@ strtextNativeFunctions.forEach(([fid, ifaceSpecStr, jsImpl]) => {
   globalNativeFunctions.push({
     kind: NodeKind.NativeFunctionDefinition,
     fid,
-    iface: {
-      kind: 'strtext',
-      spec: ifaceSpecStr,
-    },
+    iface: parseInterfaceFromString(ifaceSpecStr),
     impl: jsImpl,
   });
 });
@@ -250,19 +247,17 @@ globalNativeFunctions.push(
     kind: NodeKind.NativeFunctionDefinition,
     fid: 'array',
     iface: {
-      kind: 'dtext',
+      kind: NodeKind.DynamicFunctionInterface,
       getIface: (settings) => {
         if ((settings !== undefined) && (typeof settings !== 'number')) {
           throw new Error();
         }
         const size: number = (settings === undefined) ? 1 : settings;
 
-        const streamParams: Array<TreeSignatureStreamParam> = [];
         const tmpl: Array<TemplateGroup> = [];
 
         tmpl.push({segments: [{kind: 'text', text: '['}]});
         for (let i = 0; i < size; i++) {
-          streamParams.push({name: undefined});
           tmpl.push({
             segments: [{kind: 'placeholder', key: 's' + i}],
             editable: {
@@ -275,13 +270,16 @@ globalNativeFunctions.push(
         tmpl.push({segments: [{kind: 'text', text: ']'}]});
 
         return {
-          treeSig: {
-            streamParams,
-            funcParams: [],
-            yields: [{name: undefined}],
-            returnedIdx: 0,
-          },
+          streamParams: [...Array(size)].map(() => ({
+            name: undefined,
+          })),
+          funcParams: [],
+          outs: [{
+            name: undefined,
+          }],
           tmpl,
+          returnedIdx: 0,
+          /*
           declaredType: {
             sargs: [...Array(size)].map(_ => ({
               kind: 'qvar',
@@ -297,6 +295,7 @@ globalNativeFunctions.push(
               }],
             }],
           },
+          */
         };
       },
       onEdit: (action, groupId, settings): DynamicInterfaceChange => {
@@ -373,20 +372,26 @@ globalNativeFunctions.push(
     kind: NodeKind.NativeFunctionDefinition,
     fid: 'multireducer',
     iface: {
-      kind: 'dtext',
+      kind: NodeKind.DynamicFunctionInterface,
       getIface: (settings) => {
         if ((settings !== undefined) && (typeof settings !== 'number')) {
           throw new Error();
         }
         const size: number = (settings === undefined) ? 1 : settings;
 
-        const streamParams: Array<TreeSignatureStreamParam> = [];
-        const funcParams: Array<TreeSignatureFuncParam> = [];
+        const streamParams: Array<StreamParam> = [];
+        const funcParams: Array<FunctionParam> = [];
         const tmpl: Array<TemplateGroup> = [];
 
         tmpl.push({segments: [{kind: 'text', text: 'set'}]});
         tmpl.push({segments: [{kind: 'text', text: 'initially'}, {kind: 'placeholder', key: 'f0'}]});
-        funcParams.push({name: undefined, ifaceSpec: {kind: 'strtext', spec: 'initialize => {:value}'}});
+        funcParams.push({iface: {
+          streamParams: [],
+          funcParams: [],
+          outs: [{name: 'value'}],
+          returnedIdx: 0,
+          tmpl: [{segments: [{kind: 'text', text: 'initialize'}]}],
+        }});
         for (let i = 0; i < size; i++) {
           tmpl.push({
             segments: [
@@ -403,17 +408,25 @@ globalNativeFunctions.push(
           });
 
           streamParams.push({name: undefined});
-          funcParams.push({name: undefined, ifaceSpec: {kind: 'strtext', spec: '{0:previous value} {1: event} => {:new value}'}});
+          funcParams.push({iface: {
+            streamParams: [
+              {name: 'previous value'},
+              {name: 'event'},
+            ],
+            funcParams: [],
+            outs: [{name: 'new value'}],
+            returnedIdx: 0,
+            tmpl: [{segments: [{kind: 'placeholder', key: 's0'}, {kind: 'placeholder', key: 's1'}]}],
+          }});
         }
 
         return {
-          treeSig: {
-            streamParams,
-            funcParams,
-            yields: [{name: undefined}],
-            returnedIdx: 0,
-          },
+          streamParams,
+          funcParams,
+          outs: [{name: undefined}],
+          returnedIdx: 0,
           tmpl,
+          /*
           declaredType: {
             sargs: [...Array(size)].map((_, i) => ({
               // i-th stream input
@@ -473,6 +486,7 @@ globalNativeFunctions.push(
               }],
             }],
           },
+          */
         };
       },
       onEdit: (action, groupId, settings): DynamicInterfaceChange => {
@@ -588,19 +602,18 @@ globalNativeFunctions.push(
     kind: NodeKind.NativeFunctionDefinition,
     fid: 'slider',
     iface: {
-      kind: 'dtext',
+      kind: NodeKind.DynamicFunctionInterface,
       getIface: () => {
         const tmpl: Array<TemplateGroup> = [];
         tmpl.push({segments: [{kind: 'text', text: 'slider'}]});
 
         return {
-          treeSig: {
-            streamParams: [],
-            funcParams: [],
-            yields: [{name: undefined}],
-            returnedIdx: 0,
-          },
+          streamParams: [],
+          funcParams: [],
+          outs: [{name: undefined}],
+          returnedIdx: 0,
           tmpl,
+          /*
           declaredType: {
             sargs: [],
             fargs: [],
@@ -614,6 +627,7 @@ globalNativeFunctions.push(
               }],
             }],
           },
+          */
         };
       },
       createCustomUI: (underNode, settings, onChange) => {
@@ -655,19 +669,18 @@ globalNativeFunctions.push(
     kind: NodeKind.NativeFunctionDefinition,
     fid: 'fileData',
     iface: {
-      kind: 'dtext',
+      kind: NodeKind.DynamicFunctionInterface,
       getIface: () => {
         const tmpl: Array<TemplateGroup> = [];
         tmpl.push({segments: [{kind: 'text', text: 'file data'}]});
 
         return {
-          treeSig: {
-            streamParams: [],
-            funcParams: [],
-            yields: [{name: undefined}],
-            returnedIdx: 0,
-          },
+          streamParams: [],
+          funcParams: [],
+          outs: [{name: undefined}],
+          returnedIdx: 0,
           tmpl,
+          /*
           declaredType: {
             sargs: [],
             fargs: [],
@@ -681,6 +694,7 @@ globalNativeFunctions.push(
               }],
             }],
           },
+          */
         };
       },
       createCustomUI: (underNode, settings, onChange) => {

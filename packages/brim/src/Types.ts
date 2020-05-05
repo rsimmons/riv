@@ -43,6 +43,7 @@ export interface TypeQVar {
   readonly idx: number;
 }
 
+// note that these "value" types do not include functions, functions are not first-class
 export type Type = TypeApp | TypeVar | TypeQVar;
 
 export interface FunctionType {

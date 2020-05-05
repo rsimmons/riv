@@ -1,45 +1,32 @@
 import { TemplateSegment, TemplateGroup, TemplateLayout, templateToPlainText } from './TemplateLayout';
-import { ApplicationSettings } from './Tree';
-import { FunctionType } from './Types';
+import { ApplicationSettings, FunctionInterfaceNode, NodeKind, StaticFunctionInterfaceNode, TreeFunctionDefinitionNode, generateFunctionId, generateStreamId, FITmplSegNode, FIOutNode, NameNode } from './Tree';
 const pegParser = require('./parseStringTextualFunctionInterfaceSpec');
 
-export interface TreeSignatureStreamParam {
+/**
+ * This is the internal representation of a function interface. It is not stored or directly edited.
+ */
+export interface StreamParam {
   readonly name: string | undefined;
-  // eventually, type info will go here
+  // readonly type: Type;
 }
 
-export interface TreeSignatureFuncParam {
+export interface FunctionParam {
+  readonly iface: FunctionInterface;
+  // NOTE: The interface have a template (in lieu of a name) and type,
+  //  so we don't need those fields here.
+}
+
+export interface Out {
   readonly name: string | undefined;
-  readonly ifaceSpec: FunctionInterfaceSpec;
+  // readonly type: Type;
 }
 
-export interface TreeSignatureYield {
-  readonly name: string | undefined;
-  // eventually, type info will go here
-}
-
-// This is the information we need to determine that a tree-application is valid,
-// provide placeholder child nodes (with names), reconcile with a tree-implementation, etc.
-// It does not include anything related to textual syntax templates or custom UI.
-// This is NOT stored in saved code.
-export interface TreeSignature {
-  readonly streamParams: ReadonlyArray<TreeSignatureStreamParam>;
-  readonly funcParams: ReadonlyArray<TreeSignatureFuncParam>;
-  readonly yields: ReadonlyArray<TreeSignatureYield>;
-  readonly returnedIdx: number | undefined;
-}
-
-// This is NOT stored in saved code. It is derived from a spec.
-interface TextualFunctionInterface {
-  readonly treeSig: TreeSignature;
+export interface FunctionInterface {
+  readonly streamParams: ReadonlyArray<StreamParam>;
+  readonly funcParams: ReadonlyArray<FunctionParam>;
+  readonly outs: ReadonlyArray<Out>;
+  readonly returnedIdx: number | null;
   readonly tmpl: TemplateLayout;
-  readonly declaredType: FunctionType;
-}
-
-// This IS stored in saved code.
-interface StringTextualFunctionInterfaceSpec {
-  readonly kind: 'strtext';
-  readonly spec: string;
 }
 
 export type DynamicInterfaceEditAction = 'insert-before' | 'insert-after' | 'delete';
@@ -55,21 +42,10 @@ export type DynamicInterfaceChange = {
   readonly newSelectedKey?: string | 'parent';
 }
 
-// This IS stored in saved code. (or well, should be once we fix it)
-interface DynamicTextualFunctionInterfaceSpec {
-  readonly kind: 'dtext';
-  // TODO: these funcs should be in a JS code string, props on one object, so we can store them?
-  readonly getIface: (settings: ApplicationSettings) => TextualFunctionInterface;
-  readonly onEdit?: (action: DynamicInterfaceEditAction, groupId: number, settings: ApplicationSettings) => DynamicInterfaceChange;
-  readonly createCustomUI?: (underNode: HTMLElement, settings: ApplicationSettings, onChange: (change: DynamicInterfaceChange) => void) => (() => void); // returns "shutdown" closure
-}
-
-export type FunctionInterfaceSpec = StringTextualFunctionInterfaceSpec | DynamicTextualFunctionInterfaceSpec;
-
 export class InterfaceSpecParseError extends Error {
 };
 
-export function parseStringTextualInterfaceSpec(spec: string): TextualFunctionInterface {
+export function parseInterfaceFromString(spec: string): StaticFunctionInterfaceNode {
   let parseResult;
   try {
     parseResult = pegParser.parse(spec);
@@ -77,55 +53,50 @@ export function parseStringTextualInterfaceSpec(spec: string): TextualFunctionIn
     throw new InterfaceSpecParseError(e.message);
   }
 
-  const tmplGroups: Array<TemplateGroup> = [];
-  let groupSegs: Array<TemplateSegment> = [];
+  return transformParsedInterface(parseResult);
+}
 
-  const streamParamFromIdx: Map<number, TreeSignatureStreamParam> = new Map();
-  const funcParamFromIdx: Map<number, TreeSignatureFuncParam> = new Map();
-  const yieldFromIdx: Map<number, TreeSignatureYield> = new Map();
+function transformParsedInterface(parseResult: any): StaticFunctionInterfaceNode {
+  const segs: Array<FITmplSegNode> = [];
 
-  const emitGroup = () => {
-    tmplGroups.push({
-      segments: groupSegs,
-    });
-    groupSegs = [];
-  };
+  const nameNodeFromString = (text: string): NameNode => ({kind: NodeKind.Name, text: text || ''});
 
   for (const seg of parseResult.tmplSegs) {
     switch (seg.segKind) {
       case 'text':
-        groupSegs.push({
-          kind: 'text',
+        segs.push({
+          kind: NodeKind.FIText,
           text: seg.text,
         });
         break;
 
       case 'placeholder':
-        groupSegs.push({
-          kind: 'placeholder',
-          key: seg.info.pkind + seg.info.idx,
-        });
-
         switch (seg.info.pkind) {
           case 's':
-            streamParamFromIdx.set(seg.info.idx, {name: seg.info.name});
+            segs.push({
+              kind: NodeKind.FIStreamParam,
+              idx: seg.info.idx,
+              name: nameNodeFromString(seg.info.name),
+            });
             break;
 
           case 'f':
             if (seg.info.type.typeKind !== 'func') {
               throw new Error('function param does not have function type');
             }
-            funcParamFromIdx.set(seg.info.idx, {
-              name: seg.info.name,
-              ifaceSpec: {
-                kind: 'strtext',
-                spec: seg.info.type.type.rawText,
-              },
+            segs.push({
+              kind: NodeKind.FIFunctionParam,
+              idx: seg.info.idx,
+              iface: transformParsedInterface(seg.info.type.type),
             });
             break;
 
           case 'y':
-            yieldFromIdx.set(seg.info.idx, {name: seg.info.name});
+            segs.push({
+              kind: NodeKind.FIOut,
+              idx: seg.info.idx,
+              name: nameNodeFromString(seg.info.name),
+            });
             break;
 
           default:
@@ -134,118 +105,271 @@ export function parseStringTextualInterfaceSpec(spec: string): TextualFunctionIn
         break;
 
       case 'break':
-        emitGroup();
+        segs.push({
+          kind: NodeKind.FIBreak,
+        });
         break;
 
       default:
         throw new Error();
     }
   }
-  emitGroup();
 
-  let returnedIdx: number | undefined;
+  let ret: FIOutNode | null = null;
   if (parseResult.ret) {
     if (parseResult.ret.pkind !== 'y') {
       throw new Error();
     }
-    returnedIdx = parseResult.ret.idx;
-    yieldFromIdx.set(parseResult.ret.idx, {name: parseResult.ret.name});
+    ret = {
+      kind: NodeKind.FIOut,
+      idx: parseResult.ret.idx,
+      name: nameNodeFromString(parseResult.ret.name),
+    };
   }
 
-  const streamParams: Array<TreeSignatureStreamParam> = [];
+  return {
+    kind: NodeKind.StaticFunctionInterface,
+    segs,
+    ret,
+  };
+}
+
+export function functionInterfaceAsPlainText(ifaceNode: FunctionInterfaceNode): string {
+  return templateToPlainText(functionInterfaceFromNode(ifaceNode).tmpl);
+}
+
+export function functionInterfaceFromNode(node: FunctionInterfaceNode): FunctionInterface {
+  switch (node.kind) {
+    case NodeKind.StaticFunctionInterface:
+      return functionInterfaceFromStaticNode(node);
+
+    case NodeKind.DynamicFunctionInterface:
+      return node.getIface(undefined);
+
+    default: {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const exhaustive: never = node; // this will cause a type error if we haven't handled all cases
+      throw new Error();
+    }
+  }
+}
+
+export function functionInterfaceFromStaticNode(node: StaticFunctionInterfaceNode): FunctionInterface {
+  const tmplGroups: Array<TemplateGroup> = [];
+  let groupSegs: Array<TemplateSegment> = [];
+
+  const sparamFromIdx: Map<number, StreamParam> = new Map();
+  const fparamFromIdx: Map<number, FunctionParam> = new Map();
+  const outFromIdx: Map<number, Out> = new Map();
+
+  const emitGroup = () => {
+    if (groupSegs.length > 0) {
+      tmplGroups.push({
+        segments: groupSegs,
+      });
+    }
+    groupSegs = [];
+  };
+
+  for (const seg of node.segs) {
+    switch (seg.kind) {
+      case NodeKind.FIText:
+        groupSegs.push({
+          kind: 'text',
+          text: seg.text,
+        });
+        break;
+
+      case NodeKind.FIStreamParam:
+        groupSegs.push({
+          kind: 'placeholder',
+          key: 's' + seg.idx,
+        });
+        sparamFromIdx.set(seg.idx, {
+          name: seg.name.text ? seg.name.text : undefined,
+        });
+        break;
+
+      case NodeKind.FIFunctionParam:
+        groupSegs.push({
+          kind: 'placeholder',
+          key: 'f' + seg.idx,
+        });
+        fparamFromIdx.set(seg.idx, {
+          iface: functionInterfaceFromStaticNode(seg.iface),
+        });
+        break;
+
+      case NodeKind.FIOut:
+        groupSegs.push({
+          kind: 'placeholder',
+          key: 'y' + seg.idx,
+        });
+        outFromIdx.set(seg.idx, {
+          name: seg.name.text ? seg.name.text : undefined,
+        });
+        break;
+
+      case NodeKind.FIBreak:
+        emitGroup();
+        break;
+
+      default: {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const exhaustive: never = seg; // this will cause a type error if we haven't handled all cases
+        throw new Error();
+      }
+    }
+  }
+  emitGroup();
+
+  let returnedIdx: number | null = null;
+  if (node.ret) {
+    returnedIdx = node.ret.idx;
+    outFromIdx.set(node.ret.idx, {
+      name: node.ret.name.text ? node.ret.name.text : undefined,
+    });
+  }
+
+  const streamParams: Array<StreamParam> = [];
   let idx = 0;
   while (true) {
-    const param = streamParamFromIdx.get(idx);
-    if (param === undefined) {
+    const info = sparamFromIdx.get(idx);
+    if (info === undefined) {
       break;
     }
-    streamParams.push(param);
+    streamParams.push(info);
     idx++;
   }
-  if (streamParamFromIdx.size !== idx) {
+  if (sparamFromIdx.size !== idx) {
     throw new Error('must be gap in indexes');
   }
 
-  const funcParams: Array<TreeSignatureFuncParam> = [];
+  const funcParams: Array<FunctionParam> = [];
   idx = 0;
   while (true) {
-    const param = funcParamFromIdx.get(idx);
-    if (param === undefined) {
+    const info = fparamFromIdx.get(idx);
+    if (info === undefined) {
       break;
     }
-    funcParams.push(param);
+    funcParams.push(info);
     idx++;
   }
-  if (funcParamFromIdx.size !== idx) {
+  if (fparamFromIdx.size !== idx) {
     throw new Error('must be gap in indexes');
   }
 
-  const yields: Array<TreeSignatureYield> = [];
+  const outs: Array<Out> = [];
   idx = 0;
   while (true) {
-    const param = yieldFromIdx.get(idx);
-    if (param === undefined) {
+    const info = outFromIdx.get(idx);
+    if (info === undefined) {
       break;
     }
-    yields.push(param);
+    outs.push(info);
     idx++;
   }
-  if (yieldFromIdx.size !== idx) {
+  if (outFromIdx.size !== idx) {
     throw new Error('must be gap in indexes');
   }
 
   return {
-    treeSig: {
-      streamParams,
-      funcParams,
-      yields,
-      returnedIdx,
-    },
+    streamParams,
+    funcParams,
+    outs,
+    returnedIdx,
     tmpl: tmplGroups,
-    declaredType: { // TODO: fill this out
-      sargs: [],
-      fargs: [],
-      yields: [],
+  };
+}
+
+export function functionInterfaceToStaticNode(iface: FunctionInterface): StaticFunctionInterfaceNode {
+  const segs: Array<FITmplSegNode> = [];
+
+  iface.tmpl.forEach((tmplGroup, groupIdx) => {
+    for (const seg of tmplGroup.segments) {
+      switch (seg.kind) {
+        case 'text':
+          segs.push({
+            kind: NodeKind.FIText,
+            text: seg.text,
+          });
+          break;
+
+        case 'placeholder':
+          const ptype = seg.key[0]; // hacky to "parse" this out
+          const idx = +seg.key.slice(1);
+          switch (ptype) {
+            case 's':
+              segs.push({
+                kind: NodeKind.FIStreamParam,
+                idx,
+                name: {kind: NodeKind.Name, text: iface.streamParams[idx].name || ''},
+              });
+              break;
+
+            case 'f':
+              segs.push({
+                kind: NodeKind.FIFunctionParam,
+                idx,
+                iface: functionInterfaceToStaticNode(iface.funcParams[idx].iface),
+              });
+              break;
+
+            case 'y':
+              segs.push({
+                kind: NodeKind.FIOut,
+                idx,
+                name: {kind: NodeKind.Name, text: iface.outs[idx].name || ''},
+              });
+              break;
+
+            default:
+              throw new Error();
+          }
+          break;
+
+        default: {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const exhaustive: never = seg; // this will cause a type error if we haven't handled all cases
+          throw new Error();
+        }
+      }
+    }
+    // add a break if this isn't the last group
+    if (groupIdx !== (iface.tmpl.length-1)) {
+      segs.push({
+        kind: NodeKind.FIBreak,
+      });
+    }
+  });
+
+  return {
+    kind: NodeKind.StaticFunctionInterface,
+    segs,
+    ret: (iface.returnedIdx === null) ? null : {
+      kind: NodeKind.FIOut,
+      idx: iface.returnedIdx,
+      name: {kind: NodeKind.Name, text: iface.outs[iface.returnedIdx].name || ''},
     },
   };
 }
 
-export function functionUIAsPlainText(ifaceSpec: FunctionInterfaceSpec): string {
-  switch (ifaceSpec.kind) {
-    case 'strtext': {
-      const textIface = parseStringTextualInterfaceSpec(ifaceSpec.spec);
-      return templateToPlainText(textIface.tmpl);
-    }
+export function defaultTreeImplFromFunctionInterface(iface: FunctionInterface): TreeFunctionDefinitionNode {
+  const ifaceNode = functionInterfaceToStaticNode(iface);
 
-    case 'dtext': {
-      const textIface = ifaceSpec.getIface(undefined);
-      return templateToPlainText(textIface.tmpl);
-    }
-
-    default: {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const exhaustive: never = ifaceSpec; // this will cause a type error if we haven't handled all cases
-      throw new Error();
-    }
-  }
-}
-
-export function treeSignatureFromInterfaceSpec(ifaceSpec: FunctionInterfaceSpec, settings: ApplicationSettings): TreeSignature {
-  switch (ifaceSpec.kind) {
-    case 'strtext': {
-      const textIface = parseStringTextualInterfaceSpec(ifaceSpec.spec);
-      return textIface.treeSig;
-    }
-
-    case 'dtext': {
-      const textIface = ifaceSpec.getIface(settings);
-      return textIface.treeSig;
-    }
-
-    default: {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const exhaustive: never = ifaceSpec; // this will cause a type error if we haven't handled all cases
-      throw new Error();
-    }
-  }
+  return {
+    kind: NodeKind.TreeFunctionDefinition,
+    fid: generateFunctionId(),
+    iface: ifaceNode,
+    spids: iface.streamParams.map(() => generateStreamId()),
+    fpids: iface.funcParams.map(() => generateFunctionId()),
+    bodyExprs: iface.outs.map((_, idx) => ({
+      kind: NodeKind.YieldExpression,
+      idx,
+      expr: {
+        kind: NodeKind.UndefinedLiteral,
+        sid: generateStreamId(),
+      },
+    })),
+  };
 }

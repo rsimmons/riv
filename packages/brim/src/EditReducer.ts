@@ -8,7 +8,7 @@ import { createLiveFunction } from './LiveFunction';
 import Environment from './Environment';
 import { iterChildren, visitChildren, replaceChild, transformChildren } from './Traversal';
 import globalNativeFunctions from './globalNatives';
-import { parseStringTextualInterfaceSpec } from './FunctionInterface';
+import { functionInterfaceFromStaticNode } from './FunctionInterface';
 
 // We don't make a discriminated union of specific actions, but maybe we could
 interface Action {
@@ -191,11 +191,11 @@ export function initStaticEnv(globalFunctions: ReadonlyArray<FunctionDefinitionN
 }
 
 export function extendStaticEnv(outer: StaticEnvironment, def: TreeFunctionDefinitionNode): StaticEnvironment {
-  if (def.iface.kind !== 'strtext') {
+  if (def.iface.kind !== NodeKind.StaticFunctionInterface) {
     throw new Error();
   }
 
-  const treeSig = parseStringTextualInterfaceSpec(def.iface.spec).treeSig;
+  const iface = functionInterfaceFromStaticNode(def.iface);
 
   const streamEnv: Environment<StreamID, StreamDefinition> = new Environment(outer.streamEnv);
   const functionEnv: Environment<FunctionID, FunctionDefinitionNode> = new Environment(outer.functionEnv);
@@ -204,7 +204,7 @@ export function extendStaticEnv(outer: StaticEnvironment, def: TreeFunctionDefin
     if (streamEnv.has(sid)) {
       throw new Error();
     }
-    const sigParam = treeSig.streamParams[idx];
+    const sigParam = iface.streamParams[idx];
     streamEnv.set(sid, {
       kind: 'param',
       sid,
@@ -902,8 +902,9 @@ const INITIAL_MAIN: TreeFunctionDefinitionNode = {
   kind: NodeKind.TreeFunctionDefinition,
   fid: generateFunctionId(),
   iface: {
-    kind: 'strtext',
-    spec: 'main => void',
+    kind: NodeKind.StaticFunctionInterface,
+    segs: [], // no parameters
+    ret: null, // void return
   },
   spids: [],
   fpids: [],

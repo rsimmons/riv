@@ -1,5 +1,4 @@
-import { NodeKind, StreamID, StreamExpressionNode, FunctionDefinitionNode, generateFunctionId, generateStreamId } from './Tree';
-import { TreeSignatureFuncParam, treeSignatureFromInterfaceSpec } from './FunctionInterface';
+import { NodeKind, StreamID, StreamExpressionNode } from './Tree';
 
 export function streamExprReturnedId(node: StreamExpressionNode): StreamID | undefined {
   switch (node.kind) {
@@ -29,24 +28,4 @@ export function streamExprReturnedId(node: StreamExpressionNode): StreamID | und
       throw new Error();
     }
   }
-}
-
-export function defaultFunctionArgFromParam(fparam: TreeSignatureFuncParam): FunctionDefinitionNode {
-  const fparamSig = treeSignatureFromInterfaceSpec(fparam.ifaceSpec, undefined);
-
-  return {
-    kind: NodeKind.TreeFunctionDefinition,
-    fid: generateFunctionId(),
-    iface: fparam.ifaceSpec,
-    spids: fparamSig.streamParams.map(() => generateStreamId()),
-    fpids: fparamSig.funcParams.map(() => generateFunctionId()),
-    bodyExprs: fparamSig.yields.map((_, idx) => ({
-      kind: NodeKind.YieldExpression,
-      idx,
-      expr: {
-        kind: NodeKind.UndefinedLiteral,
-        sid: generateStreamId(),
-      },
-    })),
-  };
 }

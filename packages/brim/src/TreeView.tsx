@@ -1,12 +1,11 @@
 import React, { useState, useRef, useLayoutEffect, useEffect } from 'react';
-import { Node, FunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, StreamReferenceNode, NameNode, ApplicationNode, TreeFunctionDefinitionNode, isFunctionDefinitionNode, generateStreamId, ApplicationSettings } from './Tree';
+import { Node, FunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, StreamReferenceNode, NameNode, ApplicationNode, TreeFunctionDefinitionNode, isFunctionDefinitionNode, ApplicationSettings, generateStreamId } from './Tree';
 import './TreeView.css';
 import { StaticEnvironment, extendStaticEnv } from './EditReducer';
 import { TemplateLayout, TextSegment, GroupEditable } from './TemplateLayout';
 import quotesIcon from './icons/quotes.svg';
 import booleanIcon from './icons/boolean.svg';
-import { parseStringTextualInterfaceSpec, TreeSignature, TreeSignatureYield, DynamicInterfaceEditAction, treeSignatureFromInterfaceSpec, DynamicInterfaceChange } from './FunctionInterface';
-import { defaultFunctionArgFromParam } from './TreeUtil';
+import { functionInterfaceFromStaticNode, DynamicInterfaceEditAction, DynamicInterfaceChange, FunctionInterface, defaultTreeImplFromFunctionInterface } from './FunctionInterface';
 
 const BOUND_NAME_BOX_COLOR = '#d1e6ff';
 const STREAM_REFERENCE_BOX_COLOR = '#a1cdff';
@@ -466,24 +465,24 @@ const sizedApplicationView = ({node, ctx}: {node: ApplicationNode, ctx: TreeView
   });
 
   switch (funcDef.iface.kind) {
-    case 'strtext':
-      const tifspec = parseStringTextualInterfaceSpec(funcDef.iface.spec);
+    case NodeKind.StaticFunctionInterface:
+      const iface = functionInterfaceFromStaticNode(funcDef.iface);
       return sizedLogicalTextView({
         selectionNode: node,
         outwardNode: node,
-        layout: templateToLogicalLayout(tifspec.tmpl, nodeMap),
+        layout: templateToLogicalLayout(iface.tmpl, nodeMap),
         tightGrouping: true,
         ctx,
       });
 
-    case 'dtext': {
-      const iface = funcDef.iface;
-      const tifspec = iface.getIface(node.settings);
-      const ifaceOnEdit = iface.onEdit;
+    case NodeKind.DynamicFunctionInterface: {
+      const ifaceNode = funcDef.iface;
+      const tifspec = ifaceNode.getIface(node.settings);
+      const ifaceOnEdit = ifaceNode.onEdit;
 
       const handleChange = (change: DynamicInterfaceChange): void => {
         const {newSettings, remap, newSelectedKey} = change;
-        const newTreeSig = treeSignatureFromInterfaceSpec(iface, newSettings);
+        const newIface = ifaceNode.getIface(newSettings);
 
         const newNode: ApplicationNode = {
           ...node,
@@ -496,7 +495,7 @@ const sizedApplicationView = ({node, ctx}: {node: ApplicationNode, ctx: TreeView
               };
             }),
             fargs: remap.funcParams.map((fromIdx, idx) => {
-              return (fromIdx !== undefined) ? node.fargs[fromIdx] : defaultFunctionArgFromParam(newTreeSig.funcParams[idx]);
+              return (fromIdx !== undefined) ? node.fargs[fromIdx] : defaultTreeImplFromFunctionInterface(newIface.funcParams[idx].iface);
             }),
           },
         };
@@ -539,7 +538,7 @@ const sizedApplicationView = ({node, ctx}: {node: ApplicationNode, ctx: TreeView
         } : undefined,
       });
 
-      const ifaceCreateCustomUI = iface.createCustomUI;
+      const ifaceCreateCustomUI = ifaceNode.createCustomUI;
       if (ifaceCreateCustomUI) {
         return {
           reactNode: <CustomUIView logicalReactNode={logicalView.reactNode} createCustomUI={ifaceCreateCustomUI} settings={node.settings} onChange={handleChange} />,
@@ -591,13 +590,13 @@ export const StreamExpressionView: React.FC<{node: StreamExpressionNode, ctx: Tr
   return <>{reactNode}</> // empty angle brackets are to make types work
 }
 
-const sizedBodyExpressionView = ({node, sigYields, ctx}: {node: BodyExpressionNode, sigYields: ReadonlyArray<TreeSignatureYield>, ctx: TreeViewContext}): SizedReactNode => {
+const sizedBodyExpressionView = ({node, outNames, ctx}: {node: BodyExpressionNode, outNames: ReadonlyArray<string | undefined>, ctx: TreeViewContext}): SizedReactNode => {
   if (isStreamExpressionNode(node)) {
     return sizedStreamExpressionView({node, ctx});
   } else if (isFunctionDefinitionNode(node)) {
     return sizedFunctionDefinitionView({node, ctx});
   } else if (node.kind === NodeKind.YieldExpression) {
-    const displayedName = sigYields[node.idx].name === undefined ? node.idx.toString() : sigYields[node.idx].name;
+    const displayedName = (outNames[node.idx] === undefined) ? node.idx.toString() : outNames[node.idx];
     return sizedLogicalTextView({
       selectionNode: node,
       outwardNode: node,
@@ -636,16 +635,16 @@ export const TreeFunctionDefinitionView: React.FC<{node: TreeFunctionDefinitionN
   };
 
   let ifaceReactNode: React.ReactNode;
-  let treeSig: TreeSignature;
+  let iface: FunctionInterface;
   switch (node.iface.kind) {
-    case 'strtext':
-      treeSig = parseStringTextualInterfaceSpec(node.iface.spec).treeSig;
+    case NodeKind.StaticFunctionInterface:
+      iface = functionInterfaceFromStaticNode(node.iface);
       ifaceReactNode = (
-        <div>ƒ {node.iface.spec}</div>
+        <div>ƒ (TODO: interface)</div>
       );
       break;
 
-    case 'dtext':
+    case NodeKind.DynamicFunctionInterface:
       throw new Error('unsupported');
 
     default: {
@@ -662,7 +661,7 @@ export const TreeFunctionDefinitionView: React.FC<{node: TreeFunctionDefinitionN
       segments: [{
         kind: 'nodes',
         treeNode: bodyExpr,
-        sizedReactNode: sizedBodyExpressionView({node: bodyExpr, sigYields: treeSig.yields, ctx: newCtx}),
+        sizedReactNode: sizedBodyExpressionView({node: bodyExpr, outNames: iface.outs.map(out => out.name), ctx: newCtx}),
       }],
     });
   });

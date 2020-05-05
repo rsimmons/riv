@@ -1,9 +1,8 @@
-import { StreamID, FunctionID, Node, FunctionDefinitionNode, StreamExpressionNode, NodeKind, isStreamExpressionNode, TreeFunctionDefinitionNode, isFunctionDefinitionNode } from './Tree';
+import { StreamID, FunctionID, Node, FunctionDefinitionNode, StreamExpressionNode, NodeKind, isStreamExpressionNode, TreeFunctionDefinitionNode, isFunctionDefinitionNode, FunctionInterfaceNode } from './Tree';
 import { streamExprReturnedId } from './TreeUtil';
 import { CompiledDefinition, ConstStreamSpec, LocalFunctionDefinition, AppSpec, CallingConvention } from './CompiledDefinition';
 import Environment from './Environment';
 import { visitChildren } from './Traversal';
-import { FunctionInterfaceSpec } from './FunctionInterface';
 
 export class CompilationError extends Error {
 };
@@ -11,7 +10,7 @@ export class CompilationError extends Error {
 // A stream id can be defined by either a stream expression or a parameter. If a stream id was
 // created by a parameter, then it maps to null (because we don't need to traverse from the param).
 type CompilationStreamEnvironment = Environment<StreamID, StreamExpressionNode | null>;
-type CompilationFunctionEnvironment = Environment<FunctionID, FunctionInterfaceSpec>;
+type CompilationFunctionEnvironment = Environment<FunctionID, FunctionInterfaceNode>;
 
 function compileTreeFuncDef(def: TreeFunctionDefinitionNode, outerStreamEnvironment: CompilationStreamEnvironment, outerFunctionEnvironment: CompilationFunctionEnvironment): [CompiledDefinition, Set<StreamID>] {
   const streamEnvironment: CompilationStreamEnvironment = new Environment(outerStreamEnvironment);
@@ -143,8 +142,8 @@ function compileTreeFuncDef(def: TreeFunctionDefinitionNode, outerStreamEnvironm
         break;
 
       case NodeKind.Application: {
-        const functionIfaceSpec = functionEnvironment.get(node.fid);
-        if (!functionIfaceSpec) {
+        const functionIfaceNode = functionEnvironment.get(node.fid);
+        if (!functionIfaceNode) {
           throw new CompilationError();
         }
 
@@ -199,18 +198,18 @@ function compileTreeFuncDef(def: TreeFunctionDefinitionNode, outerStreamEnvironm
         temporaryMarked.delete(node);
 
         let callConv: CallingConvention;
-        switch (functionIfaceSpec.kind) {
-          case 'strtext':
+        switch (functionIfaceNode.kind) {
+          case NodeKind.StaticFunctionInterface:
             callConv = CallingConvention.Raw;
             break;
 
-          case 'dtext':
+          case NodeKind.DynamicFunctionInterface:
             callConv = CallingConvention.SettingsStructured;
             break;
 
           default: {
             // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            const exhaustive: never = functionIfaceSpec; // this will cause a type error if we haven't handled all cases
+            const exhaustive: never = functionIfaceNode; // this will cause a type error if we haven't handled all cases
             throw new Error();
           }
         }

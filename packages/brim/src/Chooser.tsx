@@ -5,8 +5,7 @@ import Fuse from 'fuse.js';
 import { computeParentLookup } from './EditReducer';
 import { SelTree } from './State';
 import { StreamExpressionView, TreeViewContext, FunctionDefinitionView } from './TreeView';
-import { functionUIAsPlainText, treeSignatureFromInterfaceSpec } from './FunctionInterface';
-import { defaultFunctionArgFromParam } from './TreeUtil';
+import { functionInterfaceAsPlainText, defaultTreeImplFromFunctionInterface, functionInterfaceFromNode } from './FunctionInterface';
 
 interface Choice {
   node: StreamExpressionNode | FunctionDefinitionNode;
@@ -152,7 +151,7 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any)
 
     const functionEnv = treeViewCtx.staticEnv.functionEnv;
     functionEnv.forEach(defNode => {
-      const defAsText = functionUIAsPlainText(defNode.iface);
+      const defAsText = functionInterfaceAsPlainText(defNode.iface);
       if (atRoot) {
         searchItems.push({
           name: defAsText,
@@ -162,8 +161,8 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any)
           },
         });
       } else {
-        const sig = treeSignatureFromInterfaceSpec(defNode.iface, undefined);
-        if (sig.returnedIdx !== undefined) {
+        const iface = functionInterfaceFromNode(defNode.iface);
+        if (iface.outs.length > 0) {
           searchItems.push({
             name: defAsText,
             data: {
@@ -208,20 +207,20 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any)
 
         case 'func': {
           const funcDefNode = result.item.data.def;
-          const sig = treeSignatureFromInterfaceSpec(funcDefNode.iface, undefined);
+          const iface = functionInterfaceFromNode(funcDefNode.iface);
 
-          const outs: ReadonlyArray<ApplicationOut> = sig.yields.map((_, idx) => {
-            const thisYieldReturned = (idx === sig.returnedIdx);
+          const outs: ReadonlyArray<ApplicationOut> = iface.outs.map((_, idx) => {
+            const thisOutReturned = (idx === iface.returnedIdx);
             return {
               sid: generateStreamId(),
-              name: thisYieldReturned ? null : {
+              name: thisOutReturned ? null : {
                 kind: NodeKind.Name,
                 text: '',
               },
             };
           });
 
-          const sargs: ReadonlyArray<StreamExpressionNode> = sig.streamParams.map((_, idx) => (
+          const sargs: ReadonlyArray<StreamExpressionNode> = iface.streamParams.map((_, idx) => (
             (infixMode && (idx === 0))
             ? initNode
             : {
@@ -230,7 +229,7 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any)
             }
           ));
 
-          const fargs: ReadonlyArray<FunctionDefinitionNode> = sig.funcParams.map(defaultFunctionArgFromParam);
+          const fargs: ReadonlyArray<FunctionDefinitionNode> = iface.funcParams.map(fp => defaultTreeImplFromFunctionInterface(fp.iface));
 
           const n: ApplicationNode = {
             kind: NodeKind.Application,
@@ -273,6 +272,7 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any)
         },
       });
 
+      // Create a choice for a new local function definition
       choices.push({
         /*
         node: {
@@ -296,8 +296,23 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any)
           kind: NodeKind.TreeFunctionDefinition,
           fid: generateFunctionId(),
           iface: {
-            kind: 'strtext',
-            spec: text.trim() + ' {0:param} => {:output}',
+            kind: NodeKind.StaticFunctionInterface,
+            segs: [
+              {
+                kind: NodeKind.FIText,
+                text: text.trim(),
+              },
+              {
+                kind: NodeKind.FIStreamParam,
+                idx: 0,
+                name: {kind: NodeKind.Name, text: 'param'},
+              },
+            ],
+            ret: {
+              kind: NodeKind.FIOut,
+              idx: 0,
+              name: {kind: NodeKind.Name, text: 'output'},
+            },
           },
           spids: [generateStreamId()],
           fpids: [],

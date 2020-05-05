@@ -1,5 +1,5 @@
 import genuid from './uid';
-import { FunctionInterfaceSpec } from './FunctionInterface';
+import { FunctionInterface, DynamicInterfaceEditAction, DynamicInterfaceChange } from './FunctionInterface';
 
 /**
  * IDS
@@ -45,6 +45,15 @@ export enum NodeKind {
   Application = 'app',
   NativeFunctionDefinition = 'nfdef',
   YieldExpression = 'yield',
+  ValueTypeApp = 'vtyapp',
+  ValueTypeVar = 'vtyvar',
+  FIText = 'fitext',
+  FIStreamParam = 'fisparam',
+  FIFunctionParam = 'fifparam',
+  FIOut = 'fiout',
+  FIBreak = 'fibreak',
+  StaticFunctionInterface = 'sfi',
+  DynamicFunctionInterface = 'dfi',
   TreeFunctionDefinition = 'tfdef',
 }
 
@@ -116,6 +125,82 @@ export function isStreamExpressionNode(node: Node): node is StreamExpressionNode
 }
 
 /**
+ * TYPE DECLARATION NODES
+ */
+
+/*
+export interface ValueTypeAppNode {
+  readonly kind: NodeKind.ValueTypeApp;
+  readonly ctor: string;
+  readonly args: ReadonlyArray<ValueTypeNode>;
+}
+
+export interface ValueTypeVarNode {
+  readonly kind: NodeKind.ValueTypeVar;
+}
+
+export type ValueTypeNode = ValueTypeAppNode | ValueTypeVarNode;
+*/
+
+/**
+ * FUNCTION INTERFACE NODES
+ */
+
+export interface FITextNode {
+  readonly kind: NodeKind.FIText;
+  readonly text: string;
+}
+
+export interface FIStreamParamNode {
+  readonly kind: NodeKind.FIStreamParam;
+  readonly idx: number;
+  readonly name: NameNode;
+  // readonly type: ValueTypeNode;
+}
+
+export interface FIOutNode {
+  readonly kind: NodeKind.FIOut;
+  readonly idx: number;
+  readonly name: NameNode;
+  // readonly type: ValueTypeNode;
+}
+
+export interface FIFunctionParamNode {
+  readonly kind: NodeKind.FIFunctionParam;
+  readonly idx: number;
+  readonly iface: StaticFunctionInterfaceNode;
+}
+
+export interface FIBreakNode {
+  readonly kind: NodeKind.FIBreak;
+}
+
+export type FITmplSegNode = FITextNode | FIStreamParamNode | FIOutNode | FIFunctionParamNode | FIBreakNode;
+export function isFITmplSegNode(node: Node): node is FITmplSegNode {
+  return (node.kind === NodeKind.FIText) || (node.kind === NodeKind.FIStreamParam) || (node.kind === NodeKind.FIOut) || (node.kind === NodeKind.FIFunctionParam) || (node.kind === NodeKind.FIBreak);
+}
+
+export interface StaticFunctionInterfaceNode {
+  readonly kind: NodeKind.StaticFunctionInterface;
+  readonly segs: ReadonlyArray<FITmplSegNode>;
+  readonly ret: FIOutNode | null;
+}
+
+export interface DynamicFunctionInterfaceNode {
+  readonly kind: NodeKind.DynamicFunctionInterface;
+  // TODO: these funcs should be in a JS code string, props on one object, so we can store them?
+  readonly getIface: (settings: ApplicationSettings) => FunctionInterface;
+  readonly onEdit?: (action: DynamicInterfaceEditAction, groupId: number, settings: ApplicationSettings) => DynamicInterfaceChange;
+  readonly createCustomUI?: (underNode: HTMLElement, settings: ApplicationSettings, onChange: (change: DynamicInterfaceChange) => void) => (() => void); // returns "shutdown" closure
+}
+
+export type FunctionInterfaceNode = StaticFunctionInterfaceNode | DynamicFunctionInterfaceNode;
+export function isFunctionInterfaceNode(node: Node): node is FunctionInterfaceNode {
+  return (node.kind === NodeKind.StaticFunctionInterface) || (node.kind === NodeKind.DynamicFunctionInterface);
+}
+
+
+/**
  * FUNCTION NODES
  */
 
@@ -123,7 +208,7 @@ export function isStreamExpressionNode(node: Node): node is StreamExpressionNode
 export interface NativeFunctionDefinitionNode {
   readonly kind: NodeKind.NativeFunctionDefinition;
   readonly fid: FunctionID;
-  readonly iface: FunctionInterfaceSpec;
+  readonly iface: FunctionInterfaceNode;
 
   // TODO: JS code as string?
   readonly impl: Function;
@@ -143,7 +228,7 @@ export function isBodyExpressionNode(node: Node): node is BodyExpressionNode {
 export interface TreeFunctionDefinitionNode {
   readonly kind: NodeKind.TreeFunctionDefinition;
   readonly fid: FunctionID;
-  readonly iface: FunctionInterfaceSpec;
+  readonly iface: FunctionInterfaceNode;
 
   readonly spids: ReadonlyArray<StreamID>;
   readonly fpids: ReadonlyArray<FunctionID>;
@@ -155,4 +240,4 @@ export function isFunctionDefinitionNode(node: Node): node is FunctionDefinition
   return (node.kind === NodeKind.NativeFunctionDefinition) || (node.kind === NodeKind.TreeFunctionDefinition);
 }
 
-export type Node = NameNode | BodyExpressionNode;
+export type Node = NameNode | BodyExpressionNode | FunctionInterfaceNode | FITmplSegNode;
