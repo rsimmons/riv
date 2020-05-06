@@ -52,6 +52,7 @@ export enum NodeKind {
   FIFunctionParam = 'fifparam',
   FIOut = 'fiout',
   FIBreak = 'fibreak',
+  FINothing = 'finothing',
   StaticFunctionInterface = 'sfi',
   DynamicFunctionInterface = 'dfi',
   TreeFunctionDefinition = 'tfdef',
@@ -180,10 +181,15 @@ export function isFITmplSegNode(node: Node): node is FITmplSegNode {
   return (node.kind === NodeKind.FIText) || (node.kind === NodeKind.FIStreamParam) || (node.kind === NodeKind.FIOut) || (node.kind === NodeKind.FIFunctionParam) || (node.kind === NodeKind.FIBreak);
 }
 
+// this is like "void"
+export interface FINothingNode {
+  readonly kind: NodeKind.FINothing;
+}
+
 export interface StaticFunctionInterfaceNode {
   readonly kind: NodeKind.StaticFunctionInterface;
   readonly segs: ReadonlyArray<FITmplSegNode>;
-  readonly ret: FIOutNode | null;
+  readonly ret: FIOutNode | FINothingNode;
 }
 
 export interface DynamicFunctionInterfaceNode {
@@ -240,4 +246,4 @@ export function isFunctionDefinitionNode(node: Node): node is FunctionDefinition
   return (node.kind === NodeKind.NativeFunctionDefinition) || (node.kind === NodeKind.TreeFunctionDefinition);
 }
 
-export type Node = NameNode | BodyExpressionNode | FunctionInterfaceNode | FITmplSegNode;
+export type Node = NameNode | BodyExpressionNode | FunctionInterfaceNode | FITmplSegNode | FINothingNode;

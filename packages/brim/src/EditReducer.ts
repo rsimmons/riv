@@ -904,7 +904,7 @@ const INITIAL_MAIN: TreeFunctionDefinitionNode = {
   iface: {
     kind: NodeKind.StaticFunctionInterface,
     segs: [], // no parameters
-    ret: null, // void return
+    ret: {kind: NodeKind.FINothing}, // void return
   },
   spids: [],
   fpids: [],

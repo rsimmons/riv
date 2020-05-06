@@ -1,5 +1,5 @@
 // import { Path, pathIsPrefix } from './State';
-import { NodeKind, Node, NameNode, StreamExpressionNode, isStreamExpressionNode, BodyExpressionNode, isBodyExpressionNode, ApplicationOut, FunctionDefinitionNode, isFunctionDefinitionNode, FunctionInterfaceNode, isFunctionInterfaceNode, StaticFunctionInterfaceNode, FIOutNode, FITmplSegNode, isFITmplSegNode } from './Tree';
+import { NodeKind, Node, NameNode, StreamExpressionNode, isStreamExpressionNode, BodyExpressionNode, isBodyExpressionNode, ApplicationOut, FunctionDefinitionNode, isFunctionDefinitionNode, FunctionInterfaceNode, isFunctionInterfaceNode, StaticFunctionInterfaceNode, FIOutNode, FITmplSegNode, isFITmplSegNode, FINothingNode } from './Tree';
 
 export function firstChild(node: Node): Node | undefined {
   const res = iterChildren(node).next();
@@ -21,6 +21,7 @@ export function* iterChildren(node: Node): Generator<Node, void, undefined> {
     case NodeKind.StreamReference:
     case NodeKind.FIText:
     case NodeKind.FIBreak:
+    case NodeKind.FINothing:
       // no children
       break;
 
@@ -106,6 +107,7 @@ export function visitChildren<N, C>(node: Node, visit: (node: Node, ctx: C) => N
     case NodeKind.StreamReference:
     case NodeKind.FIText:
     case NodeKind.FIBreak:
+    case NodeKind.FINothing:
       // no children
       return;
 
@@ -258,9 +260,9 @@ export function transformChildren<C>(node: Node, transform: (node: Node, ctx: C)
     return changed ? newArr : arr;
   };
 
-  const xFIOut = (n: FIOutNode): FIOutNode => {
+  const xRet = (n: FIOutNode | FINothingNode): FIOutNode | FINothingNode => {
     const tn = transform(n, ctx);
-    if (tn.kind !== NodeKind.FIOut) {
+    if ((tn.kind !== NodeKind.FIOut) && (tn.kind !== NodeKind.FINothing)) {
       throw new Error();
     }
     return tn;
@@ -275,6 +277,7 @@ export function transformChildren<C>(node: Node, transform: (node: Node, ctx: C)
     case NodeKind.StreamReference:
     case NodeKind.FIText:
     case NodeKind.FIBreak:
+    case NodeKind.FINothing:
       // no children to transform
       return node;
 
@@ -331,7 +334,7 @@ export function transformChildren<C>(node: Node, transform: (node: Node, ctx: C)
 
     case NodeKind.StaticFunctionInterface:
       const newSegs = xTmplSegArr(node.segs);
-      const newRet: FIOutNode | null = node.ret ? xFIOut(node.ret) : null;
+      const newRet = xRet(node.ret);
       if ((newSegs === node.segs) && (newRet === node.ret)) {
         return node;
       } else {
@@ -479,9 +482,9 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
     }
   };
 
-  const replaceFIOut = (n: FIOutNode): FIOutNode => {
+  const replaceFIRet = (n: FIOutNode | FINothingNode): FIOutNode | FINothingNode => {
     if (n === oldChild) {
-      if (newChild.kind !== NodeKind.FIOut) {
+      if ((newChild.kind !== NodeKind.FIOut) && (newChild.kind !== NodeKind.FINothing)) {
         throw new Error();
       }
       return newChild;
@@ -512,6 +515,7 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
     case NodeKind.StreamReference:
     case NodeKind.FIText:
     case NodeKind.FIBreak:
+    case NodeKind.FINothing:
       throw new Error('no children to replace');
 
     case NodeKind.Application:
@@ -545,7 +549,7 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
       return {
         ...node,
         segs: replaceTmplSegArr(node.segs),
-        ret: node.ret ? replaceFIOut(node.ret) : null,
+        ret: replaceFIRet(node.ret),
       };
 
     case NodeKind.DynamicFunctionInterface:

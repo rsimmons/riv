@@ -1,5 +1,5 @@
 import { TemplateSegment, TemplateGroup, TemplateLayout, templateToPlainText } from './TemplateLayout';
-import { ApplicationSettings, FunctionInterfaceNode, NodeKind, StaticFunctionInterfaceNode, TreeFunctionDefinitionNode, generateFunctionId, generateStreamId, FITmplSegNode, FIOutNode, NameNode } from './Tree';
+import { ApplicationSettings, FunctionInterfaceNode, NodeKind, StaticFunctionInterfaceNode, TreeFunctionDefinitionNode, generateFunctionId, generateStreamId, FITmplSegNode, FIOutNode, NameNode, FINothingNode } from './Tree';
 const pegParser = require('./parseStringTextualFunctionInterfaceSpec');
 
 /**
@@ -115,7 +115,7 @@ function transformParsedInterface(parseResult: any): StaticFunctionInterfaceNode
     }
   }
 
-  let ret: FIOutNode | null = null;
+  let ret: FIOutNode | FINothingNode;
   if (parseResult.ret) {
     if (parseResult.ret.pkind !== 'y') {
       throw new Error();
@@ -124,6 +124,10 @@ function transformParsedInterface(parseResult: any): StaticFunctionInterfaceNode
       kind: NodeKind.FIOut,
       idx: parseResult.ret.idx,
       name: nameNodeFromString(parseResult.ret.name),
+    };
+  } else {
+    ret = {
+      kind: NodeKind.FINothing,
     };
   }
 
@@ -224,11 +228,15 @@ export function functionInterfaceFromStaticNode(node: StaticFunctionInterfaceNod
   emitGroup();
 
   let returnedIdx: number | null = null;
-  if (node.ret) {
+  if (node.ret.kind === NodeKind.FIOut) {
     returnedIdx = node.ret.idx;
     outFromIdx.set(node.ret.idx, {
       name: node.ret.name.text ? node.ret.name.text : undefined,
     });
+  } else if (node.ret.kind === NodeKind.FINothing) {
+    // pass
+  } else {
+    throw new Error();
   }
 
   const streamParams: Array<StreamParam> = [];
@@ -346,7 +354,9 @@ export function functionInterfaceToStaticNode(iface: FunctionInterface): StaticF
   return {
     kind: NodeKind.StaticFunctionInterface,
     segs,
-    ret: (iface.returnedIdx === null) ? null : {
+    ret: (iface.returnedIdx === null) ? {
+      kind: NodeKind.FINothing,
+    } : {
       kind: NodeKind.FIOut,
       idx: iface.returnedIdx,
       name: {kind: NodeKind.Name, text: iface.outs[iface.returnedIdx].name || ''},
