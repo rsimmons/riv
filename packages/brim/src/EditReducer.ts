@@ -903,7 +903,7 @@ const INITIAL_MAIN: TreeFunctionDefinitionNode = {
   fid: generateFunctionId(),
   iface: {
     kind: NodeKind.StaticFunctionInterface,
-    segs: [], // no parameters
+    segs: [{kind: NodeKind.FIText, text: 'main'}], // no parameters
     ret: {kind: NodeKind.FINothing}, // void return
   },
   spids: [],
