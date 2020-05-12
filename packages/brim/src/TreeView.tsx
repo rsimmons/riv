@@ -1,5 +1,5 @@
 import React, { useState, useRef, useLayoutEffect, useEffect } from 'react';
-import { Node, FunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, StreamReferenceNode, NameNode, ApplicationNode, TreeFunctionDefinitionNode, isFunctionDefinitionNode, ApplicationSettings, generateStreamId } from './Tree';
+import { Node, FunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, StreamReferenceNode, NameNode, ApplicationNode, TreeFunctionDefinitionNode, isFunctionDefinitionNode, ApplicationSettings, generateStreamId, FunctionInterfaceNode, StaticFunctionInterfaceNode, FIOutNode, FINothingNode, FITmplSegNode, FIStreamParamNode } from './Tree';
 import './TreeView.css';
 import { StaticEnvironment, extendStaticEnv } from './EditReducer';
 import { TemplateLayout, TextSegment, GroupEditable } from './TemplateLayout';
@@ -628,6 +628,103 @@ const sizedBodyExpressionView = ({node, outNames, ctx}: {node: BodyExpressionNod
   }
 };
 
+const sizedFIStreamParamOrOutView = ({node, ctx}: {node: FIStreamParamNode | FIOutNode, ctx: TreeViewContext}): SizedReactNode => {
+  const layout: Array<LogicalGroup> = [];
+
+  layout.push({
+    segments: [
+      {
+        kind: 'nodes',
+        treeNode: node.name,
+        sizedReactNode: sizedNameView({node: node.name, ctx}),
+      },
+      // {
+      //   kind: 'text',
+      //   text: ':',
+      // },
+      // {
+      //   kind: 'text',
+      //   text: '(type)',
+      // },
+    ],
+  });
+
+  return sizedLogicalTextView({selectionNode: node, outwardNode: node, layout, tightGrouping: true, ctx});
+}
+
+const sizedFITmplSegView = ({node, ctx}: {node: FITmplSegNode, ctx: TreeViewContext}): SizedReactNode => {
+  switch (node.kind) {
+    case NodeKind.FIText:
+      return sizedSimpleNodeView({treeNode: node, content: node.text, bgColor: '#fff', ctx});
+
+    case NodeKind.FIStreamParam:
+      return sizedFIStreamParamOrOutView({node, ctx});
+
+    case NodeKind.FIFunctionParam:
+      return sizedSimpleNodeView({treeNode: node, content: 'fparam', bgColor: BOUND_NAME_BOX_COLOR, ctx});
+
+    case NodeKind.FIOut:
+      return sizedFIStreamParamOrOutView({node, ctx});
+
+    case NodeKind.FIBreak:
+      return sizedSimpleNodeView({treeNode: node, content: '|', bgColor: 'transparent', ctx});
+
+    default: {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const exhaustive: never = node; // this will cause a type error if we haven't handled all cases
+      throw new Error();
+    }
+  }
+}
+
+const sizedFIRetView = ({node, ctx}: {node: FIOutNode | FINothingNode, ctx: TreeViewContext}): SizedReactNode => {
+  switch (node.kind) {
+    case NodeKind.FIOut:
+      return sizedFIStreamParamOrOutView({node, ctx});
+
+    case NodeKind.FINothing:
+      return sizedSimpleNodeView({treeNode: node, content: 'nothing', bgColor: '#fff', ctx});
+
+    default: {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const exhaustive: never = node; // this will cause a type error if we haven't handled all cases
+      throw new Error();
+    }
+  }
+}
+
+const sizedStaticFunctionInterfaceView = ({node, ctx}: {node: StaticFunctionInterfaceNode, ctx: TreeViewContext}): SizedReactNode => {
+  const layout: Array<LogicalGroup> = [];
+
+  node.segs.forEach(seg => {
+    layout.push({
+      segments: [
+        {
+          kind: 'nodes',
+          treeNode: seg,
+          sizedReactNode: sizedFITmplSegView({node: seg, ctx}),
+        }
+      ],
+    });
+  });
+
+  layout.push({
+    segments: [
+      {
+        kind: 'text',
+        text: '→',
+      },
+      {
+        kind: 'nodes',
+        treeNode: node.ret,
+        sizedReactNode: sizedFIRetView({node: node.ret, ctx}),
+      },
+    ],
+  });
+
+  return sizedLogicalTextView({selectionNode: node, outwardNode: node, layout, tightGrouping: true, ctx});
+}
+
 export const TreeFunctionDefinitionView: React.FC<{node: TreeFunctionDefinitionNode, ctx: TreeViewContext}> = ({ node, ctx }) => {
   const newCtx: TreeViewContext = {
     ...ctx,
@@ -639,9 +736,7 @@ export const TreeFunctionDefinitionView: React.FC<{node: TreeFunctionDefinitionN
   switch (node.iface.kind) {
     case NodeKind.StaticFunctionInterface:
       iface = functionInterfaceFromStaticNode(node.iface);
-      ifaceReactNode = (
-        <div>ƒ (TODO: interface)</div>
-      );
+      ifaceReactNode = sizedStaticFunctionInterfaceView({node: node.iface, ctx}).reactNode;
       break;
 
     case NodeKind.DynamicFunctionInterface:
