@@ -13,7 +13,7 @@ export const StoragePanel: React.FC<{programInfo: ProgramInfo, mainDefinition: T
   const ls = window.localStorage;
   const KEY_PREFIX = 'rivprog:';
 
-  const [selectedProgramId, setSelectedProgramId] = useState();
+  const [selectedProgramId, setSelectedProgramId] = useState<string | undefined>();
   const [savedPrograms, setSavedPrograms] = useState<ReadonlyArray<Program>>([]);
 
   const refreshSavedPrograms = useCallback((setProgramId: string | undefined = undefined) => {
@@ -37,7 +37,7 @@ export const StoragePanel: React.FC<{programInfo: ProgramInfo, mainDefinition: T
     setSavedPrograms(sp);
 
     const savedProgramIds = sp.map(prog => prog.info.id);
-    if (!savedProgramIds.includes(newProgramId)) {
+    if ((newProgramId === undefined) || !savedProgramIds.includes(newProgramId)) {
       newProgramId = undefined;
     }
 
