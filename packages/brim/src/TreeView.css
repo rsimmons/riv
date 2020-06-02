@@ -36,11 +36,17 @@
   margin-left: 1.5em;
 }
 
+/*
 .TreeView-row-view-row-tight:not(:last-child) {
   margin-bottom: 0.1em;
 }
 
 .TreeView-row-view-row-loose:not(:last-child) {
+  margin-bottom: 0.5em;
+}
+*/
+
+.TreeView-logical-group-vert:not(:last-child) {
   margin-bottom: 0.5em;
 }
 
