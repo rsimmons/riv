@@ -1,6 +1,6 @@
 import genuid from './uid';
 import { State, ProgramInfo, SelTree } from './State';
-import { StreamID, FunctionID, generateStreamId, NodeKind, Node, FunctionDefinitionNode, StreamExpressionNode, isStreamExpressionNode, UndefinedLiteralNode, BodyExpressionNode, generateApplicationId, NameNode, TreeFunctionDefinitionNode, isFunctionDefinitionNode, generateFunctionId } from './Tree';
+import { StreamID, FunctionID, generateStreamId, NodeKind, Node, FunctionDefinitionNode, StreamExpressionNode, isStreamExpressionNode, UndefinedLiteralNode, BodyExpressionNode, generateApplicationId, NameNode, TreeFunctionDefinitionNode, isFunctionDefinitionNode, generateFunctionId, ApplicationOutNode } from './Tree';
 import { CompiledDefinition } from './CompiledDefinition';
 import { compileGlobalTreeDefinition, CompilationError } from './Compiler';
 import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
@@ -8,7 +8,6 @@ import { createLiveFunction } from './LiveFunction';
 import Environment from './Environment';
 import { iterChildren, visitChildren, replaceChild, transformChildren } from './Traversal';
 import globalNativeFunctions from './globalNatives';
-import { functionInterfaceFromStaticNode } from './FunctionInterface';
 
 // We don't make a discriminated union of specific actions, but maybe we could
 interface Action {
@@ -159,7 +158,7 @@ interface ExprStreamDefinition {
   sid: StreamID;
   name: string | undefined;
 
-  nameNode: NameNode;
+  node: ApplicationOutNode;
   expr: StreamExpressionNode;
 }
 
@@ -191,42 +190,39 @@ export function initStaticEnv(globalFunctions: ReadonlyArray<FunctionDefinitionN
 }
 
 export function extendStaticEnv(outer: StaticEnvironment, def: TreeFunctionDefinitionNode): StaticEnvironment {
-  if (def.iface.kind !== NodeKind.StaticFunctionInterface) {
-    throw new Error();
-  }
-
-  const iface = functionInterfaceFromStaticNode(def.iface);
-
   const streamEnv: Environment<StreamID, StreamDefinition> = new Environment(outer.streamEnv);
   const functionEnv: Environment<FunctionID, FunctionDefinitionNode> = new Environment(outer.functionEnv);
 
-  def.spids.forEach((sid, idx) => {
-    if (streamEnv.has(sid)) {
-      throw new Error();
+  def.iface.params.forEach(param => {
+    if (param.kind === NodeKind.FIStreamParam) {
+      if (streamEnv.has(param.pid)) {
+        throw new Error();
+      }
+      streamEnv.set(param.pid, {
+        kind: 'param',
+        sid: param.pid,
+        name: param.name.text,
+      });
     }
-    const sigParam = iface.streamParams[idx];
-    streamEnv.set(sid, {
-      kind: 'param',
-      sid,
-      name: sigParam.name,
-    });
   });
 
   const visit = (node: Node): void => {
     if (isStreamExpressionNode(node)) {
       if (node.kind === NodeKind.Application) {
-        node.outs.forEach(out => {
-          if (streamEnv.has(out.sid)) {
-            throw new Error('stream ids must be unique');
-          }
-          if (out.name) {
-            streamEnv.set(out.sid, {
-              kind: 'expr',
-              sid: out.sid,
-              name: out.name.text,
-              nameNode: out.name,
-              expr: node,
-            });
+        node.args.forEach(arg => {
+          if (arg.kind === NodeKind.ApplicationOut) {
+            if (streamEnv.has(arg.sid)) {
+              throw new Error('stream ids must be unique');
+            }
+            if (arg.text) {
+              streamEnv.set(arg.sid, {
+                kind: 'expr',
+                sid: arg.sid,
+                name: arg.text,
+                node: arg,
+                expr: node,
+              });
+            }
           }
         });
       }
@@ -277,7 +273,7 @@ export function getStaticEnvForSelected(selTree: SelTree, globalFunctions: Reado
   return selectedNodeEnv;
 }
 
-export function getReferentNameNodeOfSelected(selTree: SelTree, globalFunctions: ReadonlyArray<FunctionDefinitionNode>): NameNode | undefined {
+export function getReferentNodeOfSelected(selTree: SelTree, globalFunctions: ReadonlyArray<FunctionDefinitionNode>): ApplicationOutNode | undefined {
   const selectedEnv = getStaticEnvForSelected(selTree, globalFunctions);
 
   const node = selTree.selectedNode;
@@ -289,7 +285,7 @@ export function getReferentNameNodeOfSelected(selTree: SelTree, globalFunctions:
 
     switch (streamDef.kind) {
       case 'expr':
-        return streamDef.nameNode;
+        return streamDef.node;
 
       case 'param':
         return undefined;
@@ -398,7 +394,7 @@ export function computeParentLookup(root: Node): Map<Node, Node> {
 }
 
 function canBeginEditOnNode(node: Node) {
-  return isStreamExpressionNode(node) || (node.kind === NodeKind.Name);
+  return isStreamExpressionNode(node) || (node.kind === NodeKind.Name) || (node.kind === NodeKind.ApplicationOut);
 }
 
 function attemptBeginEditSelected(state: State): State {
@@ -542,6 +538,7 @@ function compileSelTree(selTree: SelTree, globalFunctions: ReadonlyArray<Functio
 }
 
 function updateExecution(state: State, newCompiledDefinition: CompiledDefinition): State {
+  console.log('newCompiledDefinition', newCompiledDefinition);
   if (state.execution) {
     const { updateCompiledDefinition } = state.execution;
 
@@ -552,7 +549,7 @@ function updateExecution(state: State, newCompiledDefinition: CompiledDefinition
     return state;
   } else {
     // There is no old state, so we need to create the long-lived stuff
-    const [liveStreamFunc, updateCompiledDefinition] = createLiveFunction(newCompiledDefinition, new Environment(), nativeFunctionEnvironment);
+    const [liveStreamFunc, updateCompiledDefinition] = createLiveFunction(newCompiledDefinition, nativeFunctionEnvironment);
     const context = createNullaryVoidRootExecutionContext(liveStreamFunc);
 
     context.update(); // first update that generally kicks off further async updates
@@ -902,72 +899,80 @@ const INITIAL_MAIN: TreeFunctionDefinitionNode = {
   kind: NodeKind.TreeFunctionDefinition,
   fid: generateFunctionId(),
   iface: {
-    kind: NodeKind.StaticFunctionInterface,
-    segs: [{kind: NodeKind.FIText, text: 'main'}], // no parameters
-    ret: {kind: NodeKind.FINothing}, // void return
+    kind: NodeKind.FunctionInterface,
+    name: {kind: NodeKind.Name, text: 'main'},
+    params: [],
+    ret: {kind: NodeKind.FIVoid},
   },
-  spids: [],
-  fpids: [],
+  bodyExprs: [
+    {
+      kind: NodeKind.NumberLiteral,
+      sid: generateStreamId(),
+      val: 123,
+    },
+  ],
+    /*
   bodyExprs: [
     {
       kind: NodeKind.Application,
       aid: generateApplicationId(),
-      outs: [{sid: mdId, name: {kind: NodeKind.Name, text: 'md'}}],
       fid: 'bind',
-      sargs: [
-        {
+      args: new Map([
+        [generateStreamId(), {
+          kind: NodeKind.ApplicationOut,
+          sid: mdId,
+          name: {kind: NodeKind.Name, text: 'md'},
+        }],
+        [generateStreamId(), {
           kind: NodeKind.Application,
           aid: generateApplicationId(),
-          outs: [{sid: generateStreamId(), name: null}],
           fid: 'mouseDown',
-          sargs: [],
-          fargs: [],
-        },
-      ],
-      fargs: [],
+          args: new Map(),
+          rid: generateStreamId(),
+        }],
+      ]),
+      rid: undefined,
     },
     {
       kind: NodeKind.Application,
       aid: generateApplicationId(),
-      outs: [],
       fid: 'showString',
-      sargs: [
-        {
+      args: new Map([
+        [generateStreamId(), {
           kind: NodeKind.Application,
           aid: generateApplicationId(),
-          outs: [{sid: generateStreamId(), name: null}],
           fid: 'ifte',
-          sargs: [
-            {
+          args: new Map([
+            [generateStreamId(), {
               kind: NodeKind.StreamReference,
               ref: mdId,
-            },
-            {
+            }],
+            [generateStreamId(), {
               kind: NodeKind.Application,
               aid: generateApplicationId(),
-              outs: [{sid: generateStreamId(), name: null}],
               fid: 'cos',
-              sargs: [
-                {
+              args: new Map([
+                [generateStreamId(), {
                   kind: NodeKind.NumberLiteral,
                   sid: generateStreamId(),
                   val: 10,
-                },
-              ],
-              fargs: [],
-            },
-            {
+                }],
+              ]),
+              rid: generateStreamId(),
+            }],
+            [generateStreamId(), {
               kind: NodeKind.NumberLiteral,
               sid: generateStreamId(),
               val: 20,
-            },
-          ],
-          fargs: [],
-        },
-      ],
-      fargs: [],
+            }],
+          ]),
+          rid: generateStreamId(),
+        }],
+      ]),
+      rid: undefined,
     },
   ],
+  */
 };
 
 export const initialState: State = initialStateFromDefinition(INITIAL_MAIN, {id: genuid(), name: 'my program'});

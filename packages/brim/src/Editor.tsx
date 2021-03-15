@@ -1,6 +1,6 @@
 import React, { useReducer, useRef, useLayoutEffect } from 'react';
 import { HotKeys, ObserveKeys } from "react-hotkeys";
-import { initialState, reducer, getReferentNameNodeOfSelected, initStaticEnv, getStaticEnvForSelected } from './EditReducer';
+import { initialState, reducer, getReferentNodeOfSelected, initStaticEnv, getStaticEnvForSelected } from './EditReducer';
 import { StoragePanel } from './StoragePanel';
 import './Editor.css';
 import { TreeFunctionDefinitionView, TreeViewContext } from './TreeView';
@@ -79,7 +79,7 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
 
   const displayedSelTree = state.editing ? state.editing.initSelTree : state.stableSelTree;
 
-  const referentNameNode = getReferentNameNodeOfSelected(displayedSelTree, state.globalFunctions);
+  const referentNameNode = getReferentNodeOfSelected(displayedSelTree, state.globalFunctions);
 
   // Determine if we should focus the selected node. This is hacky, but don't know better way to handle.
   const editorElem = useRef<HTMLDivElement>(null);

@@ -12,15 +12,7 @@ export function streamExprReturnedId(node: StreamExpressionNode): StreamID | und
       return node.ref;
 
     case NodeKind.Application:
-      // NOTE: This is hacky, but works.
-      //  We could be more robust by looking up the function definition and checking its signature.
-      //  That would require having the environment available.
-      for (const out of node.outs) {
-        if (!out.name) {
-          return out.sid;
-        }
-      }
-      return undefined;
+      return node.rid;
 
     default: {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars

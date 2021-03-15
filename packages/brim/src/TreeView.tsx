@@ -1,11 +1,11 @@
 import React, { useState, useRef, useLayoutEffect, useEffect } from 'react';
-import { Node, FunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, StreamReferenceNode, NameNode, ApplicationNode, TreeFunctionDefinitionNode, isFunctionDefinitionNode, ApplicationSettings, generateStreamId, FunctionInterfaceNode, StaticFunctionInterfaceNode, FIOutNode, FINothingNode, FITmplSegNode, FIStreamParamNode } from './Tree';
+import { Node, FunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, StreamReferenceNode, NameNode, ApplicationNode, TreeFunctionDefinitionNode, isFunctionDefinitionNode, ApplicationSettings, generateStreamId, FIStreamParamNode, FIReturnNode, FIVoidNode, FunctionInterfaceNode, FIOutParamNode, FIParamNode, ApplicationArgNode, ApplicationOutNode } from './Tree';
 import './TreeView.css';
 import { StaticEnvironment, extendStaticEnv } from './EditReducer';
 import { TemplateLayout, TextSegment, GroupEditable } from './TemplateLayout';
 import quotesIcon from './icons/quotes.svg';
 import booleanIcon from './icons/boolean.svg';
-import { functionInterfaceFromStaticNode, DynamicInterfaceEditAction, DynamicInterfaceChange, FunctionInterface, defaultTreeImplFromFunctionInterface } from './FunctionInterface';
+import { defaultTreeImplFromFunctionInterface, DynamicInterfaceEditAction, DynamicInterfaceChange } from './FunctionInterface';
 
 const BOUND_NAME_BOX_COLOR = '#d1e6ff';
 const STREAM_REFERENCE_BOX_COLOR = '#a1cdff';
@@ -369,6 +369,10 @@ const sizedNameView = ({node, ctx}: {node: NameNode, ctx: TreeViewContext}): Siz
   return sizedSimpleNodeView({treeNode: node, content: node.text || '\xa0\xa0\xa0\xa0', bgColor: BOUND_NAME_BOX_COLOR, ctx});
 };
 
+const sizedApplicationOutView = ({node, ctx}: {node: ApplicationOutNode, ctx: TreeViewContext}): SizedReactNode => {
+  return sizedSimpleNodeView({treeNode: node, content: node.text || '\xa0\xa0\xa0\xa0', bgColor: BOUND_NAME_BOX_COLOR, ctx});
+};
+
 const sizedStreamReferenceView = ({node, ctx}: {node: StreamReferenceNode, ctx: TreeViewContext}): SizedReactNode => {
   const streamDef = ctx.staticEnv.streamEnv.get(node.ref);
   if (!streamDef) {
@@ -441,6 +445,47 @@ const sizedApplicationView = ({node, ctx}: {node: ApplicationNode, ctx: TreeView
     throw new Error();
   }
 
+  const sizedArgNode = (argNode: ApplicationArgNode): SizedReactNode => {
+    if (isFunctionDefinitionNode(argNode)) {
+      return sizedFunctionDefinitionView({node: argNode, ctx});
+    } else if (isStreamExpressionNode(argNode)) {
+      return sizedStreamExpressionView({node: argNode, ctx});
+    } else if (argNode.kind === NodeKind.ApplicationOut) {
+      return sizedApplicationOutView({node: argNode, ctx});
+    } else {
+      throw new Error();
+    }
+  };
+
+  const layout: Array<LogicalGroup> = [];
+  layout.push({
+    segments: [{
+      kind: 'text',
+      text: funcDef.iface.name.text,
+    }],
+  });
+  funcDef.iface.params.forEach(param => {
+    const argNode = node.args.get(param.pid);
+    if (!argNode) {
+      throw new Error();
+    }
+    layout.push({
+      segments: [{
+        kind: 'nodes',
+        treeNode: argNode,
+        sizedReactNode: sizedArgNode(argNode),
+      }],
+    });
+  });
+  return sizedLogicalTextView({
+    selectionNode: node,
+    outwardNode: node,
+    layout,
+    tightGrouping: true,
+    ctx,
+  });
+
+/*
   const nodeMap: Map<string, TreeAndSizedNodes> = new Map();
 
   node.sargs.forEach((sarg, idx) => {
@@ -464,17 +509,17 @@ const sizedApplicationView = ({node, ctx}: {node: ApplicationNode, ctx: TreeView
     }
   });
 
-  switch (funcDef.iface.kind) {
-    case NodeKind.StaticFunctionInterface:
-      const iface = functionInterfaceFromStaticNode(funcDef.iface);
-      return sizedLogicalTextView({
-        selectionNode: node,
-        outwardNode: node,
-        layout: templateToLogicalLayout(iface.tmpl, nodeMap),
-        tightGrouping: true,
-        ctx,
-      });
+  const iface = functionInterfaceFromStaticNode(funcDef.iface);
+  return sizedLogicalTextView({
+    selectionNode: node,
+    outwardNode: node,
+    layout: templateToLogicalLayout(iface.tmpl, nodeMap),
+    tightGrouping: true,
+    ctx,
+  });
+*/
 
+/*
     case NodeKind.DynamicFunctionInterface: {
       const ifaceNode = funcDef.iface;
       const tifspec = ifaceNode.getIface(node.settings);
@@ -548,13 +593,7 @@ const sizedApplicationView = ({node, ctx}: {node: ApplicationNode, ctx: TreeView
         return logicalView;
       }
     }
-
-    default: {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const exhaustive: never = funcDef.iface; // this will cause a type error if we haven't handled all cases
-      throw new Error();
-    }
-  }
+*/
 };
 
 const sizedStreamExpressionView = ({node, ctx}: {node: StreamExpressionNode, ctx: TreeViewContext}): SizedReactNode => {
@@ -596,7 +635,7 @@ const sizedBodyExpressionView = ({node, outNames, ctx}: {node: BodyExpressionNod
   } else if (isFunctionDefinitionNode(node)) {
     return sizedFunctionDefinitionView({node, ctx});
   } else if (node.kind === NodeKind.YieldExpression) {
-    const displayedName = (outNames[node.idx] === undefined) ? node.idx.toString() : outNames[node.idx];
+    const displayedName = '<out>'; // (outNames[node.idx] === undefined) ? node.idx.toString() : outNames[node.idx];
     return sizedLogicalTextView({
       selectionNode: node,
       outwardNode: node,
@@ -628,11 +667,15 @@ const sizedBodyExpressionView = ({node, outNames, ctx}: {node: BodyExpressionNod
   }
 };
 
-const sizedFIStreamParamOrOutView = ({node, ctx}: {node: FIStreamParamNode | FIOutNode, ctx: TreeViewContext}): SizedReactNode => {
+const sizedFIStreamView = ({node, ctx}: {node: FIStreamParamNode | FIOutParamNode, ctx: TreeViewContext}): SizedReactNode => {
   const layout: Array<LogicalGroup> = [];
 
   layout.push({
     segments: [
+      {
+        kind: 'text',
+        text: 'param',
+      },
       {
         kind: 'nodes',
         treeNode: node.name,
@@ -652,22 +695,16 @@ const sizedFIStreamParamOrOutView = ({node, ctx}: {node: FIStreamParamNode | FIO
   return sizedLogicalTextView({selectionNode: node, outwardNode: node, layout, tightGrouping: true, ctx});
 }
 
-const sizedFITmplSegView = ({node, ctx}: {node: FITmplSegNode, ctx: TreeViewContext}): SizedReactNode => {
+const sizedFIParamView = ({node, ctx}: {node: FIParamNode, ctx: TreeViewContext}): SizedReactNode => {
   switch (node.kind) {
-    case NodeKind.FIText:
-      return sizedSimpleNodeView({treeNode: node, content: node.text, bgColor: '#fff', ctx});
-
     case NodeKind.FIStreamParam:
-      return sizedFIStreamParamOrOutView({node, ctx});
+      return sizedFIStreamView({node, ctx});
 
     case NodeKind.FIFunctionParam:
       return sizedSimpleNodeView({treeNode: node, content: 'fparam', bgColor: BOUND_NAME_BOX_COLOR, ctx});
 
-    case NodeKind.FIOut:
-      return sizedFIStreamParamOrOutView({node, ctx});
-
-    case NodeKind.FIBreak:
-      return sizedSimpleNodeView({treeNode: node, content: '|', bgColor: 'transparent', ctx});
+    case NodeKind.FIOutParam:
+      return sizedFIStreamView({node, ctx});
 
     default: {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -677,12 +714,12 @@ const sizedFITmplSegView = ({node, ctx}: {node: FITmplSegNode, ctx: TreeViewCont
   }
 }
 
-const sizedFIRetView = ({node, ctx}: {node: FIOutNode | FINothingNode, ctx: TreeViewContext}): SizedReactNode => {
+const sizedFIRetView = ({node, ctx}: {node: FIReturnNode | FIVoidNode, ctx: TreeViewContext}): SizedReactNode => {
   switch (node.kind) {
-    case NodeKind.FIOut:
-      return sizedFIStreamParamOrOutView({node, ctx});
+    case NodeKind.FIReturn:
+      return sizedSimpleNodeView({treeNode: node, content: 'something', bgColor: '#fff', ctx});
 
-    case NodeKind.FINothing:
+    case NodeKind.FIVoid:
       return sizedSimpleNodeView({treeNode: node, content: 'nothing', bgColor: '#fff', ctx});
 
     default: {
@@ -693,16 +730,26 @@ const sizedFIRetView = ({node, ctx}: {node: FIOutNode | FINothingNode, ctx: Tree
   }
 }
 
-const sizedStaticFunctionInterfaceView = ({node, ctx}: {node: StaticFunctionInterfaceNode, ctx: TreeViewContext}): SizedReactNode => {
+const sizedFunctionInterfaceView = ({node, ctx}: {node: FunctionInterfaceNode, ctx: TreeViewContext}): SizedReactNode => {
   const layout: Array<LogicalGroup> = [];
 
-  node.segs.forEach(seg => {
+  layout.push({
+    segments: [
+      {
+        kind: 'nodes',
+        treeNode: node.name,
+        sizedReactNode: sizedNameView({node: node.name, ctx}),
+      }
+    ],
+  });
+
+  node.params.forEach(param => {
     layout.push({
       segments: [
         {
           kind: 'nodes',
-          treeNode: seg,
-          sizedReactNode: sizedFITmplSegView({node: seg, ctx}),
+          treeNode: param,
+          sizedReactNode: sizedFIParamView({node: param, ctx}),
         }
       ],
     });
@@ -731,32 +778,15 @@ export const TreeFunctionDefinitionView: React.FC<{node: TreeFunctionDefinitionN
     staticEnv: extendStaticEnv(ctx.staticEnv, node),
   };
 
-  let ifaceReactNode: React.ReactNode;
-  let iface: FunctionInterface;
-  switch (node.iface.kind) {
-    case NodeKind.StaticFunctionInterface:
-      iface = functionInterfaceFromStaticNode(node.iface);
-      ifaceReactNode = sizedStaticFunctionInterfaceView({node: node.iface, ctx}).reactNode;
-      break;
-
-    case NodeKind.DynamicFunctionInterface:
-      throw new Error('unsupported');
-
-    default: {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const exhaustive: never = node.iface; // this will cause a type error if we haven't handled all cases
-      throw new Error('unreachable');
-    }
-  }
+  const ifaceReactNode: React.ReactNode = sizedFunctionInterfaceView({node: node.iface, ctx}).reactNode;
 
   const layout: Array<LogicalGroup> = [];
-
   node.bodyExprs.forEach(bodyExpr => {
     layout.push({
       segments: [{
         kind: 'nodes',
         treeNode: bodyExpr,
-        sizedReactNode: sizedBodyExpressionView({node: bodyExpr, outNames: iface.outs.map(out => out.name), ctx: newCtx}),
+        sizedReactNode: sizedBodyExpressionView({node: bodyExpr, outNames: [] /*TODO*/, ctx: newCtx}),
       }],
     });
   });

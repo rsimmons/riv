@@ -1,5 +1,5 @@
 import genuid from './uid';
-import { FunctionInterface, DynamicInterfaceEditAction, DynamicInterfaceChange } from './FunctionInterface';
+import { Stream } from 'stream';
 
 /**
  * IDS
@@ -43,27 +43,30 @@ export enum NodeKind {
   BooleanLiteral = 'bool',
   StreamReference = 'sref',
   Application = 'app',
+  ApplicationOut = 'appout',
   NativeFunctionDefinition = 'nfdef',
   YieldExpression = 'yield',
   ValueTypeApp = 'vtyapp',
   ValueTypeVar = 'vtyvar',
-  FIText = 'fitext',
   FIStreamParam = 'fisparam',
   FIFunctionParam = 'fifparam',
-  FIOut = 'fiout',
-  FIBreak = 'fibreak',
-  FINothing = 'finothing',
-  StaticFunctionInterface = 'sfi',
-  DynamicFunctionInterface = 'dfi',
+  FIOutParam = 'fioparam',
+  FIReturn = 'firet',
+  FIVoid = 'fivoid',
+  FunctionInterface = 'fiface',
   TreeFunctionDefinition = 'tfdef',
 }
 
 /**
  * COMMON NODES
  */
-export interface NameNode {
-  readonly kind: NodeKind.Name;
+export interface TextNode {
   readonly text: string;
+}
+
+export interface NameNode extends TextNode {
+  readonly kind: NodeKind.Name;
+  // gets "text" field from TextNode
 }
 
 /**
@@ -102,20 +105,27 @@ export interface StreamReferenceNode {
   readonly ref: StreamID; // the stream id we are referencing
 }
 
-export interface ApplicationOut {
+// This is the only way that local streams (other than parameters) get bound to names
+export interface ApplicationOutNode extends TextNode {
+  readonly kind: NodeKind.ApplicationOut;
   readonly sid: StreamID;
-  readonly name: NameNode | null; // if this output was given a local name
+  // gets "text" field from TextNode
+}
+
+export type ApplicationArgNode = StreamExpressionNode | FunctionDefinitionNode | ApplicationOutNode;
+export function isApplicationArgNode(node: Node): node is ApplicationArgNode {
+  return isStreamExpressionNode(node) || isFunctionDefinitionNode(node) || (node.kind === NodeKind.ApplicationOut);
 }
 
 export type ApplicationSettings = any;
+export type ApplicationArgs = ReadonlyMap<ParameterID, ApplicationArgNode>;
 
 export interface ApplicationNode {
   readonly kind: NodeKind.Application;
   readonly aid: ApplicationID;
-  readonly outs: ReadonlyArray<ApplicationOut>; // array since there can be multiple yields
   readonly fid: FunctionID; // function being applied
-  readonly sargs: ReadonlyArray<StreamExpressionNode>;
-  readonly fargs: ReadonlyArray<FunctionDefinitionNode>;
+  readonly args: ApplicationArgs; // includes out-arguments
+  readonly rid: StreamID | undefined; // id that we put return into, or undefined if void
   readonly settings?: ApplicationSettings;
 }
 
@@ -147,64 +157,52 @@ export type ValueTypeNode = ValueTypeAppNode | ValueTypeVarNode;
  * FUNCTION INTERFACE NODES
  */
 
-export interface FITextNode {
-  readonly kind: NodeKind.FIText;
-  readonly text: string;
-}
+export type ParameterID = StreamID | FunctionID;
 
 export interface FIStreamParamNode {
   readonly kind: NodeKind.FIStreamParam;
-  readonly idx: number;
+  readonly pid: StreamID;
   readonly name: NameNode;
-  // readonly type: ValueTypeNode;
-}
-
-export interface FIOutNode {
-  readonly kind: NodeKind.FIOut;
-  readonly idx: number;
-  readonly name: NameNode;
-  // readonly type: ValueTypeNode;
+  // TODO: type
 }
 
 export interface FIFunctionParamNode {
   readonly kind: NodeKind.FIFunctionParam;
-  readonly idx: number;
-  readonly iface: StaticFunctionInterfaceNode;
+  readonly pid: FunctionID;
+  readonly name: NameNode;
+  readonly iface: FunctionInterfaceNode;
 }
 
-export interface FIBreakNode {
-  readonly kind: NodeKind.FIBreak;
+export interface FIOutParamNode {
+  readonly kind: NodeKind.FIOutParam;
+  readonly pid: StreamID;
+  readonly name: NameNode;
+  // TODO: type
 }
 
-export type FITmplSegNode = FITextNode | FIStreamParamNode | FIOutNode | FIFunctionParamNode | FIBreakNode;
-export function isFITmplSegNode(node: Node): node is FITmplSegNode {
-  return (node.kind === NodeKind.FIText) || (node.kind === NodeKind.FIStreamParam) || (node.kind === NodeKind.FIOut) || (node.kind === NodeKind.FIFunctionParam) || (node.kind === NodeKind.FIBreak);
+export type FIParamNode = FIStreamParamNode | FIFunctionParamNode | FIOutParamNode;
+export function isFIParamNode(node: Node): node is FIParamNode {
+  return (node.kind === NodeKind.FIStreamParam) || (node.kind === NodeKind.FIFunctionParam) || (node.kind === NodeKind.FIOutParam);
+}
+
+export interface FIReturnNode {
+  readonly kind: NodeKind.FIReturn;
+  // TODO: type
 }
 
 // this is like "void"
-export interface FINothingNode {
-  readonly kind: NodeKind.FINothing;
+export interface FIVoidNode {
+  readonly kind: NodeKind.FIVoid;
 }
 
-export interface StaticFunctionInterfaceNode {
-  readonly kind: NodeKind.StaticFunctionInterface;
-  readonly segs: ReadonlyArray<FITmplSegNode>;
-  readonly ret: FIOutNode | FINothingNode;
+export interface FunctionInterfaceNode {
+  readonly kind: NodeKind.FunctionInterface;
+  readonly name: NameNode;
+  readonly params: ReadonlyArray<FIParamNode>;
+  readonly ret: FIReturnNode | FIVoidNode;
+  readonly customTmpl?: NameNode;
+  readonly createCustomUI?: (underNode: HTMLElement, settings: ApplicationSettings, onChange: (change: ApplicationSettings) => void) => (() => void); // returns "shutdown" closure
 }
-
-export interface DynamicFunctionInterfaceNode {
-  readonly kind: NodeKind.DynamicFunctionInterface;
-  // TODO: these funcs should be in a JS code string, props on one object, so we can store them?
-  readonly getIface: (settings: ApplicationSettings) => FunctionInterface;
-  readonly onEdit?: (action: DynamicInterfaceEditAction, groupId: number, settings: ApplicationSettings) => DynamicInterfaceChange;
-  readonly createCustomUI?: (underNode: HTMLElement, settings: ApplicationSettings, onChange: (change: DynamicInterfaceChange) => void) => (() => void); // returns "shutdown" closure
-}
-
-export type FunctionInterfaceNode = StaticFunctionInterfaceNode | DynamicFunctionInterfaceNode;
-export function isFunctionInterfaceNode(node: Node): node is FunctionInterfaceNode {
-  return (node.kind === NodeKind.StaticFunctionInterface) || (node.kind === NodeKind.DynamicFunctionInterface);
-}
-
 
 /**
  * FUNCTION NODES
@@ -222,7 +220,7 @@ export interface NativeFunctionDefinitionNode {
 
 export interface YieldExpressionNode {
   readonly kind: NodeKind.YieldExpression;
-  readonly idx: number;
+  readonly out: StreamID | null; // if null, this is the return yield, if StreamID, it is the ParameterID of an out-param
   readonly expr: StreamExpressionNode;
 }
 
@@ -236,8 +234,6 @@ export interface TreeFunctionDefinitionNode {
   readonly fid: FunctionID;
   readonly iface: FunctionInterfaceNode;
 
-  readonly spids: ReadonlyArray<StreamID>;
-  readonly fpids: ReadonlyArray<FunctionID>;
   readonly bodyExprs: ReadonlyArray<BodyExpressionNode>;
 }
 
@@ -246,4 +242,4 @@ export function isFunctionDefinitionNode(node: Node): node is FunctionDefinition
   return (node.kind === NodeKind.NativeFunctionDefinition) || (node.kind === NodeKind.TreeFunctionDefinition);
 }
 
-export type Node = NameNode | BodyExpressionNode | FunctionInterfaceNode | FITmplSegNode | FINothingNode;
+export type Node = NameNode | BodyExpressionNode | ApplicationOutNode | FunctionInterfaceNode | FIParamNode | FIReturnNode | FIVoidNode;

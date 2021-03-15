@@ -22,8 +22,7 @@
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
-    "deploy": "react-scripts build && gh-pages -d build --dest brim-demo",
-    "build-parser": "cd src && pegjs parseStringTextualFunctionInterfaceSpec.pegjs"
+    "deploy": "react-scripts build && gh-pages -d build --dest brim-demo"
   },
   "eslintConfig": {
     "extends": "react-app"
@@ -41,7 +40,6 @@
     ]
   },
   "devDependencies": {
-    "gh-pages": "^2.0.1",
-    "pegjs": "^0.10.0"
+    "gh-pages": "^2.0.1"
   }
 }

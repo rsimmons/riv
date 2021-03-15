@@ -1,5 +1,5 @@
 // import { Path, pathIsPrefix } from './State';
-import { NodeKind, Node, NameNode, StreamExpressionNode, isStreamExpressionNode, BodyExpressionNode, isBodyExpressionNode, ApplicationOut, FunctionDefinitionNode, isFunctionDefinitionNode, FunctionInterfaceNode, isFunctionInterfaceNode, StaticFunctionInterfaceNode, FIOutNode, FITmplSegNode, isFITmplSegNode, FINothingNode } from './Tree';
+import { NodeKind, Node, NameNode, StreamExpressionNode, isStreamExpressionNode, BodyExpressionNode, isBodyExpressionNode, ApplicationOutNode, FunctionDefinitionNode, isFunctionDefinitionNode, FunctionInterfaceNode, ApplicationArgNode, ApplicationArgs, isApplicationArgNode, FIReturnNode, FIVoidNode, FIParamNode, isFIParamNode } from './Tree';
 
 export function firstChild(node: Node): Node | undefined {
   const res = iterChildren(node).next();
@@ -14,25 +14,19 @@ export function lastChild(node: Node): Node | undefined {
 export function* iterChildren(node: Node): Generator<Node, void, undefined> {
   switch (node.kind) {
     case NodeKind.Name:
+    case NodeKind.ApplicationOut:
     case NodeKind.UndefinedLiteral:
     case NodeKind.NumberLiteral:
     case NodeKind.TextLiteral:
     case NodeKind.BooleanLiteral:
     case NodeKind.StreamReference:
-    case NodeKind.FIText:
-    case NodeKind.FIBreak:
-    case NodeKind.FINothing:
+    case NodeKind.FIVoid:
+    case NodeKind.FIReturn:
       // no children
       break;
 
     case NodeKind.Application:
-      for (const out of node.outs) {
-        if (out.name) {
-          yield out.name;
-        }
-      }
-      yield* node.sargs;
-      yield* node.fargs;
+      yield* node.args.values();
       break;
 
     case NodeKind.YieldExpression:
@@ -40,22 +34,19 @@ export function* iterChildren(node: Node): Generator<Node, void, undefined> {
       break;
 
     case NodeKind.FIStreamParam:
-    case NodeKind.FIOut:
+    case NodeKind.FIOutParam:
       yield node.name;
       break;
 
     case NodeKind.FIFunctionParam:
+      yield node.name;
       yield node.iface;
       break;
 
-    case NodeKind.StaticFunctionInterface:
-      yield* node.segs;
-      if (node.ret) {
-        yield node.ret;
-      }
-      break;
-
-    case NodeKind.DynamicFunctionInterface:
+    case NodeKind.FunctionInterface:
+      yield node.name;
+      yield* node.params;
+      yield node.ret;
       break;
 
     case NodeKind.NativeFunctionDefinition:
@@ -83,52 +74,38 @@ function visitArray<N, C>(nodeArr: ReadonlyArray<Node>, visit: (node: Node, ctx:
   }
 }
 
-function visitOuts<N, C>(outs: ReadonlyArray<ApplicationOut>, visit: (node: Node, ctx: C) => N | undefined, ctx: C): N | undefined {
-  for (const out of outs) {
-    if (out.name) {
-      const result = visit(out.name, ctx);
-      if (result) {
-        return result;
-      }
-    }
-  }
-}
-
 /**
  * Note that this aborts if the visit function returns a truthy value.
  */
 export function visitChildren<N, C>(node: Node, visit: (node: Node, ctx: C) => N | undefined, ctx: C): N | undefined {
   switch (node.kind) {
     case NodeKind.Name:
+    case NodeKind.ApplicationOut:
     case NodeKind.UndefinedLiteral:
     case NodeKind.NumberLiteral:
     case NodeKind.TextLiteral:
     case NodeKind.BooleanLiteral:
     case NodeKind.StreamReference:
-    case NodeKind.FIText:
-    case NodeKind.FIBreak:
-    case NodeKind.FINothing:
+    case NodeKind.FIReturn:
+    case NodeKind.FIVoid:
       // no children
       return;
 
     case NodeKind.Application:
-      return visitOuts(node.outs, visit, ctx) || visitArray(node.sargs, visit, ctx) || visitArray(node.fargs, visit, ctx);
+      return visitArray([...node.args.values()], visit, ctx);
 
     case NodeKind.YieldExpression:
       return visit(node.expr, ctx);
 
     case NodeKind.FIStreamParam:
-    case NodeKind.FIOut:
+    case NodeKind.FIOutParam:
       return visit(node.name, ctx);
 
     case NodeKind.FIFunctionParam:
-      return visit(node.iface, ctx);
+      return visit(node.name, ctx) || visit(node.iface, ctx);
 
-    case NodeKind.StaticFunctionInterface:
-      return visitArray(node.segs, visit, ctx) || (node.ret ? visit(node.ret, ctx) : undefined);
-
-    case NodeKind.DynamicFunctionInterface:
-      return;
+    case NodeKind.FunctionInterface:
+      return visit(node.name, ctx) || visitArray(node.params, visit, ctx) || visit(node.ret, ctx);
 
     case NodeKind.NativeFunctionDefinition:
       return visit(node.iface, ctx);
@@ -156,40 +133,27 @@ export function transformChildren<C>(node: Node, transform: (node: Node, ctx: C)
 
   const xIface = (n: FunctionInterfaceNode): FunctionInterfaceNode => {
     const tn = transform(n, ctx);
-    if (!isFunctionInterfaceNode(tn)) {
+    if (tn.kind !== NodeKind.FunctionInterface) {
       throw new Error();
     }
     return tn;
   };
 
-  const xStaticIface = (n: StaticFunctionInterfaceNode): StaticFunctionInterfaceNode => {
-    const tn = transform(n, ctx);
-    if (tn.kind !== NodeKind.StaticFunctionInterface) {
-      throw new Error();
-    }
-    return tn;
-  };
-
-  const xOuts = (outs: ReadonlyArray<ApplicationOut>): ReadonlyArray<ApplicationOut> => {
+  const xAppArgs = (args: ApplicationArgs): ApplicationArgs => {
     let changed = false;
-    const newOuts = outs.map(out => {
-      if (out.name) {
-        const newName = transform(out.name, ctx);
-        if (newName.kind !== NodeKind.Name) {
-          throw new Error();
-        }
-        if (newName !== out.name) {
-          changed = true;
-        }
-        return {
-          ...out,
-          name: newName,
-        };
-      } else {
-        return out;
+    const newArgs: Map<string, ApplicationArgNode> = new Map();
+    args.forEach((value, key) => {
+      const nval = transform(value, ctx);
+      if (!isApplicationArgNode(nval)) {
+        throw new Error();
       }
+      if (nval !== value) {
+        changed = true;
+      }
+      newArgs.set(key, nval);
+      return nval;
     });
-    return changed ? newOuts : outs;
+    return changed ? newArgs : args;
   };
 
   const xStreamExpr = (n: StreamExpressionNode): StreamExpressionNode => {
@@ -198,21 +162,6 @@ export function transformChildren<C>(node: Node, transform: (node: Node, ctx: C)
       throw new Error();
     }
     return tn;
-  };
-
-  const xStreamExprArr = (arr: ReadonlyArray<StreamExpressionNode>): ReadonlyArray<StreamExpressionNode> => {
-    let changed = false;
-    const newArr = arr.map(el => {
-      const nel = transform(el, ctx);
-      if (!isStreamExpressionNode(nel)) {
-        throw new Error();
-      }
-      if (nel !== el) {
-        changed = true;
-      }
-      return nel;
-    });
-    return changed ? newArr : arr;
   };
 
   const xBodyExprArr = (arr: ReadonlyArray<BodyExpressionNode>): ReadonlyArray<BodyExpressionNode> => {
@@ -230,11 +179,11 @@ export function transformChildren<C>(node: Node, transform: (node: Node, ctx: C)
     return changed ? newArr : arr;
   };
 
-  const xFuncDefArr = (arr: ReadonlyArray<FunctionDefinitionNode>): ReadonlyArray<FunctionDefinitionNode> => {
+  const xParams = (arr: ReadonlyArray<FIParamNode>): ReadonlyArray<FIParamNode> => {
     let changed = false;
     const newArr = arr.map(el => {
       const nel = transform(el, ctx);
-      if (!isFunctionDefinitionNode(nel)) {
+      if (!isFIParamNode(nel)) {
         throw new Error();
       }
       if (nel !== el) {
@@ -245,24 +194,9 @@ export function transformChildren<C>(node: Node, transform: (node: Node, ctx: C)
     return changed ? newArr : arr;
   };
 
-  const xTmplSegArr = (arr: ReadonlyArray<FITmplSegNode>): ReadonlyArray<FITmplSegNode> => {
-    let changed = false;
-    const newArr = arr.map(el => {
-      const nel = transform(el, ctx);
-      if (!isFITmplSegNode(nel)) {
-        throw new Error();
-      }
-      if (nel !== el) {
-        changed = true;
-      }
-      return nel;
-    });
-    return changed ? newArr : arr;
-  };
-
-  const xRet = (n: FIOutNode | FINothingNode): FIOutNode | FINothingNode => {
+  const xRet = (n: FIReturnNode | FIVoidNode): FIReturnNode | FIVoidNode => {
     const tn = transform(n, ctx);
-    if ((tn.kind !== NodeKind.FIOut) && (tn.kind !== NodeKind.FINothing)) {
+    if ((tn.kind !== NodeKind.FIReturn) && (tn.kind !== NodeKind.FIVoid)) {
       throw new Error();
     }
     return tn;
@@ -270,29 +204,25 @@ export function transformChildren<C>(node: Node, transform: (node: Node, ctx: C)
 
   switch (node.kind) {
     case NodeKind.Name:
+    case NodeKind.ApplicationOut:
     case NodeKind.UndefinedLiteral:
     case NodeKind.NumberLiteral:
     case NodeKind.TextLiteral:
     case NodeKind.BooleanLiteral:
     case NodeKind.StreamReference:
-    case NodeKind.FIText:
-    case NodeKind.FIBreak:
-    case NodeKind.FINothing:
+    case NodeKind.FIReturn:
+    case NodeKind.FIVoid:
       // no children to transform
       return node;
 
     case NodeKind.Application: {
-      const newOuts = xOuts(node.outs);
-      const newSargs = xStreamExprArr(node.sargs);
-      const newFargs = xFuncDefArr(node.fargs);
-      if ((newOuts === node.outs) && (newSargs === node.sargs) && (newFargs === node.fargs)) {
+      const newArgs = xAppArgs(node.args);
+      if (newArgs === node.args) {
         return node;
       } else {
         return {
           ...node,
-          outs: newOuts,
-          sargs: newSargs,
-          fargs: newFargs,
+          args: newArgs,
         };
       }
     }
@@ -310,7 +240,7 @@ export function transformChildren<C>(node: Node, transform: (node: Node, ctx: C)
     }
 
     case NodeKind.FIStreamParam:
-    case NodeKind.FIOut:
+    case NodeKind.FIOutParam: {
       const newName = xName(node.name);
       if (newName === node.name) {
         return node;
@@ -320,33 +250,37 @@ export function transformChildren<C>(node: Node, transform: (node: Node, ctx: C)
           name: newName,
         };
       }
+    }
 
-    case NodeKind.FIFunctionParam:
-      const newIface = xStaticIface(node.iface);
-      if (newIface === node.iface) {
+    case NodeKind.FIFunctionParam: {
+      const newName = xName(node.name);
+      const newIface = xIface(node.iface);
+      if ((newName === node.name) && (newIface === node.iface)) {
         return node;
       } else {
         return {
           ...node,
+          name: newName,
           iface: newIface,
         };
       }
+    }
 
-    case NodeKind.StaticFunctionInterface:
-      const newSegs = xTmplSegArr(node.segs);
+    case NodeKind.FunctionInterface: {
+      const newName = xName(node.name);
+      const newParams = xParams(node.params);
       const newRet = xRet(node.ret);
-      if ((newSegs === node.segs) && (newRet === node.ret)) {
+      if ((newName === node.name) && (newParams === node.params) && (newRet === node.ret)) {
         return node;
       } else {
         return {
           ...node,
-          segs: newSegs,
+          name: newName,
+          params: newParams,
           ret: newRet,
         };
       }
-
-    case NodeKind.DynamicFunctionInterface:
-      return node;
+    }
 
     case NodeKind.NativeFunctionDefinition: {
       const newIface = xIface(node.iface);
@@ -431,49 +365,24 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
     });
   };
 
-  const replaceOuts = (outs: ReadonlyArray<ApplicationOut>): ReadonlyArray<ApplicationOut> => {
-    return outs.map((out: ApplicationOut) => {
-      if (out.name === oldChild) {
-        if (newChild.kind !== NodeKind.Name) {
-          throw new Error();
-        }
-        return {
-          ...out,
-          name: newChild,
-        };
-      } else {
-        return out;
-      }
-    });
-  };
-
-  const replaceFuncDefArr = (arr: ReadonlyArray<FunctionDefinitionNode>): ReadonlyArray<FunctionDefinitionNode> => {
-    return arr.map((n: FunctionDefinitionNode) => {
+  const replaceAppArgs = (args: ApplicationArgs): ApplicationArgs => {
+    const newArgs: Map<string, ApplicationArgNode> = new Map();
+    args.forEach((n, key) => {
       if (n === oldChild) {
-        if (!isFunctionDefinitionNode(newChild)) {
+        if (!isApplicationArgNode(newChild)) {
           throw new Error();
         }
-        return newChild;
+        newArgs.set(key, newChild);
       } else {
-        return n;
+        newArgs.set(key, n);
       }
     });
-  };
-
-  const replaceStaticIface = (n: StaticFunctionInterfaceNode): StaticFunctionInterfaceNode => {
-    if (n === oldChild) {
-      if (newChild.kind !== NodeKind.StaticFunctionInterface) {
-        throw new Error();
-      }
-      return newChild;
-    } else {
-      return n;
-    }
+    return newArgs;
   };
 
   const replaceIface = (n: FunctionInterfaceNode): FunctionInterfaceNode => {
     if (n === oldChild) {
-      if (!isFunctionInterfaceNode(newChild)) {
+      if (newChild.kind !== NodeKind.FunctionInterface) {
         throw new Error();
       }
       return newChild;
@@ -482,9 +391,9 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
     }
   };
 
-  const replaceFIRet = (n: FIOutNode | FINothingNode): FIOutNode | FINothingNode => {
+  const replaceFIRet = (n: FIReturnNode | FIVoidNode): FIReturnNode | FIVoidNode => {
     if (n === oldChild) {
-      if ((newChild.kind !== NodeKind.FIOut) && (newChild.kind !== NodeKind.FINothing)) {
+      if ((newChild.kind !== NodeKind.FIReturn) && (newChild.kind !== NodeKind.FIVoid)) {
         throw new Error();
       }
       return newChild;
@@ -493,10 +402,10 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
     }
   };
 
-  const replaceTmplSegArr = (arr: ReadonlyArray<FITmplSegNode>): ReadonlyArray<FITmplSegNode> => {
-    return arr.map((n: FITmplSegNode) => {
+  const replaceParams = (arr: ReadonlyArray<FIParamNode>): ReadonlyArray<FIParamNode> => {
+    return arr.map(n => {
       if (n === oldChild) {
-        if (!isFITmplSegNode(newChild)) {
+        if (!isFIParamNode(newChild)) {
           throw new Error();
         }
         return newChild;
@@ -508,22 +417,20 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
 
   switch (node.kind) {
     case NodeKind.Name:
+    case NodeKind.ApplicationOut:
     case NodeKind.UndefinedLiteral:
     case NodeKind.NumberLiteral:
     case NodeKind.TextLiteral:
     case NodeKind.BooleanLiteral:
     case NodeKind.StreamReference:
-    case NodeKind.FIText:
-    case NodeKind.FIBreak:
-    case NodeKind.FINothing:
+    case NodeKind.FIReturn:
+    case NodeKind.FIVoid:
       throw new Error('no children to replace');
 
     case NodeKind.Application:
       return {
         ...node,
-        outs: replaceOuts(node.outs),
-        sargs: replaceStreamExprArr(node.sargs),
-        fargs: replaceFuncDefArr(node.fargs),
+        args: replaceAppArgs(node.args),
       };
 
     case NodeKind.YieldExpression:
@@ -533,7 +440,7 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
       };
 
     case NodeKind.FIStreamParam:
-    case NodeKind.FIOut:
+    case NodeKind.FIOutParam:
       return {
         ...node,
         name: replaceName(node.name),
@@ -542,18 +449,17 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
     case NodeKind.FIFunctionParam:
       return {
         ...node,
-        iface: replaceStaticIface(node.iface),
+        name: replaceName(node.name),
+        iface: replaceIface(node.iface),
       };
 
-    case NodeKind.StaticFunctionInterface:
+    case NodeKind.FunctionInterface:
       return {
         ...node,
-        segs: replaceTmplSegArr(node.segs),
+        name: replaceName(node.name),
+        params: replaceParams(node.params),
         ret: replaceFIRet(node.ret),
       };
-
-    case NodeKind.DynamicFunctionInterface:
-      throw new Error('no children to replace');
 
     case NodeKind.NativeFunctionDefinition:
       return {

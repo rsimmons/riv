@@ -1,22 +1,15 @@
-import { StreamID, FunctionID, ApplicationID } from './Tree';
+import { StreamID, FunctionID, ApplicationID, ParameterID } from './Tree';
 
 export interface ConstStreamSpec {
   readonly sid: StreamID;
   readonly val: any;
 }
 
-export enum CallingConvention {
-  Raw = 'raw',
-  SettingsStructured = 'ss',
-};
-
 export interface AppSpec {
-  readonly sids: ReadonlyArray<StreamID>;
+  readonly sids: ReadonlyArray<StreamID>; // for return (if any), followed by out-parmeters (if any) in interface order
   readonly appId: ApplicationID;
   readonly funcId: FunctionID;
-  readonly sargIds: ReadonlyArray<StreamID>;
-  readonly fargIds: ReadonlyArray<FunctionID>;
-  readonly callConv: CallingConvention;
+  readonly args: ReadonlyArray<ParameterID | ReadonlyArray<ParameterID>>; // only in-parameters, with order matching def
   readonly settings?: any;
 }
 
@@ -26,10 +19,9 @@ export interface LocalFunctionDefinition {
 }
 
 export interface CompiledDefinition {
-  readonly streamParamIds: ReadonlyArray<StreamID>;
-  readonly funcParamIds: ReadonlyArray<FunctionID>;
+  readonly paramIds: ReadonlyArray<ParameterID>; // only in-parameters
   readonly constStreams: ReadonlyArray<ConstStreamSpec>;
-  readonly apps: ReadonlyArray<AppSpec>;
+  readonly apps: ReadonlyArray<AppSpec>; // already toposorted
   readonly localDefs: ReadonlyArray<LocalFunctionDefinition>;
-  readonly yieldIds: ReadonlyArray<StreamID>;
+  readonly returnStreamIds: ReadonlyArray<StreamID>; // return (if any), followed by out-parmeters (if any) in interface order
 }

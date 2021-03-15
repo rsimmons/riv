@@ -1,6 +1,5 @@
 import { useCallbackReducer, ExecutionContext, useEventEmitter, useRequestUpdate, useDynamic, useInitialize } from 'riv-runtime';
-import { NodeKind, NativeFunctionDefinitionNode, ApplicationSettings } from './Tree';
-import { DynamicInterfaceChange, parseInterfaceFromString, FunctionInterface, FunctionParam, StreamParam } from './FunctionInterface';
+import { NodeKind, NativeFunctionDefinitionNode, ApplicationSettings, FunctionInterfaceNode } from './Tree';
 import { TemplateGroup } from './TemplateLayout';
 import { FunctionType } from './Types';
 const { useVar, useEventMultiReceiver } = require('riv-runtime');
@@ -135,28 +134,35 @@ function decodeAudioFileToArray(fileData: any) {
   return serializeAsyncToStreamFunc<any, ArrayLike>(fileData, worker, [0]);
 }
 
-const strtextNativeFunctions: Array<[string, string, Function]> = [
-  // simple
-  ['bind', '{y0::A} = {0::A} => void', (v: any) => v],
-  ['ifte', 'if {0::boolean} | then {1::A} | otherwise {2::A} => {}', (cond: any, _then: any, _else: any) => (cond ? _then : _else)],
-  ['equals', '{0} equals {1} => {}', (a: any, b: any) => Object.is(a, b)],
+type AbbrevFunctionInterface = [/*name*/ string, /*params*/ ReadonlyArray<[/*kind*/ string, /*name*/ string, /*type/iface*/ string | AbbrevFunctionInterface]>, /*return*/ string, /*tmpl*/ string];
 
+const strtextNativeFunctions: ReadonlyArray<[string, AbbrevFunctionInterface, Function]> = [
+  // simple
+  ['bind', ['bind', [['o', '', 'A'], ['s', '', 'A']], 'void', '$0 = $1'], (v: any) => v],
+  ['ifte', ['ifte', [['s', 'if', 'boolean'], ['s', 'then', 'A'], ['s', 'otherwise', 'A']], 'A', ''], (cond: any, _then: any, _else: any) => (cond ? _then : _else)],
+  ['equals', ['equals', [['s', '', 'A'], ['s', '', 'A']], 'boolean', '$0 equals $1'], (a: any, b: any) => Object.is(a, b)],
+
+/*
   // events
   ['changeCount', 'number of times {0} has changed => {}', changeCount],
+*/
 
   // math
-  ['add', '{0::number} + {1::number} => {::number}', (a: number, b: number) => a + b],
+  ['add', ['add', [['s', 'a', 'number'], ['s', 'b', 'number']], 'number', ''], (a: number, b: number) => a + b],
+/*
   ['sub', '{0::number} - {1::number} => {::number}', (a: number, b: number) => a - b],
   ['mult', '{0::number} * {1::number} => {::number}', (a: number, b: number) => a * b],
   ['div', '{0::number} / {1::number} => {::number}', (a: number, b: number) => a / b],
-  ['cos', 'cosine of {0::number} radians => {::number}', Math.cos],
   ['sqr', '{0::number} squared => {::number}', (v: number) => v*v],
   ['exp', 'e^ {0::number} => {::number}', (v: number) => Math.exp(v)],
+*/
+  ['cos', ['cosine of', [['s', 'radians', 'number']], 'number', ''], Math.cos],
 
   // dom/browser
-  ['showString', 'show the value {0} => void', showString],
-  ['animationTime', 'animation time => {::number}', animationTime],
-  ['mouseDown', 'mouse button is down => {::boolean}', mouseDown],
+  ['showString', ['show', [['s', 'value', 'A']], 'void', ''], showString],
+  ['animationTime', ['animation time', [], 'number', ''], animationTime],
+  ['mouseDown', ['mouse button is down', [], 'boolean', ''], mouseDown],
+/*
   ['mousePosition', 'mouse position => {}', mousePosition],
   ['mouseClickEvts', 'mouse clicks => {}', mouseClickEvts],
   ['redCircle', 'draw red circle at {0:position} with radius {1:radius} => void', redCircle],
@@ -222,15 +228,56 @@ const strtextNativeFunctions: Array<[string, string, Function]> = [
   ['audioDriver', 'play audio with {f0::{0:audio time:step<number>} {1:next sample:event<nothing>} {2:sample rate:step<number>} => {y0:sample:step<number>}} => void', audioDriver],
 
   ['integrate', 'integrate | {f0::derivative at value {0:value:step<number>} time {1:time:step<number>} => {:derivative:step<number>}} | over time {0:time:number} | from initial value {1:initial value:number} => {::number}', robustIntegral],
+*/
 ];
 
 const globalNativeFunctions: Array<NativeFunctionDefinitionNode> = [];
 
-strtextNativeFunctions.forEach(([fid, ifaceSpecStr, jsImpl]) => {
+function expandInterface(abbrevIface: AbbrevFunctionInterface): FunctionInterfaceNode {
+  const [name, abbrevParams, ret, tmpl] = abbrevIface;
+
+  return {
+    kind: NodeKind.FunctionInterface,
+    name: {kind: NodeKind.Name, text: name},
+    // NOTE: generating pids this way is a little sketchy, but should be OK for now
+    params: abbrevParams.map((abbrevParam, idx) => {
+      const [pkind, pname, ptype] = abbrevParam;
+      switch (pkind) {
+        case 's':
+          return {
+            kind: NodeKind.FIStreamParam,
+            pid: 'p' + idx,
+            name: {kind: NodeKind.Name, text: pname},
+          };
+
+        case 'f':
+          return {
+            kind: NodeKind.FIFunctionParam,
+            pid: 'p' + idx,
+            name: {kind: NodeKind.Name, text: pname},
+            iface: expandInterface(ptype as AbbrevFunctionInterface),
+          };
+
+        case 'o':
+          return {
+            kind: NodeKind.FIOutParam,
+            pid: 'p' + idx,
+            name: {kind: NodeKind.Name, text: pname},
+          };
+
+        default:
+          throw new Error();
+      }
+    }),
+    ret: (ret === 'void') ? {kind: NodeKind.FIVoid} : {kind: NodeKind.FIReturn},
+  };
+}
+
+strtextNativeFunctions.forEach(([fid, abbrevIface, jsImpl]) => {
   globalNativeFunctions.push({
     kind: NodeKind.NativeFunctionDefinition,
     fid,
-    iface: parseInterfaceFromString(ifaceSpecStr),
+    iface: expandInterface(abbrevIface),
     impl: jsImpl,
   });
 });
@@ -242,6 +289,7 @@ function runForOneInstant(streamFunc: Function, args: Array<any>): any {
   return retval;
 }
 
+/*
 globalNativeFunctions.push(
   {
     kind: NodeKind.NativeFunctionDefinition,
@@ -279,23 +327,6 @@ globalNativeFunctions.push(
           }],
           tmpl,
           returnedIdx: 0,
-          /*
-          declaredType: {
-            sargs: [...Array(size)].map(_ => ({
-              kind: 'qvar',
-              idx: 0,
-            })),
-            fargs: [],
-            yields: [{
-              kind: 'app',
-              ctor: 'list',
-              args: [{
-                kind: 'qvar',
-                idx: 0,
-              }],
-            }],
-          },
-          */
         };
       },
       onEdit: (action, groupId, settings): DynamicInterfaceChange => {
@@ -426,67 +457,6 @@ globalNativeFunctions.push(
           outs: [{name: undefined}],
           returnedIdx: 0,
           tmpl,
-          /*
-          declaredType: {
-            sargs: [...Array(size)].map((_, i) => ({
-              // i-th stream input
-              kind: 'app',
-              ctor: 'event',
-              args: [{
-                kind: 'qvar',
-                idx: i+1,
-              }],
-            })),
-            fargs: [{
-              // initializer func
-              sargs: [],
-              fargs: [],
-              yields: [{
-                kind: 'qvar',
-                idx: 0,
-              }],
-            } as FunctionType].concat([...Array(size)].map((_, i) => ({
-              // i-th updater
-              sargs: [
-                {
-                  kind: 'app',
-                  ctor: 'step',
-                  args: [{
-                    kind: 'qvar',
-                    idx: 0,
-                  }],
-                },
-                {
-                  kind: 'app',
-                  ctor: 'step',
-                  args: [{
-                    kind: 'qvar',
-                    idx: i+1,
-                  }],
-                },
-              ],
-              fargs: [],
-              yields: [
-                {
-                  kind: 'app',
-                  ctor: 'step',
-                  args: [{
-                    kind: 'qvar',
-                    idx: 0,
-                  }],
-                },
-              ],
-            }))),
-            yields: [{
-              kind: 'app',
-              ctor: 'step',
-              args: [{
-                kind: 'qvar',
-                idx: 0,
-              }],
-            }],
-          },
-          */
         };
       },
       onEdit: (action, groupId, settings): DynamicInterfaceChange => {
@@ -613,21 +583,6 @@ globalNativeFunctions.push(
           outs: [{name: undefined}],
           returnedIdx: 0,
           tmpl,
-          /*
-          declaredType: {
-            sargs: [],
-            fargs: [],
-            yields: [{
-              kind: 'app',
-              ctor: 'step',
-              args: [{
-                kind: 'app',
-                ctor: 'number',
-                args: [],
-              }],
-            }],
-          },
-          */
         };
       },
       createCustomUI: (underNode, settings, onChange) => {
@@ -680,21 +635,6 @@ globalNativeFunctions.push(
           outs: [{name: undefined}],
           returnedIdx: 0,
           tmpl,
-          /*
-          declaredType: {
-            sargs: [],
-            fargs: [],
-            yields: [{
-              kind: 'app',
-              ctor: 'step',
-              args: [{
-                kind: 'app',
-                ctor: 'bytes',
-                args: [],
-              }],
-            }],
-          },
-          */
         };
       },
       createCustomUI: (underNode, settings, onChange) => {
@@ -756,5 +696,6 @@ globalNativeFunctions.push(
     },
   },
 );
+*/
 
 export default globalNativeFunctions;

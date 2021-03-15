@@ -1,6 +1,6 @@
-import { StreamID, FunctionID, Node, FunctionDefinitionNode, StreamExpressionNode, NodeKind, isStreamExpressionNode, TreeFunctionDefinitionNode, isFunctionDefinitionNode, FunctionInterfaceNode } from './Tree';
+import { StreamID, FunctionID, Node, FunctionDefinitionNode, StreamExpressionNode, NodeKind, isStreamExpressionNode, TreeFunctionDefinitionNode, isFunctionDefinitionNode, FunctionInterfaceNode, ParameterID } from './Tree';
 import { streamExprReturnedId } from './TreeUtil';
-import { CompiledDefinition, ConstStreamSpec, LocalFunctionDefinition, AppSpec, CallingConvention } from './CompiledDefinition';
+import { CompiledDefinition, ConstStreamSpec, LocalFunctionDefinition, AppSpec } from './CompiledDefinition';
 import Environment from './Environment';
 import { visitChildren } from './Traversal';
 
@@ -20,16 +20,36 @@ function compileTreeFuncDef(def: TreeFunctionDefinitionNode, outerStreamEnvironm
 
   // TODO: verify that internal parameters (sparams, fparams) match the signature
 
-  // Identify locally defined stream and function ids
-  def.spids.forEach(sid => {
+  const addLocalStream = (sid: StreamID): void => {
     if (streamEnvironment.has(sid)) {
       throw new Error('must be unique');
     }
     streamEnvironment.set(sid, null);
     localStreamIds.add(sid);
-  });
+  }
 
-  // TODO: handle fparams as well
+  // Identify locally defined stream and function ids
+  def.iface.params.forEach(param => {
+    switch (param.kind) {
+      case NodeKind.FIStreamParam:
+        addLocalStream(param.pid);
+        break;
+
+      case NodeKind.FIFunctionParam:
+        // TODO: handle
+        break;
+
+      case NodeKind.FIOutParam:
+        // nothing to do here
+        break;
+
+      default: {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const exhaustive: never = param; // this will cause a type error if we haven't handled all cases
+        throw new Error();
+      }
+    }
+  });
 
   const visitToFindLocals = (node: Node): void => {
     if (isStreamExpressionNode(node)) {
@@ -39,6 +59,7 @@ function compileTreeFuncDef(def: TreeFunctionDefinitionNode, outerStreamEnvironm
         case NodeKind.TextLiteral:
         case NodeKind.BooleanLiteral:
           if (streamEnvironment.has(node.sid)) {
+            console.log('node is', node);
             throw new Error('must be unique');
           }
           streamEnvironment.set(node.sid, node);
@@ -50,12 +71,13 @@ function compileTreeFuncDef(def: TreeFunctionDefinitionNode, outerStreamEnvironm
           break;
 
         case NodeKind.Application:
-          node.outs.forEach(out => {
-            if (streamEnvironment.has(out.sid)) {
-              throw new Error('must be unique');
+          if (node.rid !== undefined) {
+            addLocalStream(node.rid);
+          }
+          node.args.forEach(arg => {
+            if (arg.kind === NodeKind.ApplicationOut) {
+              addLocalStream(arg.sid);
             }
-            streamEnvironment.set(out.sid, node);
-            localStreamIds.add(out.sid);
           });
           break;
 
@@ -84,7 +106,6 @@ function compileTreeFuncDef(def: TreeFunctionDefinitionNode, outerStreamEnvironm
   const constStreams: Array<ConstStreamSpec> = [];
   const apps: Array<AppSpec> = [];
   const localDefs: Array<LocalFunctionDefinition> = [];
-  const yieldIds: Array<StreamID> = [];
   const externalReferencedStreamIds: Set<StreamID> = new Set();
 
   // Compile local tree function definitions
@@ -142,85 +163,97 @@ function compileTreeFuncDef(def: TreeFunctionDefinitionNode, outerStreamEnvironm
         break;
 
       case NodeKind.Application: {
-        const functionIfaceNode = functionEnvironment.get(node.fid);
-        if (!functionIfaceNode) {
+        const funcIface = functionEnvironment.get(node.fid);
+        if (!funcIface) {
           throw new CompilationError();
         }
 
         // TODO: make sure that sargs, fargs, yields all match signature
 
-        const streamArgIds: Array<StreamID> = [];
-        const funcArgIds: Array<FunctionID> = [];
+        const compiledSids: Array<StreamID> = [];
+        const compiledArgs: Array<ParameterID | ReadonlyArray<ParameterID>> = [];
 
         temporaryMarked.add(node);
 
-        for (const sarg of node.sargs) {
-          traverseStreamExpr(sarg);
-          const sargRetSid = streamExprReturnedId(sarg);
-          if (!sargRetSid) {
-            throw new Error();
-          }
-          streamArgIds.push(sargRetSid);
+        if (node.rid !== undefined) {
+          compiledSids.push(node.rid);
         }
 
-        for (const funcDef of node.fargs) {
-          /*
-          if (funcDef.kind === NodeKind.TreeFunctionDefinition) {
-            const compiledContainedDef = compileTreeFuncImpl(funcDef, streamEnvironment, functionEnvironment);
-
-            compiledContainedDef.externalReferencedStreamIds.forEach((sid) => {
-              compiledDefinition.externalReferencedStreamIds.add(sid);
-            });
-
-            // An application needs to traverse from its function-arguments out to any streams (in this exact scope)
-            // that it refers to (outer-scope references), because these are dependencies. So this would be an invalid cycle:
-            // x = map(v => x, [1,2,3])
-            compiledContainedDef.externalReferencedStreamIds.forEach((sid) => {
-              if (localStreamIds.has(sid)) {
-                const depLocalExprNode = streamEnvironment.get(sid);
-                if (depLocalExprNode === undefined) {
-                  throw new Error();
-                }
-                traverseFromStreamCreation(depLocalExprNode, context);
+        for (const param of funcIface.params) {
+          switch (param.kind) {
+            case NodeKind.FIStreamParam: {
+              const argNode = node.args.get(param.pid);
+              if (!argNode || !isStreamExpressionNode(argNode)) {
+                throw new Error();
               }
-            });
+              traverseStreamExpr(argNode);
+              const sid = streamExprReturnedId(argNode);
+              if (!sid) {
+                throw new Error();
+              }
+              compiledArgs.push(sid);
+              break;
+            }
 
-            compiledDefinition.containedFunctionDefinitions.push({
-              id: argument.id,
-              definition: compiledContainedDef,
-            });
+            case NodeKind.FIFunctionParam: {
+              /*
+              const compiledContainedDef = compileTreeFuncImpl(funcDef, streamEnvironment, functionEnvironment);
+
+              compiledContainedDef.externalReferencedStreamIds.forEach((sid) => {
+                compiledDefinition.externalReferencedStreamIds.add(sid);
+              });
+
+              // An application needs to traverse from its function-arguments out to any streams (in this exact scope)
+              // that it refers to (outer-scope references), because these are dependencies. So this would be an invalid cycle:
+              // x = map(v => x, [1,2,3])
+              compiledContainedDef.externalReferencedStreamIds.forEach((sid) => {
+                if (localStreamIds.has(sid)) {
+                  const depLocalExprNode = streamEnvironment.get(sid);
+                  if (depLocalExprNode === undefined) {
+                    throw new Error();
+                  }
+                  traverseFromStreamCreation(depLocalExprNode, context);
+                }
+              });
+
+              compiledDefinition.containedFunctionDefinitions.push({
+                id: argument.id,
+                definition: compiledContainedDef,
+              });
+              */
+
+              const argNode = node.args.get(param.pid);
+              if (!argNode || !isFunctionDefinitionNode(argNode)) {
+                throw new Error();
+              }
+              compiledArgs.push(argNode.fid);
+              break;
+            }
+
+            case NodeKind.FIOutParam: {
+              const argNode = node.args.get(param.pid);
+              if (!argNode || (argNode.kind !== NodeKind.ApplicationOut)) {
+                throw new Error();
+              }
+              compiledSids.push(argNode.sid);
+              break;
+            }
+
+            default: {
+              // eslint-disable-next-line @typescript-eslint/no-unused-vars
+              const exhaustive: never = param; // this will cause a type error if we haven't handled all cases
+              throw new Error();
+            }
           }
-          */
-
-          funcArgIds.push(funcDef.fid);
         }
 
         temporaryMarked.delete(node);
 
-        let callConv: CallingConvention;
-        switch (functionIfaceNode.kind) {
-          case NodeKind.StaticFunctionInterface:
-            callConv = CallingConvention.Raw;
-            break;
-
-          case NodeKind.DynamicFunctionInterface:
-            callConv = CallingConvention.SettingsStructured;
-            break;
-
-          default: {
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            const exhaustive: never = functionIfaceNode; // this will cause a type error if we haven't handled all cases
-            throw new Error();
-          }
-        }
-
         apps.push({
-          sids: node.outs.map(out => out.sid),
+          sids: compiledSids,
           appId: node.aid,
           funcId: node.fid,
-          sargIds: streamArgIds,
-          fargIds: funcArgIds,
-          callConv,
+          args: compiledArgs,
           settings: node.settings,
         });
         break;
@@ -236,6 +269,8 @@ function compileTreeFuncDef(def: TreeFunctionDefinitionNode, outerStreamEnvironm
     permanentMarked.add(node);
   }
 
+  const yieldMap: Map<StreamID | null, StreamID> = new Map();
+
   for (const node of def.bodyExprs) {
     if (node.kind === NodeKind.YieldExpression) {
       traverseStreamExpr(node.expr);
@@ -244,7 +279,7 @@ function compileTreeFuncDef(def: TreeFunctionDefinitionNode, outerStreamEnvironm
       if (!exprRetSid) {
         throw new Error();
       }
-      yieldIds[node.idx] = exprRetSid;
+      yieldMap.set(node.out, exprRetSid);
     } else if (isStreamExpressionNode(node)) {
       traverseStreamExpr(node);
     } else if (isFunctionDefinitionNode(node)) {
@@ -254,15 +289,52 @@ function compileTreeFuncDef(def: TreeFunctionDefinitionNode, outerStreamEnvironm
     }
   }
 
+  const returnStreamIds: Array<StreamID> = [];
+
+  if (def.iface.ret.kind === NodeKind.FIReturn) {
+    const sid = yieldMap.get(null);
+    if (!sid) {
+      throw new Error();
+    }
+    returnStreamIds.push(sid);
+  }
+
+  const paramIds: Array<ParameterID> = [];
+  for (const param of def.iface.params) {
+    switch (param.kind) {
+      case NodeKind.FIStreamParam:
+        paramIds.push(param.pid);
+        break;
+
+      case NodeKind.FIFunctionParam:
+        paramIds.push(param.pid);
+        break;
+
+      case NodeKind.FIOutParam: {
+        const sid = yieldMap.get(param.pid);
+        if (!sid) {
+          throw new Error();
+        }
+        returnStreamIds.push(sid);
+        break;
+      }
+
+      default: {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const exhaustive: never = param; // this will cause a type error if we haven't handled all cases
+        throw new Error();
+      }
+    }
+  }
+
   // TODO: verify that yieldIds doesn't have any "holes" and matches signature
 
   const compiledDefinition: CompiledDefinition = {
-    streamParamIds: def.spids,
-    funcParamIds: def.fpids,
+    paramIds,
     constStreams,
     apps,
     localDefs,
-    yieldIds,
+    returnStreamIds,
   };
 
   return [compiledDefinition, externalReferencedStreamIds];

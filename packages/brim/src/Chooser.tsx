@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import './Chooser.css';
-import { generateStreamId, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, generateFunctionId, StreamExpressionNode, generateApplicationId, ApplicationOut, NameNode, isFunctionDefinitionNode } from './Tree';
+import { generateStreamId, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, generateFunctionId, StreamExpressionNode, generateApplicationId, ApplicationOutNode, NameNode, isFunctionDefinitionNode, ApplicationArgs, ApplicationArgNode, TextNode } from './Tree';
 import Fuse from 'fuse.js';
 import { computeParentLookup } from './EditReducer';
 import { SelTree } from './State';
 import { StreamExpressionView, TreeViewContext, FunctionDefinitionView } from './TreeView';
-import { functionInterfaceAsPlainText, defaultTreeImplFromFunctionInterface, functionInterfaceFromNode } from './FunctionInterface';
+import { functionInterfaceAsPlainText, defaultTreeImplFromFunctionInterface } from './FunctionInterface';
 
 interface Choice {
   node: StreamExpressionNode | FunctionDefinitionNode;
@@ -161,8 +161,7 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any)
           },
         });
       } else {
-        const iface = functionInterfaceFromNode(defNode.iface);
-        if (iface.outs.length > 0) {
+        if (defNode.iface.ret.kind === NodeKind.FIReturn) {
           searchItems.push({
             name: defAsText,
             data: {
@@ -207,37 +206,46 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any)
 
         case 'func': {
           const funcDefNode = result.item.data.def;
-          const iface = functionInterfaceFromNode(funcDefNode.iface);
+          const iface = funcDefNode.iface;
 
-          const outs: ReadonlyArray<ApplicationOut> = iface.outs.map((_, idx) => {
-            const thisOutReturned = (idx === iface.returnedIdx);
-            return {
-              sid: generateStreamId(),
-              name: thisOutReturned ? null : {
-                kind: NodeKind.Name,
-                text: '',
-              },
-            };
-          });
+          const args: Map<string, ApplicationArgNode> = new Map();
 
-          const sargs: ReadonlyArray<StreamExpressionNode> = iface.streamParams.map((_, idx) => (
-            (infixMode && (idx === 0))
-            ? initNode
-            : {
-              kind: NodeKind.UndefinedLiteral,
-              sid: generateStreamId(),
+          iface.params.forEach(param => {
+            switch (param.kind) {
+              case NodeKind.FIStreamParam:
+                // TODO: wtf was infixMode doing here before?
+                args.set(param.pid, {
+                  kind: NodeKind.UndefinedLiteral,
+                  sid: generateStreamId(),
+                });
+                break;
+
+              case NodeKind.FIFunctionParam:
+                args.set(param.pid, defaultTreeImplFromFunctionInterface(param.iface));
+                break;
+
+              case NodeKind.FIOutParam:
+                args.set(param.pid, {
+                  kind: NodeKind.ApplicationOut,
+                  sid: generateStreamId(),
+                  text: '',
+                });
+                break;
+
+              default: {
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                const exhaustive: never = param; // this will cause a type error if we haven't handled all cases
+                throw new Error();
+              }
             }
-          ));
-
-          const fargs: ReadonlyArray<FunctionDefinitionNode> = iface.funcParams.map(fp => defaultTreeImplFromFunctionInterface(fp.iface));
+          });
 
           const n: ApplicationNode = {
             kind: NodeKind.Application,
             aid: generateApplicationId(),
-            outs,
             fid: funcDefNode.fid,
-            sargs,
-            fargs,
+            args,
+            rid: (iface.ret.kind === NodeKind.FIReturn) ? generateStreamId() : undefined,
           };
 
           choices.push({
@@ -256,70 +264,43 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any)
     }
 
     if (atRoot && text.trim() !== '') {
+      const args: ApplicationArgs = new Map([
+        ['p0', {kind: NodeKind.ApplicationOut, sid: generateStreamId(), text: text.trim()}],
+        ['p1', {kind: NodeKind.UndefinedLiteral, sid: generateStreamId()}],
+      ]);
       choices.push({
         node: {
           kind: NodeKind.Application,
           aid: generateApplicationId(),
-          outs: [{sid: generateStreamId(), name: {kind: NodeKind.Name, text: text.trim()}}],
           fid: 'bind',
-          sargs: [
-            {
-              kind: NodeKind.UndefinedLiteral,
-              sid: generateStreamId(),
-            },
-          ],
-          fargs: [],
+          args,
+          rid: undefined,
         },
       });
 
       // Create a choice for a new local function definition
       choices.push({
-        /*
         node: {
           kind: NodeKind.TreeFunctionDefinition,
           fid: generateFunctionId(),
           iface: {
-            kind: 'strtext',
-            spec: text.trim() + ' => void',
-          },
-          spids: [],
-          fpids: [],
-          bodyExprs: [
-            {
-              kind: NodeKind.UndefinedLiteral,
-              sid: generateStreamId(),
-            },
-          ],
-        },
-        */
-        node: {
-          kind: NodeKind.TreeFunctionDefinition,
-          fid: generateFunctionId(),
-          iface: {
-            kind: NodeKind.StaticFunctionInterface,
-            segs: [
-              {
-                kind: NodeKind.FIText,
-                text: text.trim(),
-              },
+            kind: NodeKind.FunctionInterface,
+            name: {kind: NodeKind.Name, text: text.trim()},
+            params: [
               {
                 kind: NodeKind.FIStreamParam,
-                idx: 0,
+                pid: generateStreamId(),
                 name: {kind: NodeKind.Name, text: 'param'},
               },
             ],
             ret: {
-              kind: NodeKind.FIOut,
-              idx: 0,
-              name: {kind: NodeKind.Name, text: 'output'},
+              kind: NodeKind.FIReturn,
             },
           },
-          spids: [generateStreamId()],
-          fpids: [],
           bodyExprs: [
             {
               kind: NodeKind.YieldExpression,
-              idx: 0,
+              out: null,
               expr: {
                 kind: NodeKind.UndefinedLiteral,
                 sid: generateStreamId(),
@@ -413,15 +394,19 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any)
           const bindNode: ApplicationNode = {
             kind: NodeKind.Application,
             aid: generateApplicationId(),
-            outs: [{sid: generateStreamId(), name: {kind: NodeKind.Name, text: inputText}}],
             fid: 'bind',
-            sargs: [
-              {
+            args: new Map([
+              ['p0', {
+                kind: NodeKind.ApplicationOut,
+                sid: generateStreamId(),
+                text: inputText,
+              }],
+              ['p1', {
                 kind: NodeKind.UndefinedLiteral,
                 sid: generateStreamId(),
-              },
-            ],
-            fargs: [],
+              }],
+            ]),
+            rid: undefined,
           };
           dispatch({type: 'UPDATE_EDITING_NODE', newNode: bindNode});
           dispatch({type: 'TOGGLE_EDIT'});
@@ -463,10 +448,11 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any)
 }
 
 const NameChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any) => void}> = ({ initSelTree, dispatch }) => {
-  const initNode = initSelTree.selectedNode;
-  if (initNode.kind !== NodeKind.Name) {
+  const selNode = initSelTree.selectedNode;
+  if ((selNode.kind !== NodeKind.Name) && (selNode.kind !== NodeKind.ApplicationOut)) {
     throw new Error();
   }
+  const initNode: TextNode = selNode;
 
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -482,7 +468,7 @@ const NameChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any) => vo
 
     setText(newText);
 
-    const newNode: NameNode = {
+    const newNode = {
       ...initNode,
       text: newText,
     };
@@ -497,7 +483,7 @@ const NameChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any) => vo
 }
 
 const Chooser: React.FC<{initSelTree: SelTree, dispatch: (action: any) => void, compileError: string | undefined, infixMode: boolean, treeViewCtx: TreeViewContext}> = ({ initSelTree, dispatch, compileError, infixMode, treeViewCtx }) => {
-  if (initSelTree.selectedNode.kind === NodeKind.Name) {
+  if ((initSelTree.selectedNode.kind === NodeKind.Name) || (initSelTree.selectedNode.kind === NodeKind.ApplicationOut)) {
     return <NameChooser initSelTree={initSelTree} dispatch={dispatch} />
   } else if (isStreamExpressionNode(initSelTree.selectedNode)) {
     return <ExpressionChooser initSelTree={initSelTree} dispatch={dispatch} compileError={compileError} infixMode={infixMode} treeViewCtx={treeViewCtx} />
