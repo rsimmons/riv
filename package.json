@@ -2,10 +2,7 @@
   "private": true,
   "workspaces": {
     "packages": [
-      "packages/brim",
-      "packages/riv-demo-lib",
-      "packages/riv-runtime",
-      "packages/riv-snabbdom"
+      "packages/*"
     ]
   }
 }
