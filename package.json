@@ -2,10 +2,10 @@
   "private": true,
   "workspaces": {
     "packages": [
-      "packages/*"
-    ],
-    "nohoist": [
-      "**"
+      "packages/brim",
+      "packages/riv-demo-lib",
+      "packages/riv-runtime",
+      "packages/riv-snabbdom"
     ]
   }
 }

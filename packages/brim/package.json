@@ -4,18 +4,23 @@
   "private": true,
   "homepage": ".",
   "dependencies": {
-    "@types/jest": "25.1.2",
-    "@types/node": "13.7.0",
-    "@types/react": "16.9.19",
-    "@types/react-dom": "16.9.5",
+    "@testing-library/jest-dom": "^5.11.4",
+    "@testing-library/react": "^11.1.0",
+    "@testing-library/user-event": "^12.1.10",
+    "@types/jest": "^26.0.15",
+    "@types/node": "^12.0.0",
+    "@types/react": "^17.0.0",
+    "@types/react-dom": "^17.0.0",
     "fuse.js": "^3.4.6",
-    "react": "^16.12.0",
-    "react-dom": "^16.12.0",
+    "react": "^17.0.1",
+    "react-dom": "^17.0.1",
     "react-hotkeys": "^2.0.0",
-    "react-scripts": "3.4.0",
+    "react-scripts": "4.0.3",
     "riv-demo-lib": "^0.1.0",
     "riv-runtime": "^0.1.0",
-    "typescript": "3.7.5"
+    "typescript": "^4.2.3",
+    "web-vitals": "^1.0.1"
+
   },
   "scripts": {
     "start": "react-scripts start",
@@ -25,7 +30,10 @@
     "deploy": "react-scripts build && gh-pages -d build --dest brim-demo"
   },
   "eslintConfig": {
-    "extends": "react-app"
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
   },
   "browserslist": {
     "production": [

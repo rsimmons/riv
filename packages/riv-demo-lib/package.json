@@ -5,5 +5,8 @@
   "main": "src/index.js",
   "peerDependencies": {
     "riv-runtime": "^0.1.0"
+  },
+  "dependencies": {
+    "riv-snabbdom": "^0.1.0"
   }
 }

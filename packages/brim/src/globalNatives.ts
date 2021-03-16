@@ -2,9 +2,9 @@ import { useCallbackReducer, ExecutionContext, useEventEmitter, useRequestUpdate
 import { NodeKind, NativeFunctionDefinitionNode, ApplicationSettings, FunctionInterfaceNode } from './Tree';
 import { TemplateGroup } from './TemplateLayout';
 import { FunctionType } from './Types';
-const { useVar, useEventMultiReceiver } = require('riv-runtime');
+import { useVar, useEventMultiReceiver } from 'riv-runtime';
+
 const { showString, animationTime, mouseDown, changeCount, streamMap, audioDriver, random, mouseClickEvts, redCircle, mousePosition } = require('riv-demo-lib');
-const { h, renderDOMIntoSelector } = require('riv-snabbdom');
 
 interface Vec2d {
   x: number;
@@ -34,11 +34,7 @@ export function robustIntegral(time: number | undefined, initialValue: number | 
   const isValidNumber = (v: any): v is number => (typeof v === 'number') && !Number.isNaN(v);
 
   // eslint-disable-next-line react-hooks/rules-of-hooks
-  const accum = useVar();
-
-  if ((accum.current === undefined) && isValidNumber(initialValue)) {
-    accum.current = initialValue;
-  }
+  const accum = useVar(initialValue);
 
   // eslint-disable-next-line react-hooks/rules-of-hooks
   const prevTime = useVar(time);
@@ -47,11 +43,7 @@ export function robustIntegral(time: number | undefined, initialValue: number | 
   const createIntegrandFuncCtx = useDynamic(integrandFunc);
 
   // eslint-disable-next-line react-hooks/rules-of-hooks
-  const integrandFuncCtx = useVar();
-
-  if (!integrandFuncCtx.current) {
-    integrandFuncCtx.current = createIntegrandFuncCtx();
-  }
+  const integrandFuncCtx = useVar(() => createIntegrandFuncCtx());
 
   if ((accum.current !== undefined) && isValidNumber(prevTime.current) && isValidNumber(time) && (time > prevTime.current)) {
     const integrand = integrandFuncCtx.current.update(accum.current, prevTime.current);
@@ -74,9 +66,9 @@ function serializeAsyncToStreamFunc<A, R>(argStream: A, worker: (arg: A) => Prom
   // eslint-disable-next-line react-hooks/rules-of-hooks
   const currentResult = useVar(def);
   // eslint-disable-next-line react-hooks/rules-of-hooks
-  const currentResultForArgValue = useVar();
+  const currentResultForArgValue = useVar<A|undefined>(undefined);
   // eslint-disable-next-line react-hooks/rules-of-hooks
-  const lastReceivedArgValue = useVar();
+  const lastReceivedArgValue = useVar(argStream);
   // eslint-disable-next-line react-hooks/rules-of-hooks
   const working = useVar(false);
 
