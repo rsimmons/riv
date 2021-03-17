@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import './Chooser.css';
-import { generateStreamId, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, generateFunctionId, StreamExpressionNode, generateApplicationId, ApplicationOutNode, NameNode, isFunctionDefinitionNode, ApplicationArgs, ApplicationArgNode, TextNode } from './Tree';
+import { generateStreamId, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, generateFunctionId, StreamExpressionNode, generateApplicationId, ApplicationOutNode, NameNode, isFunctionDefinitionNode, ApplicationArgs, ApplicationArgNode, TextNode } from '../compiler/Tree';
 import Fuse from 'fuse.js';
 import { computeParentLookup } from './EditReducer';
 import { SelTree } from './State';
 import { StreamExpressionView, TreeViewContext, FunctionDefinitionView } from './TreeView';
-import { functionInterfaceAsPlainText, defaultTreeImplFromFunctionInterface } from './FunctionInterface';
+import { functionInterfaceAsPlainText, defaultTreeImplFromFunctionInterface } from '../compiler/FunctionInterface';
 
 interface Choice {
   node: StreamExpressionNode | FunctionDefinitionNode;

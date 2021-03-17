@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import genuid from './uid';
-import { ProgramInfo } from './State';
-import { TreeFunctionDefinitionNode } from './Tree';
+import genuid from '../util/uid';
+import { ProgramInfo } from '../codeview/State';
+import { TreeFunctionDefinitionNode } from '../compiler/Tree';
 import './StoragePanel.css';
 
 interface Program {

@@ -1,12 +1,12 @@
 import React, { useReducer, useRef, useLayoutEffect } from 'react';
 import { HotKeys, ObserveKeys } from "react-hotkeys";
-import { initialState, reducer, getReferentNodeOfSelected, initStaticEnv, getStaticEnvForSelected } from './EditReducer';
+import { initialState, reducer, getReferentNodeOfSelected, initStaticEnv, getStaticEnvForSelected } from '../codeview/EditReducer';
 import { StoragePanel } from './StoragePanel';
 import './Editor.css';
-import { TreeFunctionDefinitionView, TreeViewContext } from './TreeView';
-import { Node, TreeFunctionDefinitionNode } from './Tree';
-import { ProgramInfo } from './State';
-import Chooser from './Chooser';
+import { TreeFunctionDefinitionView, TreeViewContext } from '../codeview/TreeView';
+import { Node, TreeFunctionDefinitionNode } from '../compiler/Tree';
+import { ProgramInfo } from '../codeview/State';
+import Chooser from '../codeview/Chooser';
 
 const keyMap = {
   TOGGLE_EDIT: 'enter',

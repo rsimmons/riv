@@ -1,13 +1,13 @@
-import genuid from './uid';
+import genuid from '../util/uid';
 import { State, ProgramInfo, SelTree } from './State';
-import { StreamID, FunctionID, generateStreamId, NodeKind, Node, FunctionDefinitionNode, StreamExpressionNode, isStreamExpressionNode, UndefinedLiteralNode, BodyExpressionNode, generateApplicationId, NameNode, TreeFunctionDefinitionNode, isFunctionDefinitionNode, generateFunctionId, ApplicationOutNode } from './Tree';
-import { CompiledDefinition } from './CompiledDefinition';
-import { compileGlobalTreeDefinition, CompilationError } from './Compiler';
+import { StreamID, FunctionID, generateStreamId, NodeKind, Node, FunctionDefinitionNode, StreamExpressionNode, isStreamExpressionNode, UndefinedLiteralNode, BodyExpressionNode, generateApplicationId, NameNode, TreeFunctionDefinitionNode, isFunctionDefinitionNode, generateFunctionId, ApplicationOutNode } from '../compiler/Tree';
+import { CompiledDefinition } from '../compiler/CompiledDefinition';
+import { compileGlobalTreeDefinition, CompilationError } from '../compiler/Compiler';
 import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
-import { createLiveFunction } from './LiveFunction';
-import Environment from './Environment';
-import { iterChildren, visitChildren, replaceChild, transformChildren } from './Traversal';
-import globalNativeFunctions from './globalNatives';
+import { createLiveFunction } from '../runner/LiveFunction';
+import Environment from '../util/Environment';
+import { iterChildren, visitChildren, replaceChild, transformChildren } from '../compiler/Traversal';
+import globalNativeFunctions from '../builtin/globalNatives';
 
 // We don't make a discriminated union of specific actions, but maybe we could
 interface Action {

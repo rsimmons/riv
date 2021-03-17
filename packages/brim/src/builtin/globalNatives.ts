@@ -1,7 +1,7 @@
 import { useCallbackReducer, ExecutionContext, useEventEmitter, useRequestUpdate, useDynamic, useInitialize } from 'riv-runtime';
-import { NodeKind, NativeFunctionDefinitionNode, ApplicationSettings, FunctionInterfaceNode } from './Tree';
-import { TemplateGroup } from './TemplateLayout';
-import { FunctionType } from './Types';
+import { NodeKind, NativeFunctionDefinitionNode, ApplicationSettings, FunctionInterfaceNode } from '../compiler/Tree';
+import { TemplateGroup } from '../compiler/TemplateLayout';
+import { FunctionType } from '../compiler/Types';
 import { useVar, useEventMultiReceiver } from 'riv-runtime';
 
 const { showString, animationTime, mouseDown, changeCount, streamMap, audioDriver, random, mouseClickEvts, redCircle, mousePosition } = require('riv-demo-lib');

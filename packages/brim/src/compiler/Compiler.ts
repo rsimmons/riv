@@ -1,7 +1,7 @@
 import { StreamID, FunctionID, Node, FunctionDefinitionNode, StreamExpressionNode, NodeKind, isStreamExpressionNode, TreeFunctionDefinitionNode, isFunctionDefinitionNode, FunctionInterfaceNode, ParameterID } from './Tree';
 import { streamExprReturnedId } from './TreeUtil';
 import { CompiledDefinition, ConstStreamSpec, LocalFunctionDefinition, AppSpec } from './CompiledDefinition';
-import Environment from './Environment';
+import Environment from '../util/Environment';
 import { visitChildren } from './Traversal';
 
 export class CompilationError extends Error {

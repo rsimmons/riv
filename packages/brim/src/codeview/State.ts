@@ -1,7 +1,7 @@
 import { ExecutionContext } from 'riv-runtime';
-import { CompiledDefinition } from './CompiledDefinition';
+import { CompiledDefinition } from '../compiler/CompiledDefinition';
 
-import { StreamID, Node, FunctionDefinitionNode, TreeFunctionDefinitionNode } from './Tree';
+import { StreamID, Node, FunctionDefinitionNode, TreeFunctionDefinitionNode } from '../compiler/Tree';
 
 export interface ClipboardStackFrame {
   readonly mode: 'cut' | 'copy';

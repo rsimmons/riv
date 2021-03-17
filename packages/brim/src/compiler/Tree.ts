@@ -1,4 +1,4 @@
-import genuid from './uid';
+import genuid from '../util/uid';
 import { Stream } from 'stream';
 
 /**

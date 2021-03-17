@@ -1,11 +1,11 @@
 import React, { useState, useRef, useLayoutEffect, useEffect } from 'react';
-import { Node, FunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, StreamReferenceNode, NameNode, ApplicationNode, TreeFunctionDefinitionNode, isFunctionDefinitionNode, ApplicationSettings, generateStreamId, FIStreamParamNode, FIReturnNode, FIVoidNode, FunctionInterfaceNode, FIOutParamNode, FIParamNode, ApplicationArgNode, ApplicationOutNode } from './Tree';
+import { Node, FunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, StreamReferenceNode, NameNode, ApplicationNode, TreeFunctionDefinitionNode, isFunctionDefinitionNode, ApplicationSettings, generateStreamId, FIStreamParamNode, FIReturnNode, FIVoidNode, FunctionInterfaceNode, FIOutParamNode, FIParamNode, ApplicationArgNode, ApplicationOutNode } from '../compiler/Tree';
 import './TreeView.css';
 import { StaticEnvironment, extendStaticEnv } from './EditReducer';
-import { TemplateLayout, TextSegment, GroupEditable } from './TemplateLayout';
+import { TemplateLayout, TextSegment, GroupEditable } from '../compiler/TemplateLayout';
 import quotesIcon from './icons/quotes.svg';
 import booleanIcon from './icons/boolean.svg';
-import { defaultTreeImplFromFunctionInterface, DynamicInterfaceEditAction, DynamicInterfaceChange } from './FunctionInterface';
+import { defaultTreeImplFromFunctionInterface, DynamicInterfaceEditAction, DynamicInterfaceChange } from '../compiler/FunctionInterface';
 
 const BOUND_NAME_BOX_COLOR = '#d1e6ff';
 const STREAM_REFERENCE_BOX_COLOR = '#a1cdff';

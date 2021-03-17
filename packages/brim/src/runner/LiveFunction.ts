@@ -1,7 +1,7 @@
 import { ExecutionContext, useVar, useInitialize, useRequestUpdate } from 'riv-runtime';
-import { CompiledDefinition, AppSpec } from './CompiledDefinition';
-import { StreamID, FunctionID, ApplicationID, ParameterID } from './Tree';
-import Environment from './Environment';
+import { CompiledDefinition, AppSpec } from '../compiler/CompiledDefinition';
+import { StreamID, FunctionID, ApplicationID, ParameterID } from '../compiler/Tree';
+import Environment from '../util/Environment';
 
 /**
  * I think that functions in outer environment are not allowed to change identity.
