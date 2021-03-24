@@ -1,5 +1,6 @@
 import { useCallbackReducer, ExecutionContext, useEventEmitter, useRequestUpdate, useDynamic, useInitialize } from 'riv-runtime';
-import { NodeKind, NativeFunctionDefinitionNode, ApplicationSettings, FunctionInterfaceNode } from '../compiler/Tree';
+import { NodeKind, NativeImplNode, ApplicationSettings, FunctionInterfaceNode, FunctionDefinitionNode, UID } from '../compiler/Tree';
+import genuid from '../util/uid';
 import { TemplateGroup } from '../compiler/TemplateLayout';
 import { FunctionType } from '../compiler/Types';
 import { useVar, useEventMultiReceiver } from 'riv-runtime';
@@ -130,7 +131,6 @@ type AbbrevFunctionInterface = [/*name*/ string, /*params*/ ReadonlyArray<[/*kin
 
 const strtextNativeFunctions: ReadonlyArray<[string, AbbrevFunctionInterface, Function]> = [
   // simple
-  ['bind', ['bind', [['o', '', 'A'], ['s', '', 'A']], 'void', '$0 = $1'], (v: any) => v],
   ['ifte', ['ifte', [['s', 'if', 'boolean'], ['s', 'then', 'A'], ['s', 'otherwise', 'A']], 'A', ''], (cond: any, _then: any, _else: any) => (cond ? _then : _else)],
   ['equals', ['equals', [['s', '', 'A'], ['s', '', 'A']], 'boolean', '$0 equals $1'], (a: any, b: any) => Object.is(a, b)],
 
@@ -223,57 +223,58 @@ const strtextNativeFunctions: ReadonlyArray<[string, AbbrevFunctionInterface, Fu
 */
 ];
 
-const globalNativeFunctions: Array<NativeFunctionDefinitionNode> = [];
+const globalNativeFunctions: Array<FunctionDefinitionNode> = [];
 
 function expandInterface(abbrevIface: AbbrevFunctionInterface): FunctionInterfaceNode {
   const [name, abbrevParams, ret, tmpl] = abbrevIface;
 
   return {
     kind: NodeKind.FunctionInterface,
-    name: {kind: NodeKind.Name, text: name},
-    // NOTE: generating pids this way is a little sketchy, but should be OK for now
+    nid: genuid(),
+    name: {kind: NodeKind.Text, nid: genuid(), text: name},
     params: abbrevParams.map((abbrevParam, idx) => {
       const [pkind, pname, ptype] = abbrevParam;
       switch (pkind) {
         case 's':
           return {
-            kind: NodeKind.FIStreamParam,
-            pid: 'p' + idx,
-            name: {kind: NodeKind.Name, text: pname},
+            kind: NodeKind.StreamParam,
+            nid: genuid(),
+            bind: {
+              kind: NodeKind.NameBinding,
+              nid: genuid(),
+              name: {kind: NodeKind.Text, nid: genuid(), text: pname},
+            },
           };
 
         case 'f':
           return {
-            kind: NodeKind.FIFunctionParam,
-            pid: 'p' + idx,
-            name: {kind: NodeKind.Name, text: pname},
+            kind: NodeKind.FunctionParam,
+            nid: genuid(),
             iface: expandInterface(ptype as AbbrevFunctionInterface),
-          };
-
-        case 'o':
-          return {
-            kind: NodeKind.FIOutParam,
-            pid: 'p' + idx,
-            name: {kind: NodeKind.Name, text: pname},
           };
 
         default:
           throw new Error();
       }
     }),
-    ret: (ret === 'void') ? {kind: NodeKind.FIVoid} : {kind: NodeKind.FIReturn},
+    output: (ret !== 'void'),
   };
 }
 
 strtextNativeFunctions.forEach(([fid, abbrevIface, jsImpl]) => {
   globalNativeFunctions.push({
-    kind: NodeKind.NativeFunctionDefinition,
-    fid,
+    kind: NodeKind.FunctionDefinition,
+    nid: fid,
     iface: expandInterface(abbrevIface),
-    impl: jsImpl,
+    impl: {
+      kind: NodeKind.NativeImpl,
+      nid: genuid(),
+      impl: jsImpl,
+    },
   });
 });
 
+/*
 function runForOneInstant(streamFunc: Function, args: Array<any>): any {
   const ctx = new ExecutionContext(streamFunc, () => {});
   const retval = ctx.update(...args);
@@ -281,7 +282,6 @@ function runForOneInstant(streamFunc: Function, args: Array<any>): any {
   return retval;
 }
 
-/*
 globalNativeFunctions.push(
   {
     kind: NodeKind.NativeFunctionDefinition,

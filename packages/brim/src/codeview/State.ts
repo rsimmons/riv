@@ -1,11 +1,11 @@
 import { ExecutionContext } from 'riv-runtime';
 import { CompiledDefinition } from '../compiler/CompiledDefinition';
 
-import { StreamID, Node, FunctionDefinitionNode, TreeFunctionDefinitionNode } from '../compiler/Tree';
+import { UID, Node, FunctionDefinitionNode } from '../compiler/Tree';
 
 export interface ClipboardStackFrame {
   readonly mode: 'cut' | 'copy';
-  readonly streamId: StreamID;
+  readonly streamId: UID;
 }
 
 export interface ProgramInfo {
@@ -14,7 +14,7 @@ export interface ProgramInfo {
 }
 
 export interface SelTree {
-  readonly mainDef: TreeFunctionDefinitionNode;
+  readonly mainDef: FunctionDefinitionNode;
   readonly selectedNode: Node;
 }
 

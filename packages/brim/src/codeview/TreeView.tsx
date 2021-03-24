@@ -1,11 +1,11 @@
 import React, { useState, useRef, useLayoutEffect, useEffect } from 'react';
-import { Node, FunctionDefinitionNode, StreamExpressionNode, BodyExpressionNode, NodeKind, isStreamExpressionNode, StreamReferenceNode, NameNode, ApplicationNode, TreeFunctionDefinitionNode, isFunctionDefinitionNode, ApplicationSettings, generateStreamId, FIStreamParamNode, FIReturnNode, FIVoidNode, FunctionInterfaceNode, FIOutParamNode, FIParamNode, ApplicationArgNode, ApplicationOutNode } from '../compiler/Tree';
+import { Node, FunctionDefinitionNode, StreamExpressionNode, NodeKind, isStreamExpressionNode, StreamReferenceNode, ApplicationNode, ApplicationSettings, FunctionInterfaceNode, ApplicationArgNode, NameBindingNode, ParamNode, StreamParamNode, TreeImplBodyNode, FunctionImplNode, TreeImplNode, BindingExpressionNode, StreamBindingNode } from '../compiler/Tree';
 import './TreeView.css';
-import { StaticEnvironment, extendStaticEnv } from './EditReducer';
+import { StaticEnvironment } from './EditReducer';
 import { TemplateLayout, TextSegment, GroupEditable } from '../compiler/TemplateLayout';
 import quotesIcon from './icons/quotes.svg';
 import booleanIcon from './icons/boolean.svg';
-import { defaultTreeImplFromFunctionInterface, DynamicInterfaceEditAction, DynamicInterfaceChange } from '../compiler/FunctionInterface';
+import { DynamicInterfaceEditAction, DynamicInterfaceChange } from '../compiler/FunctionInterface';
 
 const BOUND_NAME_BOX_COLOR = '#d1e6ff';
 const STREAM_REFERENCE_BOX_COLOR = '#a1cdff';
@@ -17,7 +17,7 @@ interface MarkedNodes {
 
 export interface TreeViewContext {
   markedNodes: MarkedNodes;
-  staticEnv: StaticEnvironment;
+  staticEnvMap: ReadonlyMap<Node, StaticEnvironment>;
   setSelectedNode: (node: Node) => void;
   updateNode: (node: Node, newNode: Node) => void;
   focusSelected: boolean;
@@ -272,7 +272,7 @@ const LogicalTextView: React.FC<{selectionNode: Node | undefined, outwardNode: N
 
       group.segments.forEach((segment, segmentIdx) => {
         if (segment.kind === 'nodes') {
-          const key: string | number = segment.treeNode ? (('aid' in segment.treeNode) ? segment.treeNode.aid : ('obj' + objKey(segment.treeNode))) : segmentIdx;
+          const key: string | number = segment.treeNode ? segment.treeNode.nid : segmentIdx;
           if ((segment.sizedReactNode.singleLineWidth !== undefined) && ((rowWidth + segment.sizedReactNode.singleLineWidth) <= MAX_ROW_WIDTH)) {
             pushNodeSegment(segment, key, handleDeleteSelectedChildNode);
             rowWidth += segment.sizedReactNode.singleLineWidth;
@@ -365,21 +365,17 @@ const sizedLogicalTextView = ({selectionNode, outwardNode, layout, tightGrouping
   };
 }
 
-const sizedNameView = ({node, ctx}: {node: NameNode, ctx: TreeViewContext}): SizedReactNode => {
-  return sizedSimpleNodeView({treeNode: node, content: node.text || '\xa0\xa0\xa0\xa0', bgColor: BOUND_NAME_BOX_COLOR, ctx});
-};
-
-const sizedApplicationOutView = ({node, ctx}: {node: ApplicationOutNode, ctx: TreeViewContext}): SizedReactNode => {
-  return sizedSimpleNodeView({treeNode: node, content: node.text || '\xa0\xa0\xa0\xa0', bgColor: BOUND_NAME_BOX_COLOR, ctx});
-};
-
 const sizedStreamReferenceView = ({node, ctx}: {node: StreamReferenceNode, ctx: TreeViewContext}): SizedReactNode => {
-  const streamDef = ctx.staticEnv.streamEnv.get(node.ref);
-  if (!streamDef) {
+  const env = ctx.staticEnvMap.get(node);
+  if (!env) {
+    throw new Error();
+  }
+  const nameBinding = env.streamEnv.get(node.ref);
+  if (!nameBinding) {
     throw new Error();
   }
 
-  return sizedSimpleNodeView({treeNode: node, content: streamDef.name || '\xa0\xa0\xa0\xa0', bgColor: STREAM_REFERENCE_BOX_COLOR, ctx});
+  return sizedSimpleNodeView({treeNode: node, content: nameBinding.name.text || '\xa0\xa0\xa0\xa0', bgColor: STREAM_REFERENCE_BOX_COLOR, ctx});
 };
 
 const CustomUIView: React.FC<{logicalReactNode: React.ReactNode, createCustomUI: (underNode: HTMLElement, settings: any, onChange: (change: DynamicInterfaceChange) => void) => () => void, settings: ApplicationSettings, onChange: (change: DynamicInterfaceChange) => void}> = ({logicalReactNode, createCustomUI, settings, onChange}) => {
@@ -440,18 +436,20 @@ const sizedApplicationView = ({node, ctx}: {node: ApplicationNode, ctx: TreeView
     return result;
   };
 
-  const funcDef = ctx.staticEnv.functionEnv.get(node.fid);
-  if (!funcDef) {
+  const env = ctx.staticEnvMap.get(node);
+  if (!env) {
+    throw new Error();
+  }
+  const funcIface = env.functionEnv.get(node.fid);
+  if (!funcIface) {
     throw new Error();
   }
 
   const sizedArgNode = (argNode: ApplicationArgNode): SizedReactNode => {
-    if (isFunctionDefinitionNode(argNode)) {
+    if (argNode.kind === NodeKind.FunctionDefinition) {
       return sizedFunctionDefinitionView({node: argNode, ctx});
     } else if (isStreamExpressionNode(argNode)) {
       return sizedStreamExpressionView({node: argNode, ctx});
-    } else if (argNode.kind === NodeKind.ApplicationOut) {
-      return sizedApplicationOutView({node: argNode, ctx});
     } else {
       throw new Error();
     }
@@ -461,11 +459,11 @@ const sizedApplicationView = ({node, ctx}: {node: ApplicationNode, ctx: TreeView
   layout.push({
     segments: [{
       kind: 'text',
-      text: funcDef.iface.name.text,
+      text: funcIface.name.text,
     }],
   });
-  funcDef.iface.params.forEach(param => {
-    const argNode = node.args.get(param.pid);
+  funcIface.params.forEach(param => {
+    const argNode = node.args.get(param.nid);
     if (!argNode) {
       throw new Error();
     }
@@ -629,45 +627,22 @@ export const StreamExpressionView: React.FC<{node: StreamExpressionNode, ctx: Tr
   return <>{reactNode}</> // empty angle brackets are to make types work
 }
 
-const sizedBodyExpressionView = ({node, outNames, ctx}: {node: BodyExpressionNode, outNames: ReadonlyArray<string | undefined>, ctx: TreeViewContext}): SizedReactNode => {
-  if (isStreamExpressionNode(node)) {
-    return sizedStreamExpressionView({node, ctx});
-  } else if (isFunctionDefinitionNode(node)) {
-    return sizedFunctionDefinitionView({node, ctx});
-  } else if (node.kind === NodeKind.YieldExpression) {
-    const displayedName = '<out>'; // (outNames[node.idx] === undefined) ? node.idx.toString() : outNames[node.idx];
-    return sizedLogicalTextView({
-      selectionNode: node,
-      outwardNode: node,
-      layout: [{
-        segments: [
-          // {
-          //   kind: 'nodes',
-          //   treeNode: node.name,
-          //   sizedReactNode: sizedNameView({node: node.name, ctx}),
-          // },
-          {
-            kind: 'text',
-            text: displayedName + ' ←',
-          },
-          {
-            kind: 'nodes',
-            treeNode: node.expr,
-            sizedReactNode: sizedStreamExpressionView({node: node.expr, ctx}),
-          },
-        ],
-      }],
-      tightGrouping: true,
-      ctx,
-    });
-  } else {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const exhaustive: never = node; // this will cause a type error if we haven't handled all cases
-    throw new Error('unreachable');
-  }
-};
+const sizedNameBindingView = ({node, ctx}: {node: NameBindingNode, ctx: TreeViewContext}): SizedReactNode => {
+  return sizedSimpleNodeView({treeNode: node, content: node.name.text || '\xa0\xa0\xa0\xa0', bgColor: BOUND_NAME_BOX_COLOR, ctx});
+}
 
-const sizedFIStreamView = ({node, ctx}: {node: FIStreamParamNode | FIOutParamNode, ctx: TreeViewContext}): SizedReactNode => {
+const sizedBindingExpressionView = ({node, ctx}: {node: BindingExpressionNode, ctx: TreeViewContext}): SizedReactNode => {
+  switch (node.kind) {
+    case NodeKind.NameBinding:
+      return sizedNameBindingView({node, ctx});
+
+    default: {
+      throw new Error();
+    }
+  }
+}
+
+const sizedStreamParamView = ({node, ctx}: {node: StreamParamNode, ctx: TreeViewContext}): SizedReactNode => {
   const layout: Array<LogicalGroup> = [];
 
   layout.push({
@@ -678,49 +653,23 @@ const sizedFIStreamView = ({node, ctx}: {node: FIStreamParamNode | FIOutParamNod
       },
       {
         kind: 'nodes',
-        treeNode: node.name,
-        sizedReactNode: sizedNameView({node: node.name, ctx}),
+        treeNode: node.bind,
+        sizedReactNode: sizedNameBindingView({node: node.bind, ctx}),
       },
-      // {
-      //   kind: 'text',
-      //   text: ':',
-      // },
-      // {
-      //   kind: 'text',
-      //   text: '(type)',
-      // },
     ],
   });
 
   return sizedLogicalTextView({selectionNode: node, outwardNode: node, layout, tightGrouping: true, ctx});
 }
 
-const sizedFIParamView = ({node, ctx}: {node: FIParamNode, ctx: TreeViewContext}): SizedReactNode => {
+const sizedParamView = ({node, ctx}: {node: ParamNode, ctx: TreeViewContext}): SizedReactNode => {
   switch (node.kind) {
-    case NodeKind.FIStreamParam:
-      return sizedFIStreamView({node, ctx});
+    case NodeKind.StreamParam:
+      return sizedStreamParamView({node, ctx});
 
-    case NodeKind.FIFunctionParam:
+    case NodeKind.FunctionParam:
+      // TODO: show interface
       return sizedSimpleNodeView({treeNode: node, content: 'fparam', bgColor: BOUND_NAME_BOX_COLOR, ctx});
-
-    case NodeKind.FIOutParam:
-      return sizedFIStreamView({node, ctx});
-
-    default: {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const exhaustive: never = node; // this will cause a type error if we haven't handled all cases
-      throw new Error();
-    }
-  }
-}
-
-const sizedFIRetView = ({node, ctx}: {node: FIReturnNode | FIVoidNode, ctx: TreeViewContext}): SizedReactNode => {
-  switch (node.kind) {
-    case NodeKind.FIReturn:
-      return sizedSimpleNodeView({treeNode: node, content: 'something', bgColor: '#fff', ctx});
-
-    case NodeKind.FIVoid:
-      return sizedSimpleNodeView({treeNode: node, content: 'nothing', bgColor: '#fff', ctx});
 
     default: {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -738,7 +687,7 @@ const sizedFunctionInterfaceView = ({node, ctx}: {node: FunctionInterfaceNode, c
       {
         kind: 'nodes',
         treeNode: node.name,
-        sizedReactNode: sizedNameView({node: node.name, ctx}),
+        sizedReactNode: sizedSimpleNodeView({treeNode: node, content: node.name.text || '\xa0\xa0\xa0\xa0', bgColor: BOUND_NAME_BOX_COLOR, ctx}),
       }
     ],
   });
@@ -749,7 +698,7 @@ const sizedFunctionInterfaceView = ({node, ctx}: {node: FunctionInterfaceNode, c
         {
           kind: 'nodes',
           treeNode: param,
-          sizedReactNode: sizedFIParamView({node: param, ctx}),
+          sizedReactNode: sizedParamView({node: param, ctx}),
         }
       ],
     });
@@ -762,9 +711,8 @@ const sizedFunctionInterfaceView = ({node, ctx}: {node: FunctionInterfaceNode, c
         text: '→',
       },
       {
-        kind: 'nodes',
-        treeNode: node.ret,
-        sizedReactNode: sizedFIRetView({node: node.ret, ctx}),
+        kind: 'text',
+        text: node.output ? '(something)' : '(void)'
       },
     ],
   });
@@ -772,27 +720,103 @@ const sizedFunctionInterfaceView = ({node, ctx}: {node: FunctionInterfaceNode, c
   return sizedLogicalTextView({selectionNode: node, outwardNode: node, layout, tightGrouping: true, ctx});
 }
 
-export const TreeFunctionDefinitionView: React.FC<{node: TreeFunctionDefinitionNode, ctx: TreeViewContext}> = ({ node, ctx }) => {
-  const newCtx: TreeViewContext = {
-    ...ctx,
-    staticEnv: extendStaticEnv(ctx.staticEnv, node),
-  };
-
-  const ifaceReactNode: React.ReactNode = sizedFunctionInterfaceView({node: node.iface, ctx}).reactNode;
-
+export const sizedStreamBindingView = ({node, ctx}: {node: StreamBindingNode, ctx: TreeViewContext}): SizedReactNode => {
   const layout: Array<LogicalGroup> = [];
-  node.bodyExprs.forEach(bodyExpr => {
+
+  layout.push({
+    segments: [
+      {
+        kind: 'nodes',
+        treeNode: node.bexpr,
+        sizedReactNode: sizedBindingExpressionView({node: node.bexpr, ctx}),
+      },
+    ],
+  });
+
+  layout.push({
+    segments: [
+      {
+        kind: 'text',
+        text: ' = ',
+      },
+    ]
+  });
+
+  layout.push({
+    segments: [
+      {
+        kind: 'nodes',
+        treeNode: node.sexpr,
+        sizedReactNode: sizedStreamExpressionView({node: node.sexpr, ctx}),
+      },
+    ],
+  });
+
+  return sizedLogicalTextView({selectionNode: undefined, outwardNode: node, layout, tightGrouping: true, ctx});
+}
+
+const sizedTreeImplBodyView = ({node, ctx}: {node: TreeImplBodyNode, ctx: TreeViewContext}): SizedReactNode => {
+  if (isStreamExpressionNode(node)) {
+    return sizedStreamExpressionView({node, ctx});
+  } else if (node.kind === NodeKind.StreamBinding) {
+    return sizedStreamBindingView({node, ctx});
+  } else if (node.kind === NodeKind.FunctionDefinition) {
+    return sizedFunctionDefinitionView({node, ctx});
+  } else {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const exhaustive: never = node; // this will cause a type error if we haven't handled all cases
+    throw new Error('unreachable');
+  }
+};
+
+const sizedTreeImplView = ({node, ctx}: {node: TreeImplNode, ctx: TreeViewContext}): SizedReactNode => {
+  const layout: Array<LogicalGroup> = [];
+  node.body.forEach(bodyNode => {
     layout.push({
       segments: [{
         kind: 'nodes',
-        treeNode: bodyExpr,
-        sizedReactNode: sizedBodyExpressionView({node: bodyExpr, outNames: [] /*TODO*/, ctx: newCtx}),
+        treeNode: bodyNode,
+        sizedReactNode: sizedTreeImplBodyView({node: bodyNode, ctx}),
       }],
     });
   });
 
-  const {reactNode: bodyReactNode} = sizedLogicalTextView({selectionNode: undefined, outwardNode: node, layout, tightGrouping: false, ctx: newCtx});
+  if (node.out) {
+    layout.push({
+      segments: [
+        {
+          kind: 'text',
+          text: '←',
+        },
+        {
+          kind: 'nodes',
+          treeNode: node.out,
+          sizedReactNode: sizedStreamExpressionView({node: node.out, ctx}),
+        },
+      ],
+    });
+  }
 
+  return sizedLogicalTextView({selectionNode: undefined, outwardNode: node, layout, tightGrouping: false, ctx});
+}
+
+const sizedFunctionImplView = ({node, ctx}: {node: FunctionImplNode, ctx: TreeViewContext}): SizedReactNode => {
+  switch (node.kind) {
+    case NodeKind.NativeImpl:
+      throw new Error('unimplemented');
+
+    case NodeKind.TreeImpl:
+      return sizedTreeImplView({node, ctx});
+
+    default: {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const exhaustive: never = node; // this will cause a type error if we haven't handled all cases
+      throw new Error();
+    }
+  }
+}
+
+export const FunctionDefinitionView: React.FC<{node: FunctionDefinitionNode, ctx: TreeViewContext}> = ({ node, ctx }) => {
   const ref = useRef<HTMLDivElement>(null);
   const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node, ref, ctx);
 
@@ -804,31 +828,22 @@ export const TreeFunctionDefinitionView: React.FC<{node: TreeFunctionDefinitionN
       return;
     }
     if ((e.key === 'ArrowRight') && (ref.current === e.target)) {
-      if (node.bodyExprs.length > 0) {
+      if ((node.impl.kind === NodeKind.TreeImpl) && (node.impl.body.length > 0)) {
         e.stopPropagation();
-        ctx.setSelectedNode(node.bodyExprs[0]);
+        ctx.setSelectedNode(node.impl.body[0]);
       }
     }
   };
 
+  const ifaceReactNode: React.ReactNode = sizedFunctionInterfaceView({node: node.iface, ctx}).reactNode;
+  const implReactNode: React.ReactNode = sizedFunctionImplView({node: node.impl, ctx}).reactNode;
+
   return (
-    <div ref={ref} className={selectionClasses.concat(['TreeView-node', 'TreeView-tree-function-definition']).join(' ')} {...selectionHandlers} onKeyDown={onKeyDown}>
-      <div className="TreeView-tree-function-definition-iface-spec">{ifaceReactNode}</div>
-      <div className="TreeView-tree-function-definition-body">{bodyReactNode}</div>
+    <div ref={ref} className={selectionClasses.concat(['TreeView-node', 'TreeView-function-definition']).join(' ')} {...selectionHandlers} onKeyDown={onKeyDown}>
+      <div className="TreeView-function-iface">{ifaceReactNode}</div>
+      <div className="TreeView-function-impl">{implReactNode}</div>
     </div>
   );
-}
-
-export const FunctionDefinitionView: React.FC<{node: FunctionDefinitionNode, ctx: TreeViewContext}> = ({ node, ctx }) => {
-  if (node.kind === NodeKind.TreeFunctionDefinition) {
-    return <TreeFunctionDefinitionView node={node} ctx={ctx} />;
-  } else if (node.kind === NodeKind.NativeFunctionDefinition) {
-    throw new Error('unimplemented');
-  } else {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const exhaustive: never = node; // this will cause a type error if we haven't handled all cases
-    throw new Error('unreachable');
-  }
 }
 
 const sizedFunctionDefinitionView = ({node, ctx}: {node: FunctionDefinitionNode, ctx: TreeViewContext}): SizedReactNode => {

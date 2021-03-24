@@ -1,20 +1,24 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import './Chooser.css';
-import { generateStreamId, FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, generateFunctionId, StreamExpressionNode, generateApplicationId, ApplicationOutNode, NameNode, isFunctionDefinitionNode, ApplicationArgs, ApplicationArgNode, TextNode } from '../compiler/Tree';
+import { FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, StreamExpressionNode, ApplicationArgNode, FunctionInterfaceNode, UID, TextNode, StreamBindingNode } from '../compiler/Tree';
 import Fuse from 'fuse.js';
-import { computeParentLookup } from './EditReducer';
+import { computeParentLookup, getStaticEnvMap } from './EditReducer';
 import { SelTree } from './State';
-import { StreamExpressionView, TreeViewContext, FunctionDefinitionView } from './TreeView';
-import { functionInterfaceAsPlainText, defaultTreeImplFromFunctionInterface } from '../compiler/FunctionInterface';
+import { StreamExpressionView, TreeViewContext, FunctionDefinitionView, sizedStreamBindingView } from './TreeView';
+import { functionInterfaceAsPlainText, defaultTreeDefFromFunctionInterface } from '../compiler/FunctionInterface';
+import genuid from '../util/uid';
 
 interface Choice {
-  node: StreamExpressionNode | FunctionDefinitionNode;
+  node: StreamExpressionNode | StreamBindingNode | FunctionDefinitionNode;
 }
 
 const ChoiceView: React.FC<{choice: Choice, treeViewCtx: TreeViewContext}> = ({ choice, treeViewCtx }) => {
   if (isStreamExpressionNode(choice.node)) {
     return <StreamExpressionView node={choice.node} ctx={treeViewCtx} />
-  } else if (isFunctionDefinitionNode(choice.node)) {
+  } else if (choice.node.kind === NodeKind.StreamBinding) {
+    const {reactNode} = sizedStreamBindingView({node: choice.node, ctx: treeViewCtx});
+    return <>{reactNode}</>;
+  } else if (choice.node.kind === NodeKind.FunctionDefinition) {
     return <FunctionDefinitionView node={choice.node} ctx={treeViewCtx} />
   } else {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -28,13 +32,29 @@ interface DropdownState {
   index: number;
 }
 
+function createStreamBinding(name: string): StreamBindingNode {
+  return {
+    kind: NodeKind.StreamBinding,
+    nid: genuid(),
+    bexpr: {
+      kind: NodeKind.NameBinding,
+      nid: genuid(),
+      name: {kind: NodeKind.Text, nid: genuid(), text: name},
+    },
+    sexpr: {
+      kind: NodeKind.UndefinedLiteral,
+      nid: genuid(),
+    },
+  };
+}
+
 const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any) => void, compileError: string | undefined, infixMode: boolean, treeViewCtx: TreeViewContext}> = ({ initSelTree, dispatch, compileError, infixMode, treeViewCtx }) => {
   const parentLookup = useMemo(() => computeParentLookup(initSelTree.mainDef), [initSelTree.mainDef]);
   const parent = parentLookup.get(initSelTree.selectedNode);
   if (!parent) {
     throw new Error();
   }
-  const atRoot = parent.kind === NodeKind.TreeFunctionDefinition;
+  const atRoot = parent.kind === NodeKind.TreeImpl;
 
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -53,6 +73,11 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any)
   }
 
   const initNode = initSelTree.selectedNode;
+
+  const localEnv = treeViewCtx.staticEnvMap.get(initNode);
+  if (!localEnv) {
+    throw new Error();
+  }
 
   const [text, setText] = useState(() => {
     if (infixMode) {
@@ -93,7 +118,7 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any)
       choices.push({
         node: {
           kind: NodeKind.UndefinedLiteral,
-          sid: generateStreamId(),
+          nid: genuid(),
         },
       });
     }
@@ -103,7 +128,7 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any)
       choices.push({
         node:  {
           kind: NodeKind.NumberLiteral,
-          sid: generateStreamId(),
+          nid: genuid(),
           val: textAsNumber,
         },
       });
@@ -120,7 +145,8 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any)
     // function node that we will make an _application_ of
     interface SearchItemFuncData {
       kind: 'func';
-      def: FunctionDefinitionNode;
+      iface: FunctionInterfaceNode;
+      fid: UID;
     }
 
     type SearchItemData = SearchItemNodeData | SearchItemFuncData;
@@ -132,44 +158,34 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any)
 
     const searchItems: Array<SearchItem> = [];
 
-    const streamEnv = treeViewCtx.staticEnv.streamEnv;
+    const streamEnv = localEnv.streamEnv;
     streamEnv.forEach((sdef, ) => {
-      const selfRef = (sdef.kind === 'expr') && (sdef.expr === initNode);
-      if (!selfRef) {
-        searchItems.push({
-          name: sdef.name || ' ',
-          data: {
-            kind: 'node',
-            node: {
-              kind: NodeKind.StreamReference,
-              ref: sdef.sid,
-            },
+      // TODO: we used to check for a self-reference here. do we still need to?
+      searchItems.push({
+        name: sdef.name.text || ' ',
+        data: {
+          kind: 'node',
+          node: {
+            kind: NodeKind.StreamReference,
+            nid: genuid(),
+            ref: sdef.nid,
           },
-        });
-      }
+        },
+      });
     });
 
-    const functionEnv = treeViewCtx.staticEnv.functionEnv;
-    functionEnv.forEach(defNode => {
-      const defAsText = functionInterfaceAsPlainText(defNode.iface);
-      if (atRoot) {
+    const functionEnv = localEnv.functionEnv;
+    functionEnv.forEach((ifaceNode, fid) => {
+      const defAsText = functionInterfaceAsPlainText(ifaceNode);
+      if (atRoot || ifaceNode.output) {
         searchItems.push({
           name: defAsText,
           data: {
             kind: 'func',
-            def: defNode,
+            iface: ifaceNode,
+            fid,
           },
         });
-      } else {
-        if (defNode.iface.ret.kind === NodeKind.FIReturn) {
-          searchItems.push({
-            name: defAsText,
-            data: {
-              kind: 'func',
-              def: defNode,
-            },
-          });
-        }
       }
     });
 
@@ -180,7 +196,7 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any)
           kind: 'node',
           node: {
             kind: NodeKind.BooleanLiteral,
-            sid: generateStreamId(),
+            nid: genuid(),
             val: bv,
           },
         },
@@ -205,31 +221,22 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any)
           break;
 
         case 'func': {
-          const funcDefNode = result.item.data.def;
-          const iface = funcDefNode.iface;
+          const {iface, fid} = result.item.data;
 
           const args: Map<string, ApplicationArgNode> = new Map();
 
           iface.params.forEach(param => {
             switch (param.kind) {
-              case NodeKind.FIStreamParam:
+              case NodeKind.StreamParam:
                 // TODO: wtf was infixMode doing here before?
-                args.set(param.pid, {
+                args.set(param.nid, {
                   kind: NodeKind.UndefinedLiteral,
-                  sid: generateStreamId(),
+                  nid: genuid(),
                 });
                 break;
 
-              case NodeKind.FIFunctionParam:
-                args.set(param.pid, defaultTreeImplFromFunctionInterface(param.iface));
-                break;
-
-              case NodeKind.FIOutParam:
-                args.set(param.pid, {
-                  kind: NodeKind.ApplicationOut,
-                  sid: generateStreamId(),
-                  text: '',
-                });
+              case NodeKind.FunctionParam:
+                args.set(param.nid, defaultTreeDefFromFunctionInterface(param.iface));
                 break;
 
               default: {
@@ -242,10 +249,9 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any)
 
           const n: ApplicationNode = {
             kind: NodeKind.Application,
-            aid: generateApplicationId(),
-            fid: funcDefNode.fid,
+            nid: genuid(),
+            fid,
             args,
-            rid: (iface.ret.kind === NodeKind.FIReturn) ? generateStreamId() : undefined,
           };
 
           choices.push({
@@ -264,49 +270,45 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any)
     }
 
     if (atRoot && text.trim() !== '') {
-      const args: ApplicationArgs = new Map([
-        ['p0', {kind: NodeKind.ApplicationOut, sid: generateStreamId(), text: text.trim()}],
-        ['p1', {kind: NodeKind.UndefinedLiteral, sid: generateStreamId()}],
-      ]);
       choices.push({
-        node: {
-          kind: NodeKind.Application,
-          aid: generateApplicationId(),
-          fid: 'bind',
-          args,
-          rid: undefined,
-        },
+        node: createStreamBinding(text.trim()),
       });
 
       // Create a choice for a new local function definition
+      const singleParamId = genuid();
+      const singleInternalId = genuid();
       choices.push({
         node: {
-          kind: NodeKind.TreeFunctionDefinition,
-          fid: generateFunctionId(),
+          kind: NodeKind.FunctionDefinition,
+          nid: genuid(),
           iface: {
             kind: NodeKind.FunctionInterface,
-            name: {kind: NodeKind.Name, text: text.trim()},
+            nid: genuid(),
+            name: {kind: NodeKind.Text, nid: genuid(), text: text.trim()},
             params: [
               {
-                kind: NodeKind.FIStreamParam,
-                pid: generateStreamId(),
-                name: {kind: NodeKind.Name, text: 'param'},
+                kind: NodeKind.StreamParam,
+                nid: singleParamId,
+                bind: {
+                  kind: NodeKind.NameBinding,
+                  nid: genuid(),
+                  name: {kind: NodeKind.Text, nid: genuid(), text: 'param'},
+                },
               },
             ],
-            ret: {
-              kind: NodeKind.FIReturn,
-            },
+            output: true,
           },
-          bodyExprs: [
-            {
-              kind: NodeKind.YieldExpression,
-              out: null,
-              expr: {
-                kind: NodeKind.UndefinedLiteral,
-                sid: generateStreamId(),
-              },
+          impl: {
+            kind: NodeKind.TreeImpl,
+            nid: genuid(),
+            pids: new Map([[singleParamId, singleInternalId]]),
+            body: [],
+            out: {
+              kind: NodeKind.StreamReference,
+              nid: genuid(),
+              ref: singleInternalId,
             },
-          ],
+          }
         },
       });
     }
@@ -314,7 +316,7 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any)
     choices.push({
       node: {
         kind: NodeKind.TextLiteral,
-        sid: generateStreamId(),
+        nid: genuid(),
         val: text,
       },
     });
@@ -323,7 +325,7 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any)
       choices.push({
         node: {
           kind: NodeKind.UndefinedLiteral,
-          sid: generateStreamId(),
+          nid: genuid(),
         },
       });
     }
@@ -391,24 +393,8 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any)
 
         if (atRoot) {
           const inputText = inputRef.current.value;
-          const bindNode: ApplicationNode = {
-            kind: NodeKind.Application,
-            aid: generateApplicationId(),
-            fid: 'bind',
-            args: new Map([
-              ['p0', {
-                kind: NodeKind.ApplicationOut,
-                sid: generateStreamId(),
-                text: inputText,
-              }],
-              ['p1', {
-                kind: NodeKind.UndefinedLiteral,
-                sid: generateStreamId(),
-              }],
-            ]),
-            rid: undefined,
-          };
-          dispatch({type: 'UPDATE_EDITING_NODE', newNode: bindNode});
+          const newNode = createStreamBinding(inputText);
+          dispatch({type: 'UPDATE_EDITING_NODE', newNode});
           dispatch({type: 'TOGGLE_EDIT'});
         }
         break;
@@ -433,9 +419,17 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any)
               classNames.push('Chooser-dropdown-selected');
             }
           }
+
+          // a map from nodes inside our choice to their static env
+          const choiceEnvMap = getStaticEnvMap(choice.node, localEnv);
+          const choiceViewCtx = {
+            ...treeViewCtx,
+            staticEnvMap: choiceEnvMap,
+          };
+
           return (
             <li key={idx} className={classNames.join(' ')} ref={(idx === dropdownState.index) ? selectedListElem : undefined}>
-              <ChoiceView choice={choice} treeViewCtx={treeViewCtx} />
+              <ChoiceView choice={choice} treeViewCtx={choiceViewCtx} />
               {(compileError && (idx === dropdownState.index)) ?
                 <div className="Chooser-dropdown-compile-error">{compileError}</div>
               : null}
@@ -447,12 +441,11 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any)
   );
 }
 
-const NameChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any) => void}> = ({ initSelTree, dispatch }) => {
-  const selNode = initSelTree.selectedNode;
-  if ((selNode.kind !== NodeKind.Name) && (selNode.kind !== NodeKind.ApplicationOut)) {
+const TextChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any) => void}> = ({ initSelTree, dispatch }) => {
+  const initNode = initSelTree.selectedNode;
+  if (initNode.kind !== NodeKind.Text) {
     throw new Error();
   }
-  const initNode: TextNode = selNode;
 
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -468,7 +461,7 @@ const NameChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any) => vo
 
     setText(newText);
 
-    const newNode = {
+    const newNode: TextNode = {
       ...initNode,
       text: newText,
     };
@@ -483,8 +476,8 @@ const NameChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any) => vo
 }
 
 const Chooser: React.FC<{initSelTree: SelTree, dispatch: (action: any) => void, compileError: string | undefined, infixMode: boolean, treeViewCtx: TreeViewContext}> = ({ initSelTree, dispatch, compileError, infixMode, treeViewCtx }) => {
-  if ((initSelTree.selectedNode.kind === NodeKind.Name) || (initSelTree.selectedNode.kind === NodeKind.ApplicationOut)) {
-    return <NameChooser initSelTree={initSelTree} dispatch={dispatch} />
+  if (initSelTree.selectedNode.kind === NodeKind.Text) {
+    return <TextChooser initSelTree={initSelTree} dispatch={dispatch} />
   } else if (isStreamExpressionNode(initSelTree.selectedNode)) {
     return <ExpressionChooser initSelTree={initSelTree} dispatch={dispatch} compileError={compileError} infixMode={infixMode} treeViewCtx={treeViewCtx} />
   } else {

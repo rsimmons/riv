@@ -1,27 +1,22 @@
-import { StreamID, FunctionID, ApplicationID, ParameterID } from './Tree';
+import { UID } from './Tree';
 
 export interface ConstStreamSpec {
-  readonly sid: StreamID;
+  readonly sid: UID;
   readonly val: any;
 }
 
 export interface AppSpec {
-  readonly sids: ReadonlyArray<StreamID>; // for return (if any), followed by out-parmeters (if any) in interface order
-  readonly appId: ApplicationID;
-  readonly funcId: FunctionID;
-  readonly args: ReadonlyArray<ParameterID | ReadonlyArray<ParameterID>>; // only in-parameters, with order matching def
-  readonly settings?: any;
-}
-
-export interface LocalFunctionDefinition {
-  readonly fid: FunctionID;
-  readonly def: CompiledDefinition;
+  readonly aid: UID; // uniquely identifies this application
+  readonly fid: UID; // applied function
+  readonly args: ReadonlyArray<UID | ReadonlyArray<UID>>; // note that settings may be first arg
+  readonly oid: UID | null; // stream id that we store output value in (if there is any)
 }
 
 export interface CompiledDefinition {
-  readonly paramIds: ReadonlyArray<ParameterID>; // only in-parameters
-  readonly constStreams: ReadonlyArray<ConstStreamSpec>;
+  readonly fid: UID; // function id created by this definition
+  readonly pids: ReadonlyArray<UID>; // internal stream and function ids that params are assigned to
+  readonly consts: ReadonlyArray<ConstStreamSpec>;
   readonly apps: ReadonlyArray<AppSpec>; // already toposorted
-  readonly localDefs: ReadonlyArray<LocalFunctionDefinition>;
-  readonly returnStreamIds: ReadonlyArray<StreamID>; // return (if any), followed by out-parmeters (if any) in interface order
+  readonly defs: ReadonlyArray<CompiledDefinition>; // local contained definitions
+  readonly oid: UID | null; // stream id that it outputted (if there is output)
 }

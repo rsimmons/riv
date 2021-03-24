@@ -1,46 +1,51 @@
-import { StreamID, FunctionID, Node, FunctionDefinitionNode, StreamExpressionNode, NodeKind, isStreamExpressionNode, TreeFunctionDefinitionNode, isFunctionDefinitionNode, FunctionInterfaceNode, ParameterID } from './Tree';
-import { streamExprReturnedId } from './TreeUtil';
-import { CompiledDefinition, ConstStreamSpec, LocalFunctionDefinition, AppSpec } from './CompiledDefinition';
+import { UID, Node, FunctionDefinitionNode, StreamExpressionNode, NodeKind, isStreamExpressionNode, FunctionInterfaceNode, BindingExpressionNode, NameBindingNode } from './Tree';
+import { CompiledDefinition, ConstStreamSpec, AppSpec } from './CompiledDefinition';
 import Environment from '../util/Environment';
-import { visitChildren } from './Traversal';
 
 export class CompilationError extends Error {
 };
 
-// A stream id can be defined by either a stream expression or a parameter. If a stream id was
-// created by a parameter, then it maps to null (because we don't need to traverse from the param).
-type CompilationStreamEnvironment = Environment<StreamID, StreamExpressionNode | null>;
-type CompilationFunctionEnvironment = Environment<FunctionID, FunctionInterfaceNode>;
+// Streams don't map to anything currently, but may map to type info in the future?
+type CompilationStreamEnvironment = Environment<UID, null>;
+type CompilationFunctionEnvironment = Environment<UID, FunctionInterfaceNode>;
 
-function compileTreeFuncDef(def: TreeFunctionDefinitionNode, outerStreamEnvironment: CompilationStreamEnvironment, outerFunctionEnvironment: CompilationFunctionEnvironment): [CompiledDefinition, Set<StreamID>] {
-  const streamEnvironment: CompilationStreamEnvironment = new Environment(outerStreamEnvironment);
-  const functionEnvironment: CompilationFunctionEnvironment = new Environment(outerFunctionEnvironment);
-  const localStreamIds: Set<StreamID> = new Set();
-  const localFunctionMap: Map<FunctionID, FunctionDefinitionNode> = new Map();
-
-  // TODO: verify that internal parameters (sparams, fparams) match the signature
-
-  const addLocalStream = (sid: StreamID): void => {
-    if (streamEnvironment.has(sid)) {
-      throw new Error('must be unique');
-    }
-    streamEnvironment.set(sid, null);
-    localStreamIds.add(sid);
+function compileTreeFuncDef(def: FunctionDefinitionNode, outerStreamEnv: CompilationStreamEnvironment, outerFuncEnv: CompilationFunctionEnvironment): [CompiledDefinition, Set<UID>, Set<UID>] {
+  const impl = def.impl;
+  if (impl.kind !== NodeKind.TreeImpl) {
+    throw new Error();
   }
 
-  // Identify locally defined stream and function ids
+  // TODO: verify that pids match the interface?
+
+  // Note that these don't include all local stream and function ids, but rather only
+  // the ones that are at the "top level" and are valid to be referenced
+  const localStreamEnv: Map<UID, null> = new Map();
+  // This is a subset of the local stream env, doesn't contain internal parameters
+  const localStreamBinding: Map<UID, NameBindingNode> = new Map();
+
+  const localFuncEnv: Map<UID, FunctionInterfaceNode> = new Map();
+  // This is a subset of the local function env, doesn't contain internal parameters
+  const localFuncDef: Map<UID, FunctionDefinitionNode> = new Map();
+
+  // These combined environments share the same local env objects,
+  // so setting in local envs will affect these.
+  const combinedStreamEnv: CompilationStreamEnvironment = new Environment(outerStreamEnv, localStreamEnv);
+  const combinedFuncEnv: CompilationFunctionEnvironment = new Environment(outerFuncEnv, localFuncEnv);
+
+  // Add parameters to local environment, and extract internal parameter ids
+  const pids: Array<UID> = [];
   def.iface.params.forEach(param => {
+    const internalId = impl.pids.get(param.nid);
+    if (!internalId) {
+      throw new Error();
+    }
     switch (param.kind) {
-      case NodeKind.FIStreamParam:
-        addLocalStream(param.pid);
+      case NodeKind.StreamParam:
+        localStreamEnv.set(internalId, null);
         break;
 
-      case NodeKind.FIFunctionParam:
-        // TODO: handle
-        break;
-
-      case NodeKind.FIOutParam:
-        // nothing to do here
+      case NodeKind.FunctionParam:
+        localFuncEnv.set(internalId, param.iface);
         break;
 
       default: {
@@ -51,191 +56,217 @@ function compileTreeFuncDef(def: TreeFunctionDefinitionNode, outerStreamEnvironm
     }
   });
 
-  const visitToFindLocals = (node: Node): void => {
-    if (isStreamExpressionNode(node)) {
-      switch (node.kind) {
-        case NodeKind.UndefinedLiteral:
-        case NodeKind.NumberLiteral:
-        case NodeKind.TextLiteral:
-        case NodeKind.BooleanLiteral:
-          if (streamEnvironment.has(node.sid)) {
-            console.log('node is', node);
-            throw new Error('must be unique');
-          }
-          streamEnvironment.set(node.sid, node);
-          localStreamIds.add(node.sid);
-          break;
-
-        case NodeKind.StreamReference:
-          // ignore because it doesn't define a stream id
-          break;
-
-        case NodeKind.Application:
-          if (node.rid !== undefined) {
-            addLocalStream(node.rid);
-          }
-          node.args.forEach(arg => {
-            if (arg.kind === NodeKind.ApplicationOut) {
-              addLocalStream(arg.sid);
-            }
-          });
-          break;
-
-        default: {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const exhaustive: never = node; // this will cause a type error if we haven't handled all cases
-          throw new Error();
-        }
-      }
-    } else if (isFunctionDefinitionNode(node)) {
-      // A local definition
-      if (functionEnvironment.has(node.fid)) {
-        throw new Error('must be unique');
-      }
-      functionEnvironment.set(node.fid, node.iface);
-      localFunctionMap.set(node.fid, node);
+  // Iterate over stream bindings and top-level function definitions,
+  // further building out the local environment.
+  // We also build a map from BindingExpressionNodes to their parents.
+  // NOTE: When we move to nested bindings, I think we might need the parent AND
+  // the stream id that it outputs for that child? For StreamBindExpr it would be the RHS id.
+  const bindingExprParent: Map<BindingExpressionNode, Node> = new Map();
+  impl.body.forEach(bnode => {
+    if (bnode.kind === NodeKind.StreamBinding) {
+      // NOTE: When we have nested binding expressions (destructuring),
+      // we will want to recursively traverse the LHS binding expression.
+      localStreamEnv.set(bnode.bexpr.nid, null);
+      localStreamBinding.set(bnode.bexpr.nid, bnode.bexpr);
+      bindingExprParent.set(bnode.bexpr, bnode);
+    } else if (bnode.kind === NodeKind.FunctionDefinition) {
+      localFuncEnv.set(bnode.nid, bnode.iface);
+      localFuncDef.set(bnode.nid, bnode);
     }
+    // top-level (unbound) stream expressions are ignored
+  });
 
-    if (!isFunctionDefinitionNode(node)) {
-      // Don't traverse into definitions, we want to stay local
-      visitChildren(node, visitToFindLocals, undefined);
-    }
-  };
-  visitChildren(def, visitToFindLocals, undefined);
+  // TOPOLOGICAL SORT
+  // In the process of this sort, we compile to a dependency-ordered set of applications,
+  // and also identify outer scope references, and compile any local tree function defs.
+  // To "traverse to" an id or definition means to ensure that whatever is referred to by
+  // that id/def has been added to the compiled output (this of course involves traversing
+  // to any of _its dependencies).
 
-  const constStreams: Array<ConstStreamSpec> = [];
+  // Using terminology from https://en.wikipedia.org/wiki/Topological_sorting#Depth-first_search
+  const temporaryMarked: Set<Node> = new Set();
+  const permanentMarked: Set<Node> = new Set();
+
+  const consts: Array<ConstStreamSpec> = [];
   const apps: Array<AppSpec> = [];
-  const localDefs: Array<LocalFunctionDefinition> = [];
-  const externalReferencedStreamIds: Set<StreamID> = new Set();
+  const compiledSubdefs: Array<CompiledDefinition> = [];
+  const outerReferencedStreamIds: Set<UID> = new Set();
+  const outerReferencedFunctionIds: Set<UID> = new Set();
 
-  // Compile local tree function definitions
-  for (const [fid, funcDef] of localFunctionMap.entries()) {
-    if (funcDef.kind === NodeKind.TreeFunctionDefinition) {
-      const [innerCompiledDef, ] = compileTreeFuncDef(funcDef, streamEnvironment, functionEnvironment);
-      localDefs.push({fid, def: innerCompiledDef});
+  const traverseToStreamId = (sid: UID): void => {
+    if (localStreamEnv.has(sid)) {
+      if (outerStreamEnv.has(sid)) {
+        throw new Error();
+      }
+      const target = localStreamBinding.get(sid);
+      if (target) {
+        // target must be a local NameBindingNode
+        traverseToBindingExpr(target);
+      }
+      // otherwise, it's a local parameter, which we can ignore
+    } else if (outerStreamEnv.has(sid)) {
+      outerReferencedStreamIds.add(sid);
     } else {
       throw new Error();
     }
-  }
+  };
 
-  // Using terminology from https://en.wikipedia.org/wiki/Topological_sorting#Depth-first_search
-  const temporaryMarked: Set<StreamExpressionNode> = new Set();
-  const permanentMarked: Set<StreamExpressionNode> = new Set();
+  const traverseToFunctionId = (fid: UID): void => {
+    if (localFuncEnv.has(fid)) {
+      if (outerFuncEnv.has(fid)) {
+        throw new Error();
+      }
+      const target = localFuncDef.get(fid);
+      if (target) {
+        traverseToFunctionDef(target);
+      }
+    } else if (outerFuncEnv.has(fid)) {
+      outerReferencedFunctionIds.add(fid);
+    } else {
+      throw new Error();
+    }
+  };
 
-  function traverseStreamExpr(node: StreamExpressionNode): void {
-    if (permanentMarked.has(node)) {
-      return;
+  // returns the id of the function def
+  const traverseToFunctionDef = (subdef: FunctionDefinitionNode): UID => {
+    if (permanentMarked.has(subdef)) {
+      return subdef.nid;
+    }
+    if (temporaryMarked.has(subdef)) {
+      throw new CompilationError('graph cycle');
+    }
+    temporaryMarked.add(subdef);
+
+    if (subdef.impl.kind === NodeKind.NativeImpl) {
+      // do nothing
+    } else if (subdef.impl.kind === NodeKind.TreeImpl) {
+
+      // Compile
+      const [compiledSubdef, outerStreamRefs, outerFuncRefs] = compileTreeFuncDef(subdef, combinedStreamEnv, combinedFuncEnv);
+      compiledSubdefs.push(compiledSubdef);
+
+      // Traverse to all dependencies (stream and function)
+      for (const sid of outerStreamRefs) {
+        traverseToStreamId(sid);
+      }
+      for (const fid of outerFuncRefs) {
+        traverseToFunctionId(fid);
+      }
+
+    } else {
+      throw new Error();
     }
 
-    if (temporaryMarked.has(node)) {
+    temporaryMarked.delete(subdef);
+    permanentMarked.add(subdef);
+
+    return subdef.nid;
+  };
+
+  // Do what is needed to ensure this stream id defines all its "output" ids
+  const traverseToBindingExpr = (bexpr: BindingExpressionNode): void => {
+    if (permanentMarked.has(bexpr)) {
+      return;
+    }
+    if (temporaryMarked.has(bexpr)) {
       throw new CompilationError('graph cycle');
     }
 
+    // NOTE: This will get more complicated when we have nested binding expressions (destructuring)
+    if (bexpr.kind === NodeKind.NameBinding) {
+      const parent = bindingExprParent.get(bexpr);
+      if (!parent || (parent.kind !== NodeKind.StreamBinding)) {
+        throw new Error();
+      }
+      // parent must be a StreamBindingNode
+      // ensure that the RHS of the stream binding is defined
+      const rhsSid = traverseToStreamExpr(parent.sexpr);
+
+      // Generate a copy: bexpr.nid <- rhsSid
+      apps.push({
+        aid: bexpr.nid,
+        fid: '$copy',
+        args: [rhsSid],
+        oid: bexpr.nid,
+      });
+    } else {
+      throw new Error();
+    }
+
+    temporaryMarked.delete(bexpr);
+    permanentMarked.add(bexpr);
+  };
+
+  // returns the stream id of the expression
+  function traverseToStreamExpr(node: StreamExpressionNode): UID {
+    if (permanentMarked.has(node)) {
+      return node.nid;
+    }
+    if (temporaryMarked.has(node)) {
+      throw new CompilationError('graph cycle');
+    }
+    temporaryMarked.add(node);
+
     switch (node.kind) {
       case NodeKind.UndefinedLiteral:
-        constStreams.push({sid: node.sid, val: undefined});
+        consts.push({sid: node.nid, val: undefined});
         break;
 
       case NodeKind.NumberLiteral:
       case NodeKind.TextLiteral:
       case NodeKind.BooleanLiteral:
-        constStreams.push({sid: node.sid, val: node.val});
+        consts.push({sid: node.nid, val: node.val});
         break;
 
       case NodeKind.StreamReference:
-        if (localStreamIds.has(node.ref)) {
-          const targetExpressionNode = streamEnvironment.get(node.ref);
-          if (targetExpressionNode === null) {
-            // The reference is to a parameter, so we don't need to traverse
-          } else if (targetExpressionNode === undefined) {
-            throw Error();
-          } else {
-            temporaryMarked.add(node); // not really necessary to mark node here but might as well
-            traverseStreamExpr(targetExpressionNode);
-            temporaryMarked.delete(node);
-          }
-        } else {
-          if (!streamEnvironment.has(node.ref)) {
-            throw new CompilationError();
-          }
-          externalReferencedStreamIds.add(node.ref);
-        }
+        traverseToStreamId(node.ref);
+
+        // Emit a copy from the referenced id to this node's id
+        apps.push({
+          aid: node.nid,
+          fid: '$copy',
+          args: [node.ref],
+          oid: node.nid,
+        });
         break;
 
       case NodeKind.Application: {
-        const funcIface = functionEnvironment.get(node.fid);
+        // Traverse to applied function id, as it is a dependency
+        traverseToFunctionId(node.fid);
+
+        const funcIface = combinedFuncEnv.get(node.fid);
         if (!funcIface) {
-          throw new CompilationError();
+          throw new CompilationError('applied func iface not found in env');
         }
 
         // TODO: make sure that sargs, fargs, yields all match signature
 
-        const compiledSids: Array<StreamID> = [];
-        const compiledArgs: Array<ParameterID | ReadonlyArray<ParameterID>> = [];
+        // TODO: if the node has settings, add them to compiledArgs? and add to consts?
 
-        temporaryMarked.add(node);
-
-        if (node.rid !== undefined) {
-          compiledSids.push(node.rid);
-        }
-
+        // Traverse to all args, and build compiled args
+        const compiledArgs: Array<UID | ReadonlyArray<UID>> = [];
         for (const param of funcIface.params) {
+          const argNode = node.args.get(param.nid);
+          if (!argNode) {
+            throw new Error();
+          }
+
           switch (param.kind) {
-            case NodeKind.FIStreamParam: {
-              const argNode = node.args.get(param.pid);
-              if (!argNode || !isStreamExpressionNode(argNode)) {
+            case NodeKind.StreamParam: {
+              if (!isStreamExpressionNode(argNode)) {
                 throw new Error();
               }
-              traverseStreamExpr(argNode);
-              const sid = streamExprReturnedId(argNode);
-              if (!sid) {
-                throw new Error();
-              }
+              const sid = traverseToStreamExpr(argNode);
               compiledArgs.push(sid);
               break;
             }
 
-            case NodeKind.FIFunctionParam: {
-              /*
-              const compiledContainedDef = compileTreeFuncImpl(funcDef, streamEnvironment, functionEnvironment);
-
-              compiledContainedDef.externalReferencedStreamIds.forEach((sid) => {
-                compiledDefinition.externalReferencedStreamIds.add(sid);
-              });
-
-              // An application needs to traverse from its function-arguments out to any streams (in this exact scope)
-              // that it refers to (outer-scope references), because these are dependencies. So this would be an invalid cycle:
-              // x = map(v => x, [1,2,3])
-              compiledContainedDef.externalReferencedStreamIds.forEach((sid) => {
-                if (localStreamIds.has(sid)) {
-                  const depLocalExprNode = streamEnvironment.get(sid);
-                  if (depLocalExprNode === undefined) {
-                    throw new Error();
-                  }
-                  traverseFromStreamCreation(depLocalExprNode, context);
-                }
-              });
-
-              compiledDefinition.containedFunctionDefinitions.push({
-                id: argument.id,
-                definition: compiledContainedDef,
-              });
-              */
-
-              const argNode = node.args.get(param.pid);
-              if (!argNode || !isFunctionDefinitionNode(argNode)) {
+            case NodeKind.FunctionParam: {
+              if (argNode.kind !== NodeKind.FunctionDefinition) {
                 throw new Error();
               }
-              compiledArgs.push(argNode.fid);
-              break;
-            }
-
-            case NodeKind.FIOutParam: {
-              const argNode = node.args.get(param.pid);
-              if (!argNode || (argNode.kind !== NodeKind.ApplicationOut)) {
-                throw new Error();
-              }
-              compiledSids.push(argNode.sid);
+              const fid = traverseToFunctionDef(argNode);
+              compiledArgs.push(fid);
               break;
             }
 
@@ -247,14 +278,11 @@ function compileTreeFuncDef(def: TreeFunctionDefinitionNode, outerStreamEnvironm
           }
         }
 
-        temporaryMarked.delete(node);
-
         apps.push({
-          sids: compiledSids,
-          appId: node.aid,
-          funcId: node.fid,
+          aid: node.nid,
+          fid: node.fid,
           args: compiledArgs,
-          settings: node.settings,
+          oid: funcIface.output ? node.nid : null,
         });
         break;
       }
@@ -266,81 +294,43 @@ function compileTreeFuncDef(def: TreeFunctionDefinitionNode, outerStreamEnvironm
       }
     }
 
+    temporaryMarked.delete(node);
     permanentMarked.add(node);
+
+    return node.nid;
   }
 
-  const yieldMap: Map<StreamID | null, StreamID> = new Map();
-
-  for (const node of def.bodyExprs) {
-    if (node.kind === NodeKind.YieldExpression) {
-      traverseStreamExpr(node.expr);
-
-      const exprRetSid = streamExprReturnedId(node.expr);
-      if (!exprRetSid) {
-        throw new Error();
-      }
-      yieldMap.set(node.out, exprRetSid);
-    } else if (isStreamExpressionNode(node)) {
-      traverseStreamExpr(node);
-    } else if (isFunctionDefinitionNode(node)) {
-      // don't need to traverse here?
+  // To kick off the topological sort, we traverse from all the "roots" in the function def
+  for (const node of impl.body) {
+    if (isStreamExpressionNode(node)) {
+      traverseToStreamExpr(node);
+    } else if (node.kind === NodeKind.StreamBinding) {
+      // TODO: we also need to traverse the LHS, because all those streams may
+      // be referenced by inner definitions even if we don't reference them locally.
+      traverseToStreamExpr(node.sexpr);
+    } else if (node.kind === NodeKind.FunctionDefinition) {
+      traverseToFunctionDef(node);
     } else {
       throw new Error();
     }
   }
-
-  const returnStreamIds: Array<StreamID> = [];
-
-  if (def.iface.ret.kind === NodeKind.FIReturn) {
-    const sid = yieldMap.get(null);
-    if (!sid) {
-      throw new Error();
-    }
-    returnStreamIds.push(sid);
+  if (impl.out) {
+    traverseToStreamExpr(impl.out);
   }
-
-  const paramIds: Array<ParameterID> = [];
-  for (const param of def.iface.params) {
-    switch (param.kind) {
-      case NodeKind.FIStreamParam:
-        paramIds.push(param.pid);
-        break;
-
-      case NodeKind.FIFunctionParam:
-        paramIds.push(param.pid);
-        break;
-
-      case NodeKind.FIOutParam: {
-        const sid = yieldMap.get(param.pid);
-        if (!sid) {
-          throw new Error();
-        }
-        returnStreamIds.push(sid);
-        break;
-      }
-
-      default: {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const exhaustive: never = param; // this will cause a type error if we haven't handled all cases
-        throw new Error();
-      }
-    }
-  }
-
-  // TODO: verify that yieldIds doesn't have any "holes" and matches signature
 
   const compiledDefinition: CompiledDefinition = {
-    paramIds,
-    constStreams,
+    fid: def.nid,
+    pids,
+    consts,
     apps,
-    localDefs,
-    returnStreamIds,
+    defs: compiledSubdefs,
+    oid: impl.out ? impl.out.nid : null,
   };
 
-  return [compiledDefinition, externalReferencedStreamIds];
+  return [compiledDefinition, outerReferencedStreamIds, outerReferencedFunctionIds];
 }
 
-export function compileGlobalTreeDefinition(def: TreeFunctionDefinitionNode, globalFunctionEnvironment: Environment<FunctionID, FunctionDefinitionNode>): CompiledDefinition {
+export function compileGlobalTreeDefinition(def: FunctionDefinitionNode, globalFunctionEnvironment: Environment<UID, FunctionDefinitionNode>): CompiledDefinition {
   const streamEnv: CompilationStreamEnvironment = new Environment();
 
   const compGlobalFuncEnv: CompilationFunctionEnvironment = new Environment();
@@ -349,9 +339,9 @@ export function compileGlobalTreeDefinition(def: TreeFunctionDefinitionNode, glo
   });
   const funcEnv: CompilationFunctionEnvironment = new Environment(compGlobalFuncEnv);
 
-  const [compiledDefinition, externalReferencedStreamIds] = compileTreeFuncDef(def, streamEnv, funcEnv);
+  const [compiledDefinition, outerReferencedStreamIds, outerReferencedFunctionIds] = compileTreeFuncDef(def, streamEnv, funcEnv);
 
-  if (externalReferencedStreamIds.size > 0) {
+  if (outerReferencedStreamIds.size > 0) {
     throw new Error();
   }
 

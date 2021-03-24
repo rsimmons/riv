@@ -1,16 +1,16 @@
 import { ExecutionContext, useVar, useInitialize, useRequestUpdate } from 'riv-runtime';
 import { CompiledDefinition, AppSpec } from '../compiler/CompiledDefinition';
-import { StreamID, FunctionID, ApplicationID, ParameterID } from '../compiler/Tree';
+import { UID } from '../compiler/Tree';
 import Environment from '../util/Environment';
 
 /**
  * I think that functions in outer environment are not allowed to change identity.
  */
-export function createLiveFunction(initialDefinition: CompiledDefinition, outerEnv: Environment<ParameterID, any>): [Function, (newDefinition: CompiledDefinition) => void] {
+export function createLiveFunction(initialDefinition: CompiledDefinition, outerEnv: Environment<UID, any>): [Function, (newDefinition: CompiledDefinition) => void] {
   interface Activation {
-    combinedEnv: Environment<StreamID|FunctionID, any>; // local streams/function ids to their latest values (for functions, JS functions)
-    applicationContexts: Map<ApplicationID, ExecutionContext>;
-    updateLocalDef: Map<FunctionID, (newDefinition: CompiledDefinition) => void>;
+    combinedEnv: Environment<UID, any>; // local streams/function ids to their latest values (for functions, JS functions)
+    applicationContexts: Map<UID, ExecutionContext>;
+    updateLocalDef: Map<UID, (newDefinition: CompiledDefinition) => void>;
     requestUpdate: () => void;
   }
 
@@ -23,23 +23,23 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerE
 
     const activation = useVar<Activation>((): Activation => {
       const combinedEnv = new Environment(outerEnv);
-      const applicationContexts: Map<ApplicationID, ExecutionContext> = new Map();
-      const updateLocalDef: Map<FunctionID, (newDefinition: CompiledDefinition) => void> = new Map();
+      const applicationContexts: Map<UID, ExecutionContext> = new Map();
+      const updateLocalDef: Map<UID, (newDefinition: CompiledDefinition) => void> = new Map();
 
-      for (const {sid, val} of currentDefinition.constStreams) {
+      for (const {sid, val} of currentDefinition.consts) {
         combinedEnv.set(sid, val);
       }
 
-      for (const {fid, def} of currentDefinition.localDefs) {
+      for (const def of currentDefinition.defs) {
         const [sf, updateDef] = createLiveFunction(def, combinedEnv);
-        combinedEnv.set(fid, sf);
-        updateLocalDef.set(fid, updateDef);
+        combinedEnv.set(def.fid, sf);
+        updateLocalDef.set(def.fid, updateDef);
       }
 
-      for (const {appId, funcId} of currentDefinition.apps) {
-        const func = combinedEnv.getExisting(funcId);
+      for (const {aid, fid} of currentDefinition.apps) {
+        const func = combinedEnv.getExisting(fid);
         const context = new ExecutionContext(func, requestUpdate);
-        applicationContexts.set(appId, context);
+        applicationContexts.set(aid, context);
       }
 
       return {
@@ -62,18 +62,18 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerE
 
     const { combinedEnv, applicationContexts } = activation.current;
 
-    const expectedArgCount = currentDefinition.paramIds.length;
+    const expectedArgCount = currentDefinition.pids.length;
     if (arguments.length !== expectedArgCount) {
       throw new Error('wrong number of arguments to live function, got ' + arguments.length + ' expected ' + expectedArgCount);
     }
 
     const args = arguments;
-    currentDefinition.paramIds.forEach((pid, idx) => {
+    currentDefinition.pids.forEach((pid, idx) => {
       combinedEnv.set(pid, args[idx]);
     });
 
-    for (const {sids, appId, funcId, args, settings} of currentDefinition.apps) {
-      const appFunc = combinedEnv.getExisting(funcId);
+    for (const {oid, aid, fid, args} of currentDefinition.apps) {
+      const appFunc = combinedEnv.getExisting(fid);
       const argVals = args.map(id => {
         if (typeof id !== 'string') {
           throw new Error(); // don't support array-params yet
@@ -81,7 +81,7 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerE
         return combinedEnv.getExisting(id);
       });
 
-      let context = applicationContexts.get(appId);
+      let context = applicationContexts.get(aid);
       if (!context) {
         throw new Error();
       }
@@ -98,19 +98,13 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerE
         error = true;
       }
 
-      if (sids.length === 1) {
-        combinedEnv.set(sids[0], error ? undefined : retval);
-      } else if (sids.length > 1) {
-        sids.forEach((sid, idx) => {
-          combinedEnv.set(sid, error ? undefined : retval[idx]);
-        });
+      if (oid) {
+        combinedEnv.set(oid, error ? undefined : retval);
       }
     }
 
-    if (currentDefinition.returnStreamIds.length === 1) {
-      return combinedEnv.get(currentDefinition.returnStreamIds[0]);
-    } else if (currentDefinition.returnStreamIds.length > 1) {
-      return currentDefinition.returnStreamIds.map(sid => combinedEnv.get(sid));
+    if (currentDefinition.oid) {
+      return combinedEnv.get(currentDefinition.oid);
     } else {
       return undefined;
     }
@@ -122,25 +116,25 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerE
     }
 
     // Track these so we know which streams to delete
-    const oldDefStreams: Set<StreamID|FunctionID> = new Set();
-    const newDefStreams: Set<StreamID|FunctionID> = new Set();
+    const oldDefStreams: Set<UID> = new Set();
+    const newDefStreams: Set<UID> = new Set();
 
     // PARAM STREAMS
-    for (const pid of currentDefinition.paramIds) {
+    for (const pid of currentDefinition.pids) {
       oldDefStreams.add(pid);
     }
-    for (const pid of newDefinition.paramIds) {
+    for (const pid of newDefinition.pids) {
       newDefStreams.add(pid);
     }
 
     //
     // CONST STREAMS
     //
-    for (const {sid} of currentDefinition.constStreams) {
+    for (const {sid} of currentDefinition.consts) {
       oldDefStreams.add(sid);
     }
 
-    for (const {sid, val} of newDefinition.constStreams) {
+    for (const {sid, val} of newDefinition.consts) {
       // It's easier to just always set regardless of change
       activations.forEach(activation => {
         activation.combinedEnv.set(sid, val);
@@ -152,42 +146,42 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerE
     //
     // APPLICATIONS
     //
-    const oldAppMap: Map<ApplicationID, AppSpec> = new Map();
-    const newAppMap: Map<ApplicationID, AppSpec> = new Map();
+    const oldAppMap: Map<UID, AppSpec> = new Map();
+    const newAppMap: Map<UID, AppSpec> = new Map();
     for (const app of currentDefinition.apps) {
-      oldAppMap.set(app.appId, app);
+      oldAppMap.set(app.aid, app);
 
-      app.sids.forEach(sid => {
-        oldDefStreams.add(sid);
-      });
+      if (app.oid) {
+        oldDefStreams.add(app.oid);
+      }
     }
     for (const app of newDefinition.apps) {
-      newAppMap.set(app.appId, app);
+      newAppMap.set(app.aid, app);
 
-      app.sids.forEach(sid => {
-        newDefStreams.add(sid);
-      });
+      if (app.oid) {
+        newDefStreams.add(app.oid);
+      }
     }
 
-    for (const {appId} of currentDefinition.apps) {
-      if (!newAppMap.has(appId)) {
+    for (const {aid} of currentDefinition.apps) {
+      if (!newAppMap.has(aid)) {
         activations.forEach(activation => {
-          const context = activation.applicationContexts.get(appId);
+          const context = activation.applicationContexts.get(aid);
           if (!context) {
             throw new Error();
           }
           context.terminate();
-          activation.applicationContexts.delete(appId);
+          activation.applicationContexts.delete(aid);
         });
       }
     }
 
-    for (const {appId, funcId} of newDefinition.apps) {
-      if (!oldAppMap.has(appId)) {
+    for (const {aid, fid} of newDefinition.apps) {
+      if (!oldAppMap.has(aid)) {
         activations.forEach(activation => {
-          const func = activation.combinedEnv.getExisting(funcId);
+          const func = activation.combinedEnv.getExisting(fid);
           const context = new ExecutionContext(func, activation.requestUpdate);
-          activation.applicationContexts.set(appId, context);
+          activation.applicationContexts.set(aid, context);
         });
       }
     }
@@ -206,14 +200,14 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerE
     //
     const oldLocalDefsMap: Map<string, CompiledDefinition> = new Map();
     const newLocalDefsMap: Map<string, CompiledDefinition> = new Map();
-    for (const {fid, def} of currentDefinition.localDefs) {
-      oldLocalDefsMap.set(fid, def);
+    for (const def of currentDefinition.defs) {
+      oldLocalDefsMap.set(def.fid, def);
     }
-    for (const {fid, def} of newDefinition.localDefs) {
-      newLocalDefsMap.set(fid, def);
+    for (const def of newDefinition.defs) {
+      newLocalDefsMap.set(def.fid, def);
     }
 
-    for (const {fid} of currentDefinition.localDefs) {
+    for (const {fid} of currentDefinition.defs) {
       if (!newLocalDefsMap.has(fid)) {
         activations.forEach(activation => {
           activation.combinedEnv.delete(fid);
@@ -222,10 +216,10 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerE
       }
     }
 
-    for (const {fid, def} of newDefinition.localDefs) {
-      if (oldLocalDefsMap.has(fid)) {
+    for (const def of newDefinition.defs) {
+      if (oldLocalDefsMap.has(def.fid)) {
         activations.forEach(activation => {
-          const update = activation.updateLocalDef.get(fid);
+          const update = activation.updateLocalDef.get(def.fid);
           if (!update) {
             throw new Error();
           }
@@ -234,8 +228,8 @@ export function createLiveFunction(initialDefinition: CompiledDefinition, outerE
       } else {
         activations.forEach(activation => {
           const [sf, updateDef] = createLiveFunction(def, activation.combinedEnv);
-          activation.combinedEnv.set(fid, sf);
-          activation.updateLocalDef.set(fid, updateDef);
+          activation.combinedEnv.set(def.fid, sf);
+          activation.updateLocalDef.set(def.fid, updateDef);
         });
       }
     }

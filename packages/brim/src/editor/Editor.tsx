@@ -1,11 +1,11 @@
-import React, { useReducer, useRef, useLayoutEffect } from 'react';
+import React, { useReducer, useRef, useLayoutEffect, useCallback, useState } from 'react';
 import { HotKeys, ObserveKeys } from "react-hotkeys";
-import { initialState, reducer, getReferentNodeOfSelected, initStaticEnv, getStaticEnvForSelected } from '../codeview/EditReducer';
+import { Action, initialState, reducer, getStaticEnvMap, getReferentNode, initStaticEnv } from '../codeview/EditReducer';
 import { StoragePanel } from './StoragePanel';
 import './Editor.css';
-import { TreeFunctionDefinitionView, TreeViewContext } from '../codeview/TreeView';
-import { Node, TreeFunctionDefinitionNode } from '../compiler/Tree';
-import { ProgramInfo } from '../codeview/State';
+import { FunctionDefinitionView, TreeViewContext } from '../codeview/TreeView';
+import { Node, FunctionDefinitionNode } from '../compiler/Tree';
+import { ProgramInfo, State } from '../codeview/State';
 import Chooser from '../codeview/Chooser';
 
 const keyMap = {
@@ -46,8 +46,27 @@ const CATCH_IN_INPUTS = [
   ',',
 ];
 
+function useEditReducer(): [State, (action: Action) => void] {
+  // The state is stored in useState, in order to trigger re-renders.
+  // But the "authoritative" copy is stored with useRef, so that we don't
+  // have any issues with see old versions from useState.
+  const authoritativeState = useRef(initialState);
+  const [copiedState, setCopiedState] = useState(initialState);
+
+  // The dispatch method we return is memoized so that it's always the same function.
+  const memoizedDispatch = useCallback((action) => {
+    const newState = reducer(authoritativeState.current, action);
+    authoritativeState.current = newState;
+    setCopiedState(newState);
+  }, []);
+
+  return [copiedState, memoizedDispatch];
+}
+
 const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
-  const [state, dispatch] = useReducer(reducer, initialState);
+  // NOTE: We don't use useReducer here because it expects the reducer function
+  // to be pure, and ours is not. So we have to do a workaround.
+  const [state, dispatch] = useEditReducer();
 
   // TODO: memoize generation of this
   const handlers: {[key: string]: (keyEvent?: KeyboardEvent | undefined) => void} = {};
@@ -73,13 +92,17 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
     dispatch({type: 'SET_PROGRAM_NAME', newName});
   };
 
-  const handleLoadProgram = (info: ProgramInfo, mainDef: TreeFunctionDefinitionNode) => {
+  const handleLoadProgram = (info: ProgramInfo, mainDef: FunctionDefinitionNode) => {
     dispatch({type: 'LOAD_PROGRAM', newProgram: {info: info, mainDef}});
   };
 
   const displayedSelTree = state.editing ? state.editing.initSelTree : state.stableSelTree;
 
-  const referentNameNode = getReferentNodeOfSelected(displayedSelTree, state.globalFunctions);
+  // this shouldn't be repeated every render
+  const globalStaticEnv = initStaticEnv(state.globalFunctions);
+
+  const displayedStaticEnvMap = getStaticEnvMap(displayedSelTree.mainDef, globalStaticEnv);
+  const referentNameNode = getReferentNode(displayedSelTree.selectedNode, displayedStaticEnvMap);
 
   // Determine if we should focus the selected node. This is hacky, but don't know better way to handle.
   const editorElem = useRef<HTMLDivElement>(null);
@@ -97,7 +120,7 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
     },
     // clipboardTopNode: (state.clipboardStack.length > 0) ? state.derivedLookups.streamIdToNode!.get(state.clipboardStack[state.clipboardStack.length-1].streamId) : null,
     // clipboardRestNodes: state.clipboardStack.slice(0, -1).map(frame => state.derivedLookups.streamIdToNode!.get(frame.streamId)),
-    staticEnv: initStaticEnv(state.globalFunctions),
+    staticEnvMap: displayedStaticEnvMap,
     setSelectedNode: (node: Node) => {
       dispatch({
         type: 'SET_SELECTED_NODE',
@@ -143,12 +166,12 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
       <HotKeys keyMap={keyMap} handlers={handlers}>
         <ObserveKeys only={CATCH_IN_INPUTS}>
           <div className="Editor-workspace" onKeyDown={onKeyDown} ref={editorElem}>
-            <TreeFunctionDefinitionView node={displayedSelTree.mainDef} ctx={treeViewCtx} />
+            <FunctionDefinitionView node={displayedSelTree.mainDef} ctx={treeViewCtx} />
             {state.editing && (() => {
               const chooserTreeViewCtx: TreeViewContext = {
                 ...treeViewCtx,
                 setSelectedNode: () => {},
-                staticEnv: getStaticEnvForSelected(state.editing.initSelTree, state.globalFunctions),
+                staticEnvMap: getStaticEnvMap(state.editing.initSelTree.mainDef, globalStaticEnv),
                 focusSelected: false,
               };
 

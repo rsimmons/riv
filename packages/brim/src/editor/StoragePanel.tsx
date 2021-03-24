@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import genuid from '../util/uid';
 import { ProgramInfo } from '../codeview/State';
-import { TreeFunctionDefinitionNode } from '../compiler/Tree';
+import { FunctionDefinitionNode } from '../compiler/Tree';
 import './StoragePanel.css';
 
 interface Program {
   info: ProgramInfo;
-  mainDefinition: TreeFunctionDefinitionNode;
+  mainDefinition: FunctionDefinitionNode;
 }
 
-export const StoragePanel: React.FC<{programInfo: ProgramInfo, mainDefinition: TreeFunctionDefinitionNode, onChangeName: (name: string) => void, onLoadProgram: (info: ProgramInfo, mainDefinition: TreeFunctionDefinitionNode) => void}> = ({ programInfo, mainDefinition, onChangeName, onLoadProgram }) => {
+export const StoragePanel: React.FC<{programInfo: ProgramInfo, mainDefinition: FunctionDefinitionNode, onChangeName: (name: string) => void, onLoadProgram: (info: ProgramInfo, mainDefinition: FunctionDefinitionNode) => void}> = ({ programInfo, mainDefinition, onChangeName, onLoadProgram }) => {
   const ls = window.localStorage;
   const KEY_PREFIX = 'rivprog:';
 

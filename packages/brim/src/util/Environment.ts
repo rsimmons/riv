@@ -2,8 +2,8 @@ export default class Environment<K, V> {
   private local: Map<K, V>;
   private outer: Environment<K, V> | undefined;
 
-  constructor(outer: Environment<K, V> | undefined = undefined) {
-    this.local = new Map();
+  constructor(outer?: Environment<K, V>, local?: Map<K, V>) {
+    this.local = local || new Map();
     this.outer = outer;
   }
 

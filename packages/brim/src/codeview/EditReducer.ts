@@ -1,6 +1,6 @@
 import genuid from '../util/uid';
 import { State, ProgramInfo, SelTree } from './State';
-import { StreamID, FunctionID, generateStreamId, NodeKind, Node, FunctionDefinitionNode, StreamExpressionNode, isStreamExpressionNode, UndefinedLiteralNode, BodyExpressionNode, generateApplicationId, NameNode, TreeFunctionDefinitionNode, isFunctionDefinitionNode, generateFunctionId, ApplicationOutNode } from '../compiler/Tree';
+import { UID, NodeKind, Node, FunctionDefinitionNode, isStreamExpressionNode, UndefinedLiteralNode, FunctionInterfaceNode, NameBindingNode, TreeImplBodyNode, TreeImplNode } from '../compiler/Tree';
 import { CompiledDefinition } from '../compiler/CompiledDefinition';
 import { compileGlobalTreeDefinition, CompilationError } from '../compiler/Compiler';
 import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
@@ -10,7 +10,7 @@ import { iterChildren, visitChildren, replaceChild, transformChildren } from '..
 import globalNativeFunctions from '../builtin/globalNatives';
 
 // We don't make a discriminated union of specific actions, but maybe we could
-interface Action {
+export interface Action {
   type: string;
   char?: string;
   node?: Node;
@@ -153,34 +153,15 @@ function firstUndefinedNode(node: Node, after: Path | undefined = undefined): [N
 
 */
 
-interface ExprStreamDefinition {
-  kind: 'expr';
-  sid: StreamID;
-  name: string | undefined;
-
-  node: ApplicationOutNode;
-  expr: StreamExpressionNode;
-}
-
-interface ParamStreamDefinition {
-  kind: 'param';
-  sid: StreamID;
-  name: string | undefined;
-
-  // param: StreamParameterNode;
-}
-
-export type StreamDefinition = ExprStreamDefinition | ParamStreamDefinition;
-
 export interface StaticEnvironment {
-  streamEnv: Environment<StreamID, StreamDefinition>;
-  functionEnv: Environment<FunctionID, FunctionDefinitionNode>;
+  streamEnv: Environment<UID, NameBindingNode>;
+  functionEnv: Environment<UID, FunctionInterfaceNode>;
 }
 
 export function initStaticEnv(globalFunctions: ReadonlyArray<FunctionDefinitionNode>): StaticEnvironment {
-  const globalFunctionEnv: Environment<FunctionID, FunctionDefinitionNode> = new Environment();
+  const globalFunctionEnv: Environment<UID, FunctionInterfaceNode> = new Environment();
   for (const fdef of globalFunctions) {
-    globalFunctionEnv.set(fdef.fid, fdef);
+    globalFunctionEnv.set(fdef.nid, fdef.iface);
   }
 
   return {
@@ -189,50 +170,52 @@ export function initStaticEnv(globalFunctions: ReadonlyArray<FunctionDefinitionN
   };
 }
 
-export function extendStaticEnv(outer: StaticEnvironment, def: TreeFunctionDefinitionNode): StaticEnvironment {
-  const streamEnv: Environment<StreamID, StreamDefinition> = new Environment(outer.streamEnv);
-  const functionEnv: Environment<FunctionID, FunctionDefinitionNode> = new Environment(outer.functionEnv);
+export function extendStaticEnv(outer: StaticEnvironment, def: FunctionDefinitionNode): StaticEnvironment {
+  if (def.impl.kind !== NodeKind.TreeImpl) {
+    throw new Error();
+  }
+  const treeImpl: TreeImplNode = def.impl;
+
+  const streamEnv: Environment<UID, NameBindingNode> = new Environment(outer.streamEnv);
+  const functionEnv: Environment<UID, FunctionInterfaceNode> = new Environment(outer.functionEnv);
 
   def.iface.params.forEach(param => {
-    if (param.kind === NodeKind.FIStreamParam) {
-      if (streamEnv.has(param.pid)) {
+    const internalId = treeImpl.pids.get(param.nid);
+    if (!internalId) {
+      throw new Error();
+    }
+    if (param.kind === NodeKind.StreamParam) {
+      if (streamEnv.has(internalId)) {
         throw new Error();
       }
-      streamEnv.set(param.pid, {
-        kind: 'param',
-        sid: param.pid,
-        name: param.name.text,
-      });
+      streamEnv.set(internalId, param.bind);
+    } else if (param.kind === NodeKind.FunctionParam) {
+      if (functionEnv.has(internalId)) {
+        throw new Error();
+      }
+      functionEnv.set(internalId, param.iface);
+    } else {
+      throw new Error();
     }
   });
 
   const visit = (node: Node): void => {
-    if (isStreamExpressionNode(node)) {
-      if (node.kind === NodeKind.Application) {
-        node.args.forEach(arg => {
-          if (arg.kind === NodeKind.ApplicationOut) {
-            if (streamEnv.has(arg.sid)) {
-              throw new Error('stream ids must be unique');
-            }
-            if (arg.text) {
-              streamEnv.set(arg.sid, {
-                kind: 'expr',
-                sid: arg.sid,
-                name: arg.text,
-                node: arg,
-                expr: node,
-              });
-            }
-          }
-        });
+    if (node.kind === NodeKind.StreamBinding) {
+      if (node.bexpr.kind === NodeKind.NameBinding) {
+        if (streamEnv.has(node.bexpr.nid)) {
+          throw new Error('stream ids must be unique');
+        }
+        streamEnv.set(node.bexpr.nid, node.bexpr);
+      } else {
+        throw new Error();
       }
     }
 
-    if (isFunctionDefinitionNode(node)) {
-      if (functionEnv.has(node.fid)) {
+    if (node.kind === NodeKind.FunctionDefinition) {
+      if (functionEnv.has(node.nid)) {
         throw new Error('function ids must be unique');
       }
-      functionEnv.set(node.fid, node);
+      functionEnv.set(node.nid, node.iface);
     } else {
       visitChildren(node, visit, undefined);
     }
@@ -246,55 +229,48 @@ export function extendStaticEnv(outer: StaticEnvironment, def: TreeFunctionDefin
   };
 }
 
-export function getStaticEnvForSelected(selTree: SelTree, globalFunctions: ReadonlyArray<FunctionDefinitionNode>): StaticEnvironment {
-  let selectedNodeEnv: StaticEnvironment | undefined;
+// compute a map from every node to its static env
+export function getStaticEnvMap(root: Node, outerEnv: StaticEnvironment): Map<Node, StaticEnvironment> {
+  const nodeToEnv: Map<Node, StaticEnvironment> = new Map();
 
-  const visit = (node: Node, env: StaticEnvironment): void => {
-    let newEnv: StaticEnvironment;
-    if (node.kind === NodeKind.TreeFunctionDefinition) {
-      newEnv = extendStaticEnv(env, node);
-    } else {
-      newEnv = env;
-    }
-
-    if (node === selTree.selectedNode) {
-      selectedNodeEnv = newEnv;
-    }
-
-    visitChildren(node, visit, newEnv);
-  };
-
-  visit(selTree.mainDef, initStaticEnv(globalFunctions));
-
-  if (!selectedNodeEnv) {
-    throw new Error();
+  interface Context {
+    env: StaticEnvironment;
+    parent: Node | null;
   }
 
-  return selectedNodeEnv;
+  const visit = (node: Node, ctx: Context): void => {
+    nodeToEnv.set(node, ctx.env);
+
+    let newEnv: StaticEnvironment;
+    if (node.kind === NodeKind.TreeImpl) {
+      const parent = ctx.parent;
+      if (!parent || (parent.kind !== NodeKind.FunctionDefinition)) {
+        throw new Error();
+      }
+      newEnv = extendStaticEnv(ctx.env, parent);
+    } else {
+      newEnv = ctx.env;
+    }
+
+    visitChildren(node, visit, {env: newEnv, parent: node});
+  };
+
+  visit(root, {env: outerEnv, parent: null});
+
+  return nodeToEnv;
 }
 
-export function getReferentNodeOfSelected(selTree: SelTree, globalFunctions: ReadonlyArray<FunctionDefinitionNode>): ApplicationOutNode | undefined {
-  const selectedEnv = getStaticEnvForSelected(selTree, globalFunctions);
-
-  const node = selTree.selectedNode;
+export function getReferentNode(node: Node, staticEnvMap: Map<Node, StaticEnvironment>): Node | undefined {
   if (node.kind === NodeKind.StreamReference) {
-    const streamDef = selectedEnv.streamEnv.get(node.ref);
-    if (!streamDef) {
+    const env = staticEnvMap.get(node);
+    if (!env) {
       throw new Error();
     }
-
-    switch (streamDef.kind) {
-      case 'expr':
-        return streamDef.node;
-
-      case 'param':
-        return undefined;
-
-      default: {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const exhaustive: never = streamDef; // this will cause a type error if we haven't handled all cases
-      }
+    const nameBinding = env.streamEnv.get(node.ref);
+    if (!nameBinding) {
+      throw new Error();
     }
+    return nameBinding;
   }
 }
 
@@ -337,27 +313,27 @@ function deleteNodeSubtree(node: Node, parentLookup: Map<Node, Node>): SelTree |
   }
 
   if (isStreamExpressionNode(node)) {
-    if ((parent.kind === NodeKind.Application) || (parent.kind === NodeKind.YieldExpression)) {
+    if ((parent.kind === NodeKind.Application) || (parent.kind === NodeKind.StreamBinding)) {
       const newNode: UndefinedLiteralNode = {
         kind: NodeKind.UndefinedLiteral,
-        sid: generateStreamId(),
+        nid: genuid(),
       };
       const newRoot = replaceNode(node, newNode, parentLookup);
-      if (newRoot.kind !== NodeKind.TreeFunctionDefinition) {
+      if (newRoot.kind !== NodeKind.FunctionDefinition) {
         throw new Error();
       }
       return {
         mainDef: newRoot,
         selectedNode: newNode,
       };
-    } else if (parent.kind === NodeKind.TreeFunctionDefinition) {
-      const [newExprs, newSibSel] = deleteFromArr(node, parent.bodyExprs);
-      const newParent: TreeFunctionDefinitionNode = {
+    } else if (parent.kind === NodeKind.TreeImpl) {
+      const [newNodes, newSibSel] = deleteFromArr(node, parent.body);
+      const newParent: TreeImplNode = {
         ...parent,
-        bodyExprs: newExprs,
+        body: newNodes,
       };
       const newRoot = replaceNode(parent, newParent, parentLookup);
-      if (newRoot.kind !== NodeKind.TreeFunctionDefinition) {
+      if (newRoot.kind !== NodeKind.FunctionDefinition) {
         throw new Error();
       }
       return {
@@ -394,7 +370,7 @@ export function computeParentLookup(root: Node): Map<Node, Node> {
 }
 
 function canBeginEditOnNode(node: Node) {
-  return isStreamExpressionNode(node) || (node.kind === NodeKind.Name) || (node.kind === NodeKind.ApplicationOut);
+  return isStreamExpressionNode(node) || (node.kind === NodeKind.Text);
 }
 
 function attemptBeginEditSelected(state: State): State {
@@ -435,18 +411,18 @@ function attemptInsertBeforeAfter(state: State, before: boolean): State {
       return state;
     }
 
-    if (parent.kind === NodeKind.TreeFunctionDefinition) {
-      const idx = parent.bodyExprs.indexOf(n as BodyExpressionNode);
+    if (parent.kind === NodeKind.TreeImpl) {
+      const idx = parent.body.indexOf(n as TreeImplBodyNode);
       const newElem: UndefinedLiteralNode = {
         kind: NodeKind.UndefinedLiteral,
-        sid: generateStreamId(),
+        nid: genuid(),
       };
-      const newTreeDef: TreeFunctionDefinitionNode = {
+      const newTreeImpl: TreeImplNode = {
         ...parent,
-        bodyExprs: arrInsertBeforeAfter(parent.bodyExprs, idx, before, newElem),
+        body: arrInsertBeforeAfter(parent.body, idx, before, newElem),
       };
-      const newMain = replaceNode(parent, newTreeDef, parentLookup);
-      if (newMain.kind !== NodeKind.TreeFunctionDefinition) {
+      const newMain = replaceNode(parent, newTreeImpl, parentLookup);
+      if (newMain.kind !== NodeKind.FunctionDefinition) {
         throw new Error();
       }
       const initSelTree: SelTree = {
@@ -489,13 +465,13 @@ function fixupDanglingRefs(selTree: SelTree, globalFunctions: ReadonlyArray<Func
       if (!streamDef) {
         newNode = {
           kind: NodeKind.UndefinedLiteral,
-          sid: generateStreamId(),
+          nid: genuid(),
         };
       }
     }
 
     let newEnv: StaticEnvironment;
-    if (node.kind === NodeKind.TreeFunctionDefinition) {
+    if (node.kind === NodeKind.FunctionDefinition) {
       newEnv = extendStaticEnv(env, node);
     } else {
       newEnv = env;
@@ -511,7 +487,7 @@ function fixupDanglingRefs(selTree: SelTree, globalFunctions: ReadonlyArray<Func
   };
 
   const newMain = transform(selTree.mainDef, globalEnv);
-  if (newMain.kind !== NodeKind.TreeFunctionDefinition) {
+  if (newMain.kind !== NodeKind.FunctionDefinition) {
     throw new Error();
   }
 
@@ -529,21 +505,24 @@ function fixupDanglingRefs(selTree: SelTree, globalFunctions: ReadonlyArray<Func
 // NOTE: May throw a compiler exception
 function compileSelTree(selTree: SelTree, globalFunctions: ReadonlyArray<FunctionDefinitionNode>): CompiledDefinition {
   // NOTE: We could avoid repeating this work, but this is sort of temporary anyways
-  const globalFunctionEnvironment: Environment<FunctionID, FunctionDefinitionNode> = new Environment();
+  const globalFunctionEnvironment: Environment<UID, FunctionDefinitionNode> = new Environment();
   for (const gf of globalFunctions) {
-    globalFunctionEnvironment.set(gf.fid, gf);
+    globalFunctionEnvironment.set(gf.nid, gf);
   }
 
   return compileGlobalTreeDefinition(selTree.mainDef, globalFunctionEnvironment);
 }
 
 function updateExecution(state: State, newCompiledDefinition: CompiledDefinition): State {
-  console.log('newCompiledDefinition', newCompiledDefinition);
   if (state.execution) {
     const { updateCompiledDefinition } = state.execution;
 
     beginBatch();
-    updateCompiledDefinition(newCompiledDefinition);
+    try {
+      updateCompiledDefinition(newCompiledDefinition);
+    } catch (e) {
+      throw e;
+    }
     endBatch();
 
     return state;
@@ -597,7 +576,7 @@ function attemptCommitEdit(state: State, newSelTree: SelTree): State {
 
 function nodeIsHole(node: Node): boolean {
   return (node.kind === NodeKind.UndefinedLiteral) ||
-   ((node.kind === NodeKind.Name) && !node.text);
+   ((node.kind === NodeKind.Text) && !node.text);
 }
 
 function findNextHoleUnder(node: Node): Node | undefined {
@@ -649,7 +628,7 @@ function attemptChainEdit(state: State, tryInsert: boolean): State {
     if (!parent) {
       return state; // reached root, do nothing
     }
-    if (parent.kind === NodeKind.TreeFunctionDefinition) {
+    if (parent.kind === NodeKind.TreeImpl) {
       if (tryInsert) {
         return attemptInsertBeforeAfter(state, false);
       } else {
@@ -762,7 +741,7 @@ export function reducer(state: State, action: Action): State {
     }
     const parentLookup = computeParentLookup(state.editing.initSelTree.mainDef); // TODO: memoize
     const newMain = replaceNode(state.editing.initSelTree.selectedNode, action.newNode!, parentLookup);
-    if (newMain.kind !== NodeKind.TreeFunctionDefinition) {
+    if (newMain.kind !== NodeKind.FunctionDefinition) {
       throw new Error();
     }
 
@@ -775,7 +754,7 @@ export function reducer(state: State, action: Action): State {
       compileError = undefined;
     } catch (e) {
       if (e instanceof CompilationError) {
-        compileError = 'cyclic reference';
+        compileError = 'compile error: ' + e.message;
       } else {
         throw e;
       }
@@ -795,7 +774,7 @@ export function reducer(state: State, action: Action): State {
     }
     const parentLookup = computeParentLookup(state.stableSelTree.mainDef); // TODO: memoize
     const newMain = replaceNode(action.node!, action.newNode!, parentLookup);
-    if (newMain.kind !== NodeKind.TreeFunctionDefinition) {
+    if (newMain.kind !== NodeKind.FunctionDefinition) {
       throw new Error();
     }
 
@@ -873,12 +852,16 @@ export function reducer(state: State, action: Action): State {
   return state;
 }
 
-const nativeFunctionEnvironment: Environment<FunctionID, Function> = new Environment();
+const nativeFunctionEnvironment: Environment<UID, Function> = new Environment();
 globalNativeFunctions.forEach(def => {
-  nativeFunctionEnvironment.set(def.fid, def.impl);
+  if (def.impl.kind !== NodeKind.NativeImpl) {
+    throw new Error();
+  }
+  nativeFunctionEnvironment.set(def.nid, def.impl.impl);
 });
+nativeFunctionEnvironment.set('$copy', (x: any) => x);
 
-function initialStateFromDefinition(mainDef: TreeFunctionDefinitionNode, programInfo: ProgramInfo): State {
+function initialStateFromDefinition(mainDef: FunctionDefinitionNode, programInfo: ProgramInfo): State {
   const initSelTree: SelTree = {mainDef, selectedNode: mainDef};
 
   const compiledDefinition = compileSelTree(initSelTree, globalNativeFunctions);
@@ -894,23 +877,33 @@ function initialStateFromDefinition(mainDef: TreeFunctionDefinitionNode, program
   }, compiledDefinition);
 }
 
-const mdId = generateStreamId();
-const INITIAL_MAIN: TreeFunctionDefinitionNode = {
-  kind: NodeKind.TreeFunctionDefinition,
-  fid: generateFunctionId(),
+const INITIAL_MAIN: FunctionDefinitionNode = {
+  kind: NodeKind.FunctionDefinition,
+  nid: genuid(),
   iface: {
     kind: NodeKind.FunctionInterface,
-    name: {kind: NodeKind.Name, text: 'main'},
-    params: [],
-    ret: {kind: NodeKind.FIVoid},
-  },
-  bodyExprs: [
-    {
-      kind: NodeKind.NumberLiteral,
-      sid: generateStreamId(),
-      val: 123,
+    nid: genuid(),
+    name: {
+      kind: NodeKind.Text,
+      nid: genuid(),
+      text: 'main',
     },
-  ],
+    params: [],
+    output: false,
+  },
+  impl: {
+    kind: NodeKind.TreeImpl,
+    nid: genuid(),
+    pids: new Map(),
+    body: [
+      {
+        kind: NodeKind.NumberLiteral,
+        nid: genuid(),
+        val: 123,
+      },
+    ],
+    out: null,
+  },
     /*
   bodyExprs: [
     {

@@ -1,5 +1,5 @@
-import { TemplateSegment, TemplateGroup, TemplateLayout, templateToPlainText } from './TemplateLayout';
-import { ApplicationSettings, NodeKind, FunctionInterfaceNode, TreeFunctionDefinitionNode, generateFunctionId, generateStreamId, BodyExpressionNode } from './Tree';
+import { ApplicationSettings, NodeKind, FunctionInterfaceNode, TreeImplBodyNode, FunctionDefinitionNode, UndefinedLiteralNode, UID } from './Tree';
+import genuid from '../util/uid';
 
 export type DynamicInterfaceEditAction = 'insert-before' | 'insert-after' | 'delete';
 
@@ -20,31 +20,26 @@ export function functionInterfaceAsPlainText(ifaceNode: FunctionInterfaceNode): 
   return ifaceNode.name.text;
 }
 
-export function defaultTreeImplFromFunctionInterface(iface: FunctionInterfaceNode): TreeFunctionDefinitionNode {
-  const bodyExprs: Array<BodyExpressionNode> = [];
+export function defaultTreeDefFromFunctionInterface(iface: FunctionInterfaceNode): FunctionDefinitionNode {
+  const pids: ReadonlyMap<UID, UID> = new Map(iface.params.map(param => [param.nid, genuid()]));
 
-  if (iface.ret.kind === NodeKind.FIReturn) {
-    bodyExprs.push({
-      kind: NodeKind.YieldExpression,
-      out: null,
-      expr: {kind: NodeKind.UndefinedLiteral, sid: generateStreamId()},
-    });
-  }
+  const body: Array<TreeImplBodyNode> = [];
 
-  iface.params.forEach(param => {
-    if (param.kind === NodeKind.FIOutParam) {
-      bodyExprs.push({
-        kind: NodeKind.YieldExpression,
-        out: param.pid,
-        expr: {kind: NodeKind.UndefinedLiteral, sid: generateStreamId()},
-      });
-    }
-  });
+  const out: UndefinedLiteralNode | null = iface.output ? {
+    kind: NodeKind.UndefinedLiteral,
+    nid: genuid(),
+  } : null;
 
   return {
-    kind: NodeKind.TreeFunctionDefinition,
-    fid: generateFunctionId(),
+    kind: NodeKind.FunctionDefinition,
+    nid: genuid(),
     iface,
-    bodyExprs,
+    impl: {
+      kind: NodeKind.TreeImpl,
+      nid: genuid(),
+      pids,
+      body,
+      out,
+    }
   };
 }
