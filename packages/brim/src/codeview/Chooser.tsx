@@ -4,7 +4,7 @@ import { FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNo
 import Fuse from 'fuse.js';
 import { computeParentLookup, getStaticEnvMap } from './EditReducer';
 import { SelTree } from './State';
-import { StreamExpressionView, TreeViewContext, FunctionDefinitionView, sizedStreamBindingView } from './TreeView';
+import { annoStreamExpressionView, TreeViewContext, annoFunctionDefinitionView, annoStreamBindingView } from './TreeView';
 import { functionInterfaceAsPlainText, defaultTreeDefFromFunctionInterface } from '../compiler/FunctionInterface';
 import genuid from '../util/uid';
 
@@ -14,12 +14,14 @@ interface Choice {
 
 const ChoiceView: React.FC<{choice: Choice, treeViewCtx: TreeViewContext}> = ({ choice, treeViewCtx }) => {
   if (isStreamExpressionNode(choice.node)) {
-    return <StreamExpressionView node={choice.node} ctx={treeViewCtx} />
+    const {reactNode} = annoStreamExpressionView(choice.node, treeViewCtx);
+    return <>{reactNode}</>;
   } else if (choice.node.kind === NodeKind.StreamBinding) {
-    const {reactNode} = sizedStreamBindingView({node: choice.node, ctx: treeViewCtx});
+    const {reactNode} = annoStreamBindingView(choice.node, treeViewCtx);
     return <>{reactNode}</>;
   } else if (choice.node.kind === NodeKind.FunctionDefinition) {
-    return <FunctionDefinitionView node={choice.node} ctx={treeViewCtx} />
+    const {reactNode} = annoFunctionDefinitionView(choice.node, treeViewCtx);
+    return <>{reactNode}</>;
   } else {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const exhaustive: never = choice.node; // this will cause a type error if we haven't handled all cases

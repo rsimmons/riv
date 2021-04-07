@@ -1,14 +1,14 @@
-import React, { useState, useRef, useLayoutEffect, useEffect } from 'react';
-import { Node, FunctionDefinitionNode, StreamExpressionNode, NodeKind, isStreamExpressionNode, StreamReferenceNode, ApplicationNode, ApplicationSettings, FunctionInterfaceNode, ApplicationArgNode, NameBindingNode, ParamNode, StreamParamNode, TreeImplBodyNode, FunctionImplNode, TreeImplNode, BindingExpressionNode, StreamBindingNode } from '../compiler/Tree';
+import React, { useState } from 'react';
+import { Node, FunctionDefinitionNode, StreamExpressionNode, NodeKind, isStreamExpressionNode, StreamReferenceNode, ApplicationNode, FunctionInterfaceNode, NameBindingNode, ParamNode, StreamParamNode, TreeImplBodyNode, FunctionImplNode, TreeImplNode, BindingExpressionNode, StreamBindingNode, UID, TextNode } from '../compiler/Tree';
 import './TreeView.css';
 import { StaticEnvironment } from './EditReducer';
-import { TemplateLayout, TextSegment, GroupEditable } from '../compiler/TemplateLayout';
+// import { TemplateLayout, TextSegment, GroupEditable } from '../compiler/TemplateLayout';
 import quotesIcon from './icons/quotes.svg';
 import booleanIcon from './icons/boolean.svg';
-import { DynamicInterfaceEditAction, DynamicInterfaceChange } from '../compiler/FunctionInterface';
+// import { DynamicInterfaceEditAction, DynamicInterfaceChange } from '../compiler/FunctionInterface';
 
-const BOUND_NAME_BOX_COLOR = '#d1e6ff';
-const STREAM_REFERENCE_BOX_COLOR = '#a1cdff';
+const BOUND_NAME_BOX_COLOR = 'rgb(111, 66, 193)';
+const STREAM_REFERENCE_BOX_COLOR = '#1d8a3b';
 
 interface MarkedNodes {
   selected: Node;
@@ -20,9 +20,9 @@ export interface TreeViewContext {
   staticEnvMap: ReadonlyMap<Node, StaticEnvironment>;
   setSelectedNode: (node: Node) => void;
   updateNode: (node: Node, newNode: Node) => void;
-  focusSelected: boolean;
 };
 
+/*
 interface UseSelectableResult {
   classes: ReadonlyArray<string>;
   handlers: {
@@ -90,282 +90,367 @@ function useSelectable(node: Node | undefined, ref: React.RefObject<HTMLDivEleme
     }
   };
 }
+*/
 
-
-interface SizedReactNode {
-  singleLineWidth: number | undefined; // if undefined, that means it's multi-line. width only matters if single-line
-  reactNode: React.ReactNode;
-}
-
-const SimpleNodeView: React.FC<{treeNode: Node, content: string, icon?: [string, string], bgColor: string, ctx: TreeViewContext}> = ({treeNode, content, icon, bgColor, ctx}) => {
-  const ref = useRef<HTMLDivElement>(null);
-  const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(treeNode, ref, ctx);
+function layoutNodes(nodes: ReadonlyArray<React.ReactNode>, dir: 'block' | 'inline'): React.ReactNode {
   return (
-    <div ref={ref} className={selectionClasses.concat(['TreeView-node', 'TreeView-rounded-node', 'TreeView-simple-node']).join(' ')} {...selectionHandlers} style={{background: bgColor}}>{icon && <img className="TreeView-simple-node-icon" src={icon[0]} alt={icon[1]} /> }{content}</div>
+    <div className={'TreeView-layout-' + dir}>
+      {nodes.map(node => (
+        <div className={'TreeView-layout-' + dir + '-item'}>{node}</div>
+      ))}
+    </div>
   );
-};
-
-const sizedSimpleNodeView = ({treeNode, content, icon, bgColor, ctx}: {treeNode: Node, content: string, icon?: [string, string], bgColor: string, ctx: TreeViewContext}): SizedReactNode => {
-  return {
-    singleLineWidth: content.length,
-    reactNode: <SimpleNodeView treeNode={treeNode} content={content} icon={icon} bgColor={bgColor} ctx={ctx} />,
-  };
-};
-
-const objKeyWeakMap: WeakMap<object, number> = new WeakMap();
-let nextKey = 0;
-function objKey(obj: object): number {
-  const key = objKeyWeakMap.get(obj);
-  if (key) {
-    return key;
-  } else {
-    const newKey = nextKey;
-    nextKey++;
-    objKeyWeakMap.set(obj, newKey);
-    return newKey;
-  }
 }
 
-function keyModifiersEqual(e: React.KeyboardEvent<HTMLDivElement>, mods: ReadonlyArray<string>): boolean {
-  const eventMods: Set<string> = new Set();
+function indentNode(node: React.ReactNode): React.ReactNode {
+  return <div className='TreeView-indent'>{node}</div>
+}
 
-  for (const m of ['Alt', 'Control', 'Meta', 'Shift']) {
-    if (e.getModifierState(m)) {
-      eventMods.add(m);
+interface MergeableAnnotations {
+  readonly moveUp: ReadonlyArray<[UID, UID]>;
+  readonly moveDown: ReadonlyArray<[UID, UID]>;
+  readonly moveRight: ReadonlyArray<[UID, UID]>;
+  readonly moveLeft: ReadonlyArray<[UID, UID]>;
+
+  // canEdit?
+  readonly canDelete: ReadonlyArray<UID>;
+  readonly canInsertUp: ReadonlyArray<UID>;
+  readonly canInsertDown: ReadonlyArray<UID>;
+}
+
+interface PortAnnotations {
+  readonly enterTop: UID | undefined;
+  readonly enterBottom: UID | undefined;
+  readonly enterLeft: UID | undefined;
+  readonly enterRight: UID | undefined;
+  readonly exitTop: ReadonlyArray<UID>;
+  readonly exitBottom: ReadonlyArray<UID>;
+  readonly exitLeft: ReadonlyArray<UID>;
+  readonly exitRight: ReadonlyArray<UID>;
+}
+
+interface Annotations extends MergeableAnnotations, PortAnnotations {
+}
+
+type Size = number | undefined;
+
+interface AnnoReactNode {
+  reactNode: React.ReactNode;
+  size: Size; // undefined if block layout. approximate character length if inline layout.
+  anno: Annotations;
+}
+
+function combineSizes(sizes: ReadonlyArray<Size>): Size {
+  let combinedSize: Size = 0;
+
+  for (const size of sizes) {
+    if (size === undefined) {
+      combinedSize = undefined;
+      break;
+    } else {
+      combinedSize += size;
     }
   }
 
-  return (eventMods.size === mods.length) && mods.every(m => eventMods.has(m));
+  if ((combinedSize !== undefined) && (combinedSize > MAX_ROW_WIDTH)) {
+    combinedSize = undefined;
+  }
+
+  return combinedSize;
 }
 
-interface NodeSegment {
-  kind: 'nodes';
-  readonly sizedReactNode: SizedReactNode;
-  readonly treeNode?: Node; // we just use its identity for selection. may be undefined if not selectable
+function createSimplestPortAnnos(nid: UID): PortAnnotations {
+  return {
+    enterTop: nid,
+    enterBottom: nid,
+    enterLeft: nid,
+    enterRight: nid,
+    exitTop: [nid],
+    exitBottom: [nid],
+    exitLeft: [nid],
+    exitRight: [nid],
+  };
 }
 
-export type LogicalSegment = TextSegment | NodeSegment;
+function createLeafAnnos(nid: UID): Annotations {
+  return {
+    moveUp: [],
+    moveDown: [],
+    moveLeft: [],
+    moveRight: [],
 
-export interface LogicalGroup {
-  segments: ReadonlyArray<LogicalSegment>;
-  editable?: GroupEditable;
+    canDelete: [],
+    canInsertUp: [],
+    canInsertDown: [],
+
+    ...createSimplestPortAnnos(nid),
+  };
 }
 
-export type LogicalLayout = ReadonlyArray<LogicalGroup>;
+function mergeArrays<T>(arrs: ReadonlyArray<ReadonlyArray<T>>): ReadonlyArray<T> {
+  return ([] as ReadonlyArray<T>).concat(...arrs);
+}
+
+function mergeAnnos(annos: ReadonlyArray<MergeableAnnotations>): MergeableAnnotations {
+  return {
+    moveUp: mergeArrays(annos.map(a => a.moveUp)),
+    moveDown: mergeArrays(annos.map(a => a.moveDown)),
+    moveLeft: mergeArrays(annos.map(a => a.moveLeft)),
+    moveRight: mergeArrays(annos.map(a => a.moveRight)),
+
+    canDelete: mergeArrays(annos.map(a => a.canDelete)),
+    canInsertUp: mergeArrays(annos.map(a => a.canInsertUp)),
+    canInsertDown: mergeArrays(annos.map(a => a.canInsertDown)),
+  };
+}
+
+function annoLabel(text: string): AnnoReactNode {
+  return {
+    reactNode: text, // TODO: need this be wrapped in a div?
+    size: text.length,
+    anno: {
+      moveUp: [],
+      moveDown: [],
+      moveLeft: [],
+      moveRight: [],
+
+      canDelete: [],
+      canInsertUp: [],
+      canInsertDown: [],
+
+      enterTop: undefined,
+      enterBottom: undefined,
+      enterLeft: undefined,
+      enterRight: undefined,
+      exitTop: [],
+      exitBottom: [],
+      exitLeft: [],
+      exitRight: [],
+    },
+  }
+}
+
+function annoLabeledItem(label: string, item: AnnoReactNode): AnnoReactNode {
+  // TODO: Do we want to line-break if total size with label is too long?
+  if (item.size === undefined) {
+    return {
+      reactNode: layoutNodes([
+        label,
+        indentNode(item.reactNode),
+      ], 'block'),
+      size: undefined,
+      anno: item.anno,
+    };
+  } else {
+    return {
+      reactNode: layoutNodes([label, item.reactNode], 'inline'),
+      size: item.size, // TODO: include label?
+      anno: item.anno,
+    };
+  }
+}
+
+const SelectableWrapper: React.FC<{treeNode: Node, ctx: TreeViewContext}> = ({treeNode, ctx, children}) => {
+  const [isHovered, setIsHovered] = useState(false);
+  const isSelected = treeNode && (ctx.markedNodes.selected === treeNode);
+  const isReferent = treeNode && (ctx.markedNodes.referentName === treeNode);
+
+  const handleClick = (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
+    if ((e.target as Element).tagName !== 'INPUT') {
+      e.stopPropagation();
+      ctx.setSelectedNode(treeNode);
+    }
+  };
+
+  const handleMouseOver = (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
+    setIsHovered(true);
+    e.stopPropagation();
+  };
+
+  const handleMouseOut = (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
+    setIsHovered(false);
+  };
+
+  const classes: Array<string> = ['TreeView-selectable'];
+
+  if (isSelected) {
+    classes.push('TreeView-selected');
+  }
+  if (isReferent) {
+    classes.push('TreeView-referent');
+  }
+  if (isHovered) {
+    classes.push('TreeView-hovered');
+  }
+
+  return (
+    <div className={classes.join(' ')} onClick={handleClick} onMouseOver={handleMouseOver} onMouseOut={handleMouseOut}>
+      {children}
+    </div>
+  );
+};
+
+export function annoSelectable(node: AnnoReactNode, treeNode: Node, ctx: TreeViewContext): AnnoReactNode {
+  return {
+    reactNode: <SelectableWrapper treeNode={treeNode} ctx={ctx}>{node.reactNode}</SelectableWrapper>,
+    size: node.size,
+    anno: node.anno,
+  };
+}
+
+function annoTextView(node: TextNode, ctx: TreeViewContext): AnnoReactNode {
+  return annoSimpleNodeView(node, node.text || '\xa0\xa0\xa0\xa0', BOUND_NAME_BOX_COLOR, ctx);
+}
 
 const MAX_ROW_WIDTH = 30;
 
-const LogicalTextView: React.FC<{selectionNode: Node | undefined, outwardNode: Node, layout: LogicalLayout, singleLine: boolean, tightGrouping: boolean, ctx: TreeViewContext, onEdit?: (action: DynamicInterfaceEditAction, groupId: number) => void}> = ({selectionNode, outwardNode, layout, singleLine, tightGrouping, ctx, onEdit}) => {
-  const ref = useRef<HTMLDivElement>(null);
-  const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(selectionNode, ref, ctx);
+function annoArrayLayout(items: ReadonlyArray<AnnoReactNode>): AnnoReactNode {
+  const size = combineSizes(items.map(item => item.size));
 
-  let selectionLayoutRowAccum: Array<Node> = [];
-  let selectionLayout: Array<Array<Node>> = [];
-  const emitSelectionRow = (): void => {
-    if (selectionLayoutRowAccum.length > 0) {
-      selectionLayout.push(selectionLayoutRowAccum);
-      selectionLayoutRowAccum = [];
-    }
-  };
+  const mergedChildAnnos = mergeAnnos(items.map(item => item.anno));
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>): void => {
-    if (!keyModifiersEqual(e, [])) {
-      return;
-    }
-    if ((e.key === 'ArrowRight') && (ref.current === e.target)) { // TODO: I think? instead we could check if selectionNode && (ctx.markedNodes.selected === selectionNode)
-      if (selectionLayout.length > 0) {
-        e.stopPropagation();
-        ctx.setSelectedNode(selectionLayout[0][0]);
-      }
-    }
-  };
+  // clone these to make local changes
+  const moveUp = [...mergedChildAnnos.moveUp];
+  const moveDown = [...mergedChildAnnos.moveDown];
+  const moveLeft = [...mergedChildAnnos.moveLeft];
+  const moveRight = [...mergedChildAnnos.moveRight];
+  const canDelete = [...mergedChildAnnos.canDelete];
+  const canInsertUp = [...mergedChildAnnos.canInsertUp];
+  const canInsertDown = [...mergedChildAnnos.canInsertDown];
 
-  const reactNode = (
-    <div ref={ref} className={selectionClasses.concat(['TreeView-node', 'TreeView-rounded-node', 'TreeView-logical', (singleLine ? 'TreeView-logical-horiz' : 'TreeView-logical-vert')]).join(' ')} onKeyDown={handleKeyDown} {...selectionHandlers}>{layout.map((group, groupIdx) => {
-      const groupCompletedRows: Array<React.ReactNode> = [];
-      let rowAccum: Array<React.ReactNode> = [];
-      let rowWidth: number = 0;
+  let enterTop: UID | undefined;
+  let enterBottom: UID | undefined;
+  let enterLeft: UID | undefined;
+  let enterRight: UID | undefined;
+  let exitTop: ReadonlyArray<UID>;
+  let exitBottom: ReadonlyArray<UID>;
+  let exitLeft: ReadonlyArray<UID>;
+  let exitRight: ReadonlyArray<UID>;
 
-      const emitRow = (indent: boolean): void => {
-        if (rowAccum.length > 0) {
-          const classes = ['TreeView-row-view-row'];
-          if (indent) {
-            classes.push('TreeView-row-view-row-indented');
+  let layoutDir: 'block' | 'inline';
+
+  if (size === undefined) {
+    // block/vertical
+    if (items.length === 0) {
+      // TODO: implement
+      exitTop = [];
+      exitBottom = [];
+      exitLeft = [];
+      exitRight = [];
+    } else {
+      enterTop = items[0].anno.enterTop;
+      enterBottom = items[items.length-1].anno.enterBottom;
+      enterLeft = undefined;
+      enterRight = undefined;
+      exitTop = items[0].anno.exitTop;
+      exitBottom = items[items.length-1].anno.exitBottom;
+      exitLeft = []; // TODO: from all items?
+      exitRight = [];
+
+      for (let i = 0; i < (items.length-1); i++) {
+        // connect items i and i+1
+
+        for (const exit of items[i].anno.exitBottom) {
+          const entrance = items[i+1].anno.enterTop;
+          if (!entrance) {
+            console.log(items[i+1]);
+            throw new Error();
           }
-          if (tightGrouping) {
-            classes.push('TreeView-row-view-row-tight');
-          } else {
-            classes.push('TreeView-row-view-row-loose');
+          moveDown.push([exit, entrance]);
+        }
+
+        for (const exit of items[i+1].anno.exitTop) {
+          const entrance = items[i].anno.enterBottom;
+          if (!entrance) {
+            throw new Error();
           }
-
-          groupCompletedRows.push(
-            <div key={groupCompletedRows.length} className={classes.join(' ')}>{rowAccum}</div>
-          );
-
-          emitSelectionRow();
-        }
-        rowAccum = [];
-        rowWidth = 0;
-      };
-
-      const pushNodeSegment = (segment: NodeSegment, key: string | number, onDeleteSelectedNode: () => boolean) => {
-        let handleNodeKeyDown: ((e: React.KeyboardEvent<HTMLDivElement>) => void) | undefined = undefined;
-        if (segment.treeNode) {
-          const selectionRowIdx = selectionLayout.length;
-          const selectionItemIdx = selectionLayoutRowAccum.length;
-
-          handleNodeKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-            if (!keyModifiersEqual(e, [])) {
-              return;
-            }
-            if (e.key === 'ArrowLeft') {
-              e.stopPropagation();
-              if (selectionItemIdx === 0) {
-                ctx.setSelectedNode(outwardNode);
-              } else {
-                const newItemIdx = selectionItemIdx - 1;
-                ctx.setSelectedNode(selectionLayout[selectionRowIdx][newItemIdx]);
-              }
-            } else if (e.key === 'ArrowRight') {
-              if (selectionItemIdx < (selectionLayout[selectionRowIdx].length - 1)) {
-                e.stopPropagation();
-                const newItemIdx = selectionItemIdx + 1;
-                ctx.setSelectedNode(selectionLayout[selectionRowIdx][newItemIdx]);
-              }
-            } else if ((e.key === 'ArrowUp') && (selectionRowIdx === 0)) {
-              e.stopPropagation();
-              ctx.setSelectedNode(outwardNode);
-            } else if ((e.key === 'ArrowDown') && (selectionRowIdx === (selectionLayout.length - 1))) {
-              // Ignore, maybe ancestor will handle
-            } else if ((e.key === 'ArrowUp') || (e.key === 'ArrowDown')) {
-              const newRowIdx = selectionRowIdx + ((e.key === 'ArrowDown') ? 1 : -1);
-              e.stopPropagation();
-              ctx.setSelectedNode(selectionLayout[newRowIdx][0]);
-            } else if ((e.key === 'Backspace')) {
-              if (segment.treeNode && (ctx.markedNodes.selected === segment.treeNode)) {
-                if (onDeleteSelectedNode()) {
-                  e.stopPropagation();
-                  e.preventDefault();
-                }
-              }
-            }
-          };
-        };
-        const wrappedNode = (
-          <div key={key} onKeyDown={handleNodeKeyDown}>{segment.sizedReactNode.reactNode}</div>
-        );
-        rowAccum.push(wrappedNode);
-        if (segment.treeNode) {
-          selectionLayoutRowAccum.push(segment.treeNode);
-        }
-      };
-
-      const handleDeleteSelectedChildNode = (): boolean => {
-        if (group.editable && group.editable.delete && onEdit) {
-          onEdit('delete', groupIdx);
-          return true;
-        } else {
-          console.log('ignoring delete');
-          return false;
-        }
-      };
-
-      group.segments.forEach((segment, segmentIdx) => {
-        if (segment.kind === 'nodes') {
-          const key: string | number = segment.treeNode ? segment.treeNode.nid : segmentIdx;
-          if ((segment.sizedReactNode.singleLineWidth !== undefined) && ((rowWidth + segment.sizedReactNode.singleLineWidth) <= MAX_ROW_WIDTH)) {
-            pushNodeSegment(segment, key, handleDeleteSelectedChildNode);
-            rowWidth += segment.sizedReactNode.singleLineWidth;
-          } else {
-            emitRow(false);
-            pushNodeSegment(segment, key, handleDeleteSelectedChildNode);
-            emitRow(segmentIdx > 0);
-          }
-        } else if (segment.kind === 'text') {
-          const ellipsis = false; // TODO: (rowAccum.length === 0) && (layout.length > 0);
-          rowAccum.push(
-            <div key={segmentIdx} className="TreeView-logical-plain-text">{(ellipsis ? '…' : '') + segment.text}</div>
-          );
-          rowWidth += segment.text.length;
-        } else {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const exhaustive: never = segment; // this will cause a type error if we haven't handled all cases
-          throw new Error();
-        }
-      });
-
-      const handleGroupKeyDown = (e: React.KeyboardEvent<HTMLDivElement>): void => {
-        if (group.editable && onEdit) {
-          if (group.editable.insertBefore && ((singleLine && keyModifiersEqual(e, ['Shift']) && (e.key === 'ArrowLeft')) || (!singleLine && keyModifiersEqual(e, ['Shift']) && (e.key === 'ArrowUp')))) {
-            onEdit('insert-before', groupIdx);
-            e.stopPropagation();
-            e.preventDefault();
-          }
-          if (group.editable.insertAfter && ((singleLine && keyModifiersEqual(e, ['Shift']) && (e.key === 'ArrowRight')) || (!singleLine && keyModifiersEqual(e, ['Shift']) && (e.key === 'ArrowDown')))) {
-            onEdit('insert-after', groupIdx);
-            e.stopPropagation();
-            e.preventDefault();
-          }
-        }
-      };
-
-      if (singleLine) {
-        return (
-          <div key={groupIdx} className="TreeView-logical-group-horiz" onKeyDown={handleGroupKeyDown}>
-            {rowAccum}
-          </div>
-        );
-      } else {
-        emitRow(false);
-        return (
-          <div key={groupIdx} className="TreeView-logical-group-vert" onKeyDown={handleGroupKeyDown}>
-            {groupCompletedRows}
-          </div>
-        );
-      }
-    })}</div>
-  );
-  emitSelectionRow();
-
-  return reactNode;
-}
-
-const sizedLogicalTextView = ({selectionNode, outwardNode, layout, tightGrouping, ctx, onEdit}: {selectionNode: Node | undefined, outwardNode: Node, layout: LogicalLayout, tightGrouping: boolean, ctx: TreeViewContext, onEdit?: (action: DynamicInterfaceEditAction, groupId: number) => void}): SizedReactNode => {
-  // Determine how wide it would be if a single line (if possible)
-  let singleLineWidth: number | undefined = 0;
-
-  for (const group of layout) {
-    for (const segment of group.segments) {
-      switch (segment.kind) {
-        case 'nodes':
-          singleLineWidth = (segment.sizedReactNode.singleLineWidth === undefined) ? undefined : (singleLineWidth! + segment.sizedReactNode.singleLineWidth);
-          break;
-
-        case 'text':
-          singleLineWidth! += segment.text.length;
-          break;
-
-        default: {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const exhaustive: never = segment; // this will cause a type error if we haven't handled all cases
-          throw new Error();
+          moveUp.push([exit, entrance]);
         }
       }
     }
-    if (singleLineWidth === undefined) {
-      break;
+    layoutDir = 'block';
+  } else {
+    // inline/horizontal
+    if (items.length === 0) {
+      // TODO: implement
+      exitTop = [];
+      exitBottom = [];
+      exitLeft = [];
+      exitRight = [];
+    } else {
+      enterTop = items[0].anno.enterTop;
+      enterBottom = items[0].anno.enterTop;
+      enterLeft = items[0].anno.enterLeft;
+      enterRight = items[items.length-1].anno.enterRight;
+      exitTop = []; // TODO: from all items?
+      exitBottom = []; // TODO: from all items?
+      exitLeft = items[0].anno.exitLeft;
+      exitRight = items[items.length-1].anno.exitRight;
+
+      for (let i = 0; i < (items.length-1); i++) {
+        // connect items i and i+1
+
+        for (const exit of items[i].anno.exitRight) {
+          const entrance = items[i+1].anno.enterLeft;
+          if (!entrance) {
+            throw new Error();
+          }
+          moveRight.push([exit, entrance]);
+        }
+
+        for (const exit of items[i+1].anno.exitLeft) {
+          const entrance = items[i].anno.enterRight;
+          if (!entrance) {
+            throw new Error();
+          }
+          moveLeft.push([exit, entrance]);
+        }
+      }
     }
+    layoutDir = 'inline';
   }
 
-  const singleLine = ((singleLineWidth !== undefined) && (singleLineWidth <= MAX_ROW_WIDTH));
-
   return {
-    reactNode: <LogicalTextView selectionNode={selectionNode} outwardNode={outwardNode} layout={layout} tightGrouping={tightGrouping} ctx={ctx} singleLine={singleLine} onEdit={onEdit} />,
-    singleLineWidth,
-  };
+    reactNode: layoutNodes(items.map(item => item.reactNode), layoutDir),
+    size,
+    anno: {
+      moveUp,
+      moveDown,
+      moveLeft,
+      moveRight,
+
+      canDelete,
+      canInsertUp,
+      canInsertDown,
+
+      enterTop,
+      enterBottom,
+      enterLeft,
+      enterRight,
+      exitTop,
+      exitBottom,
+      exitLeft,
+      exitRight,
+    },
+  }
 }
 
-const sizedStreamReferenceView = ({node, ctx}: {node: StreamReferenceNode, ctx: TreeViewContext}): SizedReactNode => {
+function annoSimpleNodeView(treeNode: Node, content: string, bgColor: string, ctx: TreeViewContext, icon?: [string, string]): AnnoReactNode {
+  return {
+    reactNode: (
+      <div className='TreeView-simple-leaf' style={{color: bgColor}}>
+        {icon && <img className="TreeView-literal-icon" src={icon[0]} alt={icon[1]} />}
+        {content}
+      </div>
+    ),
+    size: content.length,
+    anno: createLeafAnnos(treeNode.nid),
+  };
+};
+
+
+
+function annoStreamReferenceView(node: StreamReferenceNode, ctx: TreeViewContext): AnnoReactNode {
   const env = ctx.staticEnvMap.get(node);
   if (!env) {
     throw new Error();
@@ -375,9 +460,10 @@ const sizedStreamReferenceView = ({node, ctx}: {node: StreamReferenceNode, ctx: 
     throw new Error();
   }
 
-  return sizedSimpleNodeView({treeNode: node, content: nameBinding.name.text || '\xa0\xa0\xa0\xa0', bgColor: STREAM_REFERENCE_BOX_COLOR, ctx});
+  return annoSimpleNodeView(node, nameBinding.name.text || '\xa0\xa0\xa0\xa0', STREAM_REFERENCE_BOX_COLOR, ctx);
 };
 
+/*
 const CustomUIView: React.FC<{logicalReactNode: React.ReactNode, createCustomUI: (underNode: HTMLElement, settings: any, onChange: (change: DynamicInterfaceChange) => void) => () => void, settings: ApplicationSettings, onChange: (change: DynamicInterfaceChange) => void}> = ({logicalReactNode, createCustomUI, settings, onChange}) => {
   const customRef = useRef<HTMLDivElement>(null);
 
@@ -399,14 +485,16 @@ const CustomUIView: React.FC<{logicalReactNode: React.ReactNode, createCustomUI:
     </div>
   );
 }
+*/
 
-const sizedApplicationView = ({node, ctx}: {node: ApplicationNode, ctx: TreeViewContext}): SizedReactNode => {
-  interface TreeAndSizedNodes {
-    readonly sizedReactNode: SizedReactNode;
+function annoApplicationView(node: ApplicationNode, ctx: TreeViewContext): AnnoReactNode {
+  /*
+  interface TreeAndAnnoNodes {
+    readonly annoReactNode: AnnoReactNode;
     readonly treeNode?: Node; // we just use its identity for selection. may be undefined if not selectable
   }
 
-  const templateToLogicalLayout = (template: TemplateLayout, nodeMap: ReadonlyMap<string, TreeAndSizedNodes>): LogicalLayout => {
+  const templateToLogicalLayout = (template: TemplateLayout, nodeMap: ReadonlyMap<string, TreeAndAnnoNodes>): LogicalLayout => {
     const result: Array<LogicalGroup> = [];
 
     for (const group of template) {
@@ -420,7 +508,7 @@ const sizedApplicationView = ({node, ctx}: {node: ApplicationNode, ctx: TreeView
           newSegments.push({
             kind: 'nodes',
             treeNode: nodes.treeNode,
-            sizedReactNode: nodes.sizedReactNode,
+            annoReactNode: nodes.annoReactNode,
           });
         } else {
           newSegments.push(segment);
@@ -435,6 +523,7 @@ const sizedApplicationView = ({node, ctx}: {node: ApplicationNode, ctx: TreeView
 
     return result;
   };
+  */
 
   const env = ctx.staticEnvMap.get(node);
   if (!env) {
@@ -445,174 +534,73 @@ const sizedApplicationView = ({node, ctx}: {node: ApplicationNode, ctx: TreeView
     throw new Error();
   }
 
-  const sizedArgNode = (argNode: ApplicationArgNode): SizedReactNode => {
-    if (argNode.kind === NodeKind.FunctionDefinition) {
-      return sizedFunctionDefinitionView({node: argNode, ctx});
-    } else if (isStreamExpressionNode(argNode)) {
-      return sizedStreamExpressionView({node: argNode, ctx});
-    } else {
+  const items: Array<AnnoReactNode> = [];
+
+  // TODO: push funcIface.name as plain text?
+
+  for (const param of funcIface.params) {
+    const arg = node.args.get(param.nid);
+    if (!arg) {
       throw new Error();
     }
-  };
 
-  const layout: Array<LogicalGroup> = [];
-  layout.push({
-    segments: [{
-      kind: 'text',
-      text: funcIface.name.text,
-    }],
-  });
-  funcIface.params.forEach(param => {
-    const argNode = node.args.get(param.nid);
-    if (!argNode) {
-      throw new Error();
-    }
-    layout.push({
-      segments: [{
-        kind: 'nodes',
-        treeNode: argNode,
-        sizedReactNode: sizedArgNode(argNode),
-      }],
-    });
-  });
-  return sizedLogicalTextView({
-    selectionNode: node,
-    outwardNode: node,
-    layout,
-    tightGrouping: true,
-    ctx,
-  });
-
-/*
-  const nodeMap: Map<string, TreeAndSizedNodes> = new Map();
-
-  node.sargs.forEach((sarg, idx) => {
-    nodeMap.set('s' + idx, {
-      treeNode: sarg,
-      sizedReactNode: sizedStreamExpressionView({node: sarg, ctx}),
-    });
-  });
-  node.fargs.forEach((farg, idx) => {
-    nodeMap.set('f' + idx, {
-      treeNode: farg,
-      sizedReactNode: sizedFunctionDefinitionView({node: farg, ctx}),
-    });
-  });
-  node.outs.forEach((out, idx) => {
-    if (out.name) {
-      nodeMap.set('y' + idx, {
-        treeNode: out.name,
-        sizedReactNode: sizedNameView({node: out.name, ctx}),
-      });
-    }
-  });
-
-  const iface = functionInterfaceFromStaticNode(funcDef.iface);
-  return sizedLogicalTextView({
-    selectionNode: node,
-    outwardNode: node,
-    layout: templateToLogicalLayout(iface.tmpl, nodeMap),
-    tightGrouping: true,
-    ctx,
-  });
-*/
-
-/*
-    case NodeKind.DynamicFunctionInterface: {
-      const ifaceNode = funcDef.iface;
-      const tifspec = ifaceNode.getIface(node.settings);
-      const ifaceOnEdit = ifaceNode.onEdit;
-
-      const handleChange = (change: DynamicInterfaceChange): void => {
-        const {newSettings, remap, newSelectedKey} = change;
-        const newIface = ifaceNode.getIface(newSettings);
-
-        const newNode: ApplicationNode = {
-          ...node,
-          settings: newSettings,
-          ...(remap === undefined) ? {} : {
-            sargs: remap.streamParams.map(fromIdx => {
-              return (fromIdx !== undefined) ? node.sargs[fromIdx] : {
-                kind: NodeKind.UndefinedLiteral,
-                sid: generateStreamId(),
-              };
-            }),
-            fargs: remap.funcParams.map((fromIdx, idx) => {
-              return (fromIdx !== undefined) ? node.fargs[fromIdx] : defaultTreeImplFromFunctionInterface(newIface.funcParams[idx].iface);
-            }),
-          },
-        };
-
-        ctx.updateNode(node, newNode);
-        if (newSelectedKey === undefined) {
-          // TODO: we should verify that the selected node is still valid
-        } else if (newSelectedKey === 'parent') {
-          ctx.setSelectedNode(newNode);
-        } else {
-          const newNodeMap: Map<string, Node> = new Map();
-          newNode.sargs.forEach((sarg, idx) => {
-            newNodeMap.set('s' + idx, sarg);
-          });
-          newNode.fargs.forEach((farg, idx) => {
-            newNodeMap.set('f' + idx, farg);
-          });
-          newNode.outs.forEach((out, idx) => {
-            if (out.name) {
-              newNodeMap.set('y' + idx, out.name);
-            }
-          });
-
-          const newSelNode = newNodeMap.get(newSelectedKey);
-          if (!newSelNode) {
-            throw new Error();
-          }
-          ctx.setSelectedNode(newSelNode);
+    switch (param.kind) {
+      case NodeKind.StreamParam:
+        if (!isStreamExpressionNode(arg)) {
+          throw new Error();
         }
-      };
+        items.push(annoLabeledItem(param.bind.name.text, annoSelectable(annoStreamExpressionView(arg, ctx), arg, ctx)));
+        break;
 
-      const logicalView = sizedLogicalTextView({
-        selectionNode: node,
-        outwardNode: node,
-        layout: templateToLogicalLayout(tifspec.tmpl, nodeMap),
-        tightGrouping: true,
-        ctx,
-        onEdit: ifaceOnEdit ? (action, groupId) => {
-          handleChange(ifaceOnEdit(action, groupId, node.settings));
-        } : undefined,
-      });
+      case NodeKind.FunctionParam:
+        if (arg.kind !== NodeKind.FunctionDefinition) {
+          throw new Error();
+        }
+        items.push(annoSelectable(annoFunctionDefinitionView(arg, ctx), arg, ctx));
+        break;
 
-      const ifaceCreateCustomUI = ifaceNode.createCustomUI;
-      if (ifaceCreateCustomUI) {
-        return {
-          reactNode: <CustomUIView logicalReactNode={logicalView.reactNode} createCustomUI={ifaceCreateCustomUI} settings={node.settings} onChange={handleChange} />,
-          singleLineWidth: undefined,
-        };
-      } else {
-        return logicalView;
+      default: {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const exhaustive: never = param; // this will cause a type error if we haven't handled all cases
+        throw new Error();
       }
     }
-*/
+  }
+
+  return annoArrayLayout(items);
+
+  /*
+  const ifaceCreateCustomUI = ifaceNode.createCustomUI;
+  if (ifaceCreateCustomUI) {
+    return {
+      reactNode: <CustomUIView logicalReactNode={logicalView.reactNode} createCustomUI={ifaceCreateCustomUI} settings={node.settings} onChange={handleChange} />,
+      len: undefined,
+    };
+  } else {
+    return logicalView;
+  }
+  */
 };
 
-const sizedStreamExpressionView = ({node, ctx}: {node: StreamExpressionNode, ctx: TreeViewContext}): SizedReactNode => {
+export function annoStreamExpressionView(node: StreamExpressionNode, ctx: TreeViewContext): AnnoReactNode {
   switch (node.kind) {
     case NodeKind.UndefinedLiteral:
-      return sizedSimpleNodeView({treeNode: node, content: '\xa0\xa0\xa0\xa0', bgColor: '#faa', ctx});
+      return annoSimpleNodeView(node, '\xa0\xa0\xa0\xa0', '#faa', ctx);
 
     case NodeKind.NumberLiteral:
-      return sizedSimpleNodeView({treeNode: node, content: node.val.toString(), bgColor: '#cce8cc', ctx});
+      return annoSimpleNodeView(node, node.val.toString(), 'rgb(0, 92, 197)', ctx);
 
     case NodeKind.TextLiteral:
-      return sizedSimpleNodeView({treeNode: node, content: node.val, icon: [quotesIcon, 'text'], bgColor: '#fff3b9', ctx});
+      return annoSimpleNodeView(node, node.val, 'rgb(3, 47, 98)', ctx, [quotesIcon, 'text']);
 
     case NodeKind.BooleanLiteral:
-      return sizedSimpleNodeView({treeNode: node, content: node.val.toString(), icon: [booleanIcon, 'boolean'], bgColor: '#f0d4ff', ctx});
+      return annoSimpleNodeView(node, node.val.toString(), 'rgb(0, 92, 197)', ctx, [booleanIcon, 'boolean']);
 
     case NodeKind.StreamReference:
-      return sizedStreamReferenceView({node, ctx});
+      return annoStreamReferenceView(node, ctx);
 
     case NodeKind.Application:
-      return sizedApplicationView({node, ctx});
+      return annoApplicationView(node, ctx);
 
     default: {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -622,19 +610,14 @@ const sizedStreamExpressionView = ({node, ctx}: {node: StreamExpressionNode, ctx
   }
 }
 
-export const StreamExpressionView: React.FC<{node: StreamExpressionNode, ctx: TreeViewContext}> = ({ node, ctx }) => {
-  const {reactNode} = sizedStreamExpressionView({node, ctx});
-  return <>{reactNode}</> // empty angle brackets are to make types work
+function annoNameBindingView(node: NameBindingNode, ctx: TreeViewContext): AnnoReactNode {
+  return annoTextView(node.name, ctx);
 }
 
-const sizedNameBindingView = ({node, ctx}: {node: NameBindingNode, ctx: TreeViewContext}): SizedReactNode => {
-  return sizedSimpleNodeView({treeNode: node, content: node.name.text || '\xa0\xa0\xa0\xa0', bgColor: BOUND_NAME_BOX_COLOR, ctx});
-}
-
-const sizedBindingExpressionView = ({node, ctx}: {node: BindingExpressionNode, ctx: TreeViewContext}): SizedReactNode => {
+function annoBindingExpressionView(node: BindingExpressionNode, ctx: TreeViewContext): AnnoReactNode {
   switch (node.kind) {
     case NodeKind.NameBinding:
-      return sizedNameBindingView({node, ctx});
+      return annoNameBindingView(node, ctx);
 
     default: {
       throw new Error();
@@ -642,34 +625,23 @@ const sizedBindingExpressionView = ({node, ctx}: {node: BindingExpressionNode, c
   }
 }
 
-const sizedStreamParamView = ({node, ctx}: {node: StreamParamNode, ctx: TreeViewContext}): SizedReactNode => {
-  const layout: Array<LogicalGroup> = [];
+function annoStreamParamView(node: StreamParamNode, ctx: TreeViewContext): AnnoReactNode {
+  const annoNameBinding = annoNameBindingView(node.bind, ctx);
 
-  layout.push({
-    segments: [
-      {
-        kind: 'text',
-        text: 'param',
-      },
-      {
-        kind: 'nodes',
-        treeNode: node.bind,
-        sizedReactNode: sizedNameBindingView({node: node.bind, ctx}),
-      },
-    ],
-  });
-
-  return sizedLogicalTextView({selectionNode: node, outwardNode: node, layout, tightGrouping: true, ctx});
+  return {
+    reactNode: annoNameBinding.reactNode,
+    size: annoNameBinding.size,
+    anno: createLeafAnnos(node.nid),
+  };
 }
 
-const sizedParamView = ({node, ctx}: {node: ParamNode, ctx: TreeViewContext}): SizedReactNode => {
+function annoParamView(node: ParamNode, ctx: TreeViewContext): AnnoReactNode {
   switch (node.kind) {
     case NodeKind.StreamParam:
-      return sizedStreamParamView({node, ctx});
+      return annoStreamParamView(node, ctx);
 
     case NodeKind.FunctionParam:
-      // TODO: show interface
-      return sizedSimpleNodeView({treeNode: node, content: 'fparam', bgColor: BOUND_NAME_BOX_COLOR, ctx});
+      return annoSelectable(annoFunctionInterfaceView(node.iface, ctx), node.iface, ctx);
 
     default: {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -679,89 +651,70 @@ const sizedParamView = ({node, ctx}: {node: ParamNode, ctx: TreeViewContext}): S
   }
 }
 
-const sizedFunctionInterfaceView = ({node, ctx}: {node: FunctionInterfaceNode, ctx: TreeViewContext}): SizedReactNode => {
-  const layout: Array<LogicalGroup> = [];
+function annoFunctionInterfaceView(node: FunctionInterfaceNode, ctx: TreeViewContext): AnnoReactNode {
+  const items: Array<AnnoReactNode> = [];
 
-  layout.push({
-    segments: [
-      {
-        kind: 'nodes',
-        treeNode: node.name,
-        sizedReactNode: sizedSimpleNodeView({treeNode: node, content: node.name.text || '\xa0\xa0\xa0\xa0', bgColor: BOUND_NAME_BOX_COLOR, ctx}),
-      }
-    ],
-  });
+  items.push(annoSelectable(annoTextView(node.name, ctx), node.name, ctx));
 
-  node.params.forEach(param => {
-    layout.push({
-      segments: [
-        {
-          kind: 'nodes',
-          treeNode: param,
-          sizedReactNode: sizedParamView({node: param, ctx}),
-        }
-      ],
-    });
-  });
+  for (const n of node.params) {
+    items.push(annoSelectable(annoParamView(n, ctx), n, ctx));
+  }
 
-  layout.push({
-    segments: [
-      {
-        kind: 'text',
-        text: '→',
-      },
-      {
-        kind: 'text',
-        text: node.output ? '(something)' : '(void)'
-      },
-    ],
-  });
+  // TODO: handle node.output when we can. maybe use →
 
-  return sizedLogicalTextView({selectionNode: node, outwardNode: node, layout, tightGrouping: true, ctx});
+  return annoArrayLayout(items);
 }
 
-export const sizedStreamBindingView = ({node, ctx}: {node: StreamBindingNode, ctx: TreeViewContext}): SizedReactNode => {
-  const layout: Array<LogicalGroup> = [];
+export function annoStreamBindingView(node: StreamBindingNode, ctx: TreeViewContext): AnnoReactNode {
+  const annoBindingExpr = annoBindingExpressionView(node.bexpr, ctx);
+  const annoStreamExpr = annoSelectable(annoStreamExpressionView(node.sexpr, ctx), node.sexpr, ctx);
 
-  layout.push({
-    segments: [
-      {
-        kind: 'nodes',
-        treeNode: node.bexpr,
-        sizedReactNode: sizedBindingExpressionView({node: node.bexpr, ctx}),
-      },
-    ],
-  });
+  const size = combineSizes([annoBindingExpr.size, 1, annoStreamExpr.size]);
 
-  layout.push({
-    segments: [
-      {
-        kind: 'text',
-        text: ' = ',
-      },
-    ]
-  });
+  let reactNode: React.ReactNode;
 
-  layout.push({
-    segments: [
-      {
-        kind: 'nodes',
-        treeNode: node.sexpr,
-        sizedReactNode: sizedStreamExpressionView({node: node.sexpr, ctx}),
-      },
-    ],
-  });
+  const mergedChildAnnos = mergeAnnos([annoBindingExpr.anno, annoStreamExpr.anno]);
+  const newMoveRight = [...mergedChildAnnos.moveRight];
 
-  return sizedLogicalTextView({selectionNode: undefined, outwardNode: node, layout, tightGrouping: true, ctx});
+  for (const exit of annoBindingExpr.anno.exitRight) {
+    const entrance = annoStreamExpr.anno.enterLeft;
+    if (!entrance) {
+      throw new Error();
+    }
+    newMoveRight.push([exit, entrance]);
+  }
+
+  if (size === undefined) {
+    // break
+    reactNode = (
+      <div>
+        <div>{annoBindingExpr.reactNode} =</div>
+        <div>{annoStreamExpr.reactNode}</div>
+      </div>
+    );
+  } else {
+    // one line
+    reactNode = <span>{annoBindingExpr.reactNode} = {annoStreamExpr.reactNode}</span>
+  }
+
+  return {
+    reactNode,
+    size,
+    anno: {
+      ...mergedChildAnnos,
+      moveRight: newMoveRight,
+      ...createSimplestPortAnnos(node.nid), // TODO: this is not right
+    },
+  };
 }
 
-const sizedTreeImplBodyView = ({node, ctx}: {node: TreeImplBodyNode, ctx: TreeViewContext}): SizedReactNode => {
+function annoTreeImplBodyNodeView(node: TreeImplBodyNode, ctx: TreeViewContext): AnnoReactNode {
   if (isStreamExpressionNode(node)) {
-    return sizedStreamExpressionView({node, ctx});
+    return annoStreamExpressionView(node, ctx);
   } else if (node.kind === NodeKind.StreamBinding) {
-    return sizedStreamBindingView({node, ctx});
+    return annoStreamBindingView(node, ctx);
   } else if (node.kind === NodeKind.FunctionDefinition) {
-    return sizedFunctionDefinitionView({node, ctx});
+    return annoFunctionDefinitionView(node, ctx);
   } else {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const exhaustive: never = node; // this will cause a type error if we haven't handled all cases
@@ -769,44 +722,28 @@ const sizedTreeImplBodyView = ({node, ctx}: {node: TreeImplBodyNode, ctx: TreeVi
   }
 };
 
-const sizedTreeImplView = ({node, ctx}: {node: TreeImplNode, ctx: TreeViewContext}): SizedReactNode => {
-  const layout: Array<LogicalGroup> = [];
-  node.body.forEach(bodyNode => {
-    layout.push({
-      segments: [{
-        kind: 'nodes',
-        treeNode: bodyNode,
-        sizedReactNode: sizedTreeImplBodyView({node: bodyNode, ctx}),
-      }],
-    });
-  });
+function annoTreeImplView(node: TreeImplNode, ctx: TreeViewContext): AnnoReactNode {
+  const items: Array<AnnoReactNode> = [];
 
+  for (const n of node.body) {
+    items.push(annoSelectable(annoTreeImplBodyNodeView(n, ctx), n, ctx));
+  }
   if (node.out) {
-    layout.push({
-      segments: [
-        {
-          kind: 'text',
-          text: '←',
-        },
-        {
-          kind: 'nodes',
-          treeNode: node.out,
-          sizedReactNode: sizedStreamExpressionView({node: node.out, ctx}),
-        },
-      ],
-    });
+    const annoSexp = annoSelectable(annoStreamExpressionView(node.out, ctx), node.out, ctx);
+
+    items.push(annoLabeledItem('←', annoSexp));
   }
 
-  return sizedLogicalTextView({selectionNode: undefined, outwardNode: node, layout, tightGrouping: false, ctx});
+  return annoArrayLayout(items);
 }
 
-const sizedFunctionImplView = ({node, ctx}: {node: FunctionImplNode, ctx: TreeViewContext}): SizedReactNode => {
+function annoFunctionImplView(node: FunctionImplNode, ctx: TreeViewContext): AnnoReactNode {
   switch (node.kind) {
     case NodeKind.NativeImpl:
       throw new Error('unimplemented');
 
     case NodeKind.TreeImpl:
-      return sizedTreeImplView({node, ctx});
+      return annoTreeImplView(node, ctx);
 
     default: {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -816,39 +753,23 @@ const sizedFunctionImplView = ({node, ctx}: {node: FunctionImplNode, ctx: TreeVi
   }
 }
 
-export const FunctionDefinitionView: React.FC<{node: FunctionDefinitionNode, ctx: TreeViewContext}> = ({ node, ctx }) => {
-  const ref = useRef<HTMLDivElement>(null);
-  const {classes: selectionClasses, handlers: selectionHandlers} = useSelectable(node, ref, ctx);
+export function annoFunctionDefinitionView(node: FunctionDefinitionNode, ctx: TreeViewContext): AnnoReactNode {
+  const annoIface = annoFunctionInterfaceView(node.iface, ctx);
+  const annoImpl = annoFunctionImplView(node.impl, ctx);
 
-  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.getModifierState('Alt') ||
-      e.getModifierState('Control') ||
-      e.getModifierState('Meta') ||
-      e.getModifierState('Shift')) {
-      return;
-    }
-    if ((e.key === 'ArrowRight') && (ref.current === e.target)) {
-      if ((node.impl.kind === NodeKind.TreeImpl) && (node.impl.body.length > 0)) {
-        e.stopPropagation();
-        ctx.setSelectedNode(node.impl.body[0]);
-      }
-    }
-  };
+  const mergedChildAnnos = mergeAnnos([annoIface.anno, annoImpl.anno]);
+  const newMoveRight = [...mergedChildAnnos.moveRight];
+  if ((node.impl.kind === NodeKind.TreeImpl) && (node.impl.body.length > 0)) {
+    newMoveRight.push([node.nid, node.impl.body[0].nid]);
+  }
 
-  const ifaceReactNode: React.ReactNode = sizedFunctionInterfaceView({node: node.iface, ctx}).reactNode;
-  const implReactNode: React.ReactNode = sizedFunctionImplView({node: node.impl, ctx}).reactNode;
-
-  return (
-    <div ref={ref} className={selectionClasses.concat(['TreeView-node', 'TreeView-function-definition']).join(' ')} {...selectionHandlers} onKeyDown={onKeyDown}>
-      <div className="TreeView-function-iface">{ifaceReactNode}</div>
-      <div className="TreeView-function-impl">{implReactNode}</div>
-    </div>
-  );
-}
-
-const sizedFunctionDefinitionView = ({node, ctx}: {node: FunctionDefinitionNode, ctx: TreeViewContext}): SizedReactNode => {
   return {
-    singleLineWidth: undefined,
-    reactNode: <FunctionDefinitionView node={node} ctx={ctx} />,
+    reactNode: layoutNodes([annoIface.reactNode, annoImpl.reactNode], 'block'),
+    size: undefined,
+    anno: {
+      ...mergedChildAnnos,
+      moveRight: newMoveRight,
+      ...createSimplestPortAnnos(node.nid),
+    },
   };
 };

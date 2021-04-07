@@ -170,7 +170,7 @@ export function initStaticEnv(globalFunctions: ReadonlyArray<FunctionDefinitionN
   };
 }
 
-export function extendStaticEnv(outer: StaticEnvironment, def: FunctionDefinitionNode): StaticEnvironment {
+function extendStaticEnv(outer: StaticEnvironment, def: FunctionDefinitionNode): StaticEnvironment {
   if (def.impl.kind !== NodeKind.TreeImpl) {
     throw new Error();
   }

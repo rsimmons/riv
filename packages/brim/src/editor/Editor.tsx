@@ -1,50 +1,76 @@
-import React, { useReducer, useRef, useLayoutEffect, useCallback, useState } from 'react';
-import { HotKeys, ObserveKeys } from "react-hotkeys";
+import React, { useRef, useLayoutEffect, useCallback, useState } from 'react';
 import { Action, initialState, reducer, getStaticEnvMap, getReferentNode, initStaticEnv } from '../codeview/EditReducer';
 import { StoragePanel } from './StoragePanel';
 import './Editor.css';
-import { FunctionDefinitionView, TreeViewContext } from '../codeview/TreeView';
+import { annoFunctionDefinitionView, annoSelectable, TreeViewContext } from '../codeview/TreeView';
 import { Node, FunctionDefinitionNode } from '../compiler/Tree';
 import { ProgramInfo, State } from '../codeview/State';
 import Chooser from '../codeview/Chooser';
 
-const keyMap = {
-  TOGGLE_EDIT: 'enter',
-  ABORT_EDIT: 'escape',
-  INFIX_EDIT: 'shift+enter',
-
-  INSERT_BEFORE: 'shift+up',
-  INSERT_AFTER: 'shift+down',
-
-  DELETE_SUBTREE: 'backspace',
-
-  EDIT_NEXT_UNDEFINED: 'tab',
-
-  UNDO: 'command+z',
-
-  CUT: 'command+x',
-  PASTE: 'command+v',
-};
+const keyActions: ReadonlyArray<[string, ReadonlyArray<string>, boolean, string]> = [
+  ['Enter', [], true, 'TOGGLE_EDIT'],
+  ['Escape', [], true, 'ABORT_EDIT'],
+  ['Backspace', [], false, 'DELETE_SUBTREE'],
+  ['ArrowUp', ['Shift'], false, 'INSERT_BEFORE'],
+  ['ArrowDown', ['Shift'], false, 'INSERT_AFTER'],
+  ['Enter', ['Shift'], true, 'INFIX_EDIT'],
+  ['Tab', [], true, 'EDIT_NEXT_UNDEFINED'],
+  ['KeyZ', ['Meta'], false, 'UNDO'],
+  ['KeyX', ['Meta'], false, 'CUT'],
+  ['KeyV', ['Meta'], false, 'PASTE'],
+  ['ArrowUp', [], false, 'MOVE_UP'],
+  ['ArrowDown', [], false, 'MOVE_DOWN'],
+  ['ArrowLeft', [], false, 'MOVE_LEFT'],
+  ['ArrowRight', [], false, 'MOVE_RIGHT'],
+];
 
 // These are "normal" character keys that we use as commands. We identify them because we don't want
-// them to begin a "overwrite edit".
-const COMMAND_CHARS = new Set([
+// them to begin an "overwrite edit".
+const DONT_START_EDIT_CHARS = new Set([
   '=',
   ',',
 ]);
 
-// By default, if an input element is focused, keys will be ignored. But we want some
-// of them to be processed even when an input is focused, and those ones are listed here.
-// Note that react-hotkeys only lets us list the individual keys herfe not "combinations"
-// as we would want.
-const CATCH_IN_INPUTS = [
-  'Enter',
-  'Shift',
-  'Escape',
-  'Tab',
-  '=',
-  ',',
-];
+function setsEq<T>(as: ReadonlySet<T>, bs: ReadonlySet<T>): boolean {
+  if (as.size !== bs.size) {
+    return false;
+  }
+
+  for (const a of as) {
+    if (!bs.has(a)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function makeUniqueMap<K, V>(pairs: ReadonlyArray<[K, V]>) : Map<K, V> {
+  const result: Map<K, V> = new Map();
+
+  for (const [k, v] of pairs) {
+    if (result.has(k)) {
+      console.log('collision', k, result.get(k), v);
+      throw new Error();
+    }
+    result.set(k, v);
+  }
+
+  return result;
+}
+
+function makeUniqueSet<T>(arr: ReadonlyArray<T>) : Set<T> {
+  const result: Set<T> = new Set();
+
+  for (const v of arr) {
+    if (result.has(v)) {
+      throw new Error();
+    }
+    result.add(v);
+  }
+
+  return result;
+}
 
 function useEditReducer(): [State, (action: Action) => void] {
   // The state is stored in useState, in order to trigger re-renders.
@@ -68,21 +94,38 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
   // to be pure, and ours is not. So we have to do a workaround.
   const [state, dispatch] = useEditReducer();
 
-  // TODO: memoize generation of this
-  const handlers: {[key: string]: (keyEvent?: KeyboardEvent | undefined) => void} = {};
-  for (const k of Object.keys(keyMap)) {
-    handlers[k] = (() => (e: KeyboardEvent | undefined) => {
-      if (e) {
-        e.preventDefault(); // If we attempted to handle this, prevent default (scrolling window, entering character, etc.)
-      }
-      dispatch({type: k});
-    })(); // IIFE to bind k
-  }
-
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    // TODO: This is not a robust check, but the spec is complicated
-    // (https://www.w3.org/TR/uievents-key/#keys-whitespace)
-    if (((e.target as Element).tagName.toLowerCase() !== 'input') && ([...e.key].length === 1) && !e.altKey && !e.ctrlKey && !e.metaKey && !COMMAND_CHARS.has(e.key)) {
+    // find the set of key modifiers for this press
+    const eventMods: Set<string> = new Set();
+    for (const m of ['Alt', 'Control', 'Meta', 'Shift']) {
+      if (e.getModifierState(m)) {
+        eventMods.add(m);
+      }
+    }
+
+    // was this key entered into an input box?
+    const intoInput = (e.target as Element).tagName.toLowerCase() === 'input';
+
+    // hacky, but works. see https://stackoverflow.com/questions/12467240/determine-if-javascript-e-keycode-is-a-printable-non-control-character#comment114613852_58658881
+    const printable = [...e.key].length === 1;
+
+    for (const [key, modsArr, handleInInput, action] of keyActions) {
+      if ((e.code === key) && setsEq(eventMods, new Set(modsArr)) && (!intoInput || handleInInput)) {
+        // hack: handle some actions here for now
+        if (action === 'MOVE_UP') {
+          const curSelId = displayedSelTree.selectedNode.nid;
+          const newSelId = moveUp.get(curSelId);
+          // TODO: move
+          console.log(curSelId, newSelId);
+        } else {
+          dispatch({type: action});
+        }
+        e.preventDefault();
+        return;
+      }
+    }
+
+    if (!intoInput && printable && ((eventMods.size === 0) || setsEq(eventMods, new Set(['Shift']))) && !DONT_START_EDIT_CHARS.has(e.key)) {
       // Interestingly, the key here will still end up going into the input element, which is what we want.
       dispatch({type: 'BEGIN_EDIT'});
     }
@@ -104,14 +147,19 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
   const displayedStaticEnvMap = getStaticEnvMap(displayedSelTree.mainDef, globalStaticEnv);
   const referentNameNode = getReferentNode(displayedSelTree.selectedNode, displayedStaticEnvMap);
 
-  // Determine if we should focus the selected node. This is hacky, but don't know better way to handle.
-  const editorElem = useRef<HTMLDivElement>(null);
+  // Move focus back to workspace after chooser has closed. This is hacky, but don't know better way to handle.
+  const workspaceElem = useRef<HTMLDivElement>(null);
   const firstRender = useRef(true);
   const previouslyEditing = useRef<boolean>(false);
-  const focusWasUnderEditor: boolean = !!editorElem.current && editorElem.current.contains(document.activeElement);
-  const focusSelected: boolean = (autoFocus && firstRender.current) || (!state.editing && (focusWasUnderEditor || previouslyEditing.current));
+  const focusWasOnTree: boolean = !!workspaceElem.current && workspaceElem.current.contains(document.activeElement);
+  const focusWorkspaceNow: boolean = (autoFocus && firstRender.current) || (!state.editing && (focusWasOnTree || previouslyEditing.current));
   previouslyEditing.current = !!state.editing;
   firstRender.current = false;
+  useLayoutEffect(() => {
+    if (focusWorkspaceNow && workspaceElem.current) {
+      workspaceElem.current.focus();
+    }
+  });
 
   const treeViewCtx: TreeViewContext = {
     markedNodes: {
@@ -134,7 +182,6 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
         newNode,
       });
     },
-    focusSelected,
   };
 
   const positionedForEditSessionId: React.MutableRefObject<string | undefined> = useRef();
@@ -158,32 +205,31 @@ const Editor: React.FC<{autoFocus: boolean}> = ({ autoFocus }) => {
     }
   });
 
+  console.log(displayedSelTree.mainDef);
+  const mainDefAnnoReactNode = annoSelectable(annoFunctionDefinitionView(displayedSelTree.mainDef, treeViewCtx), displayedSelTree.mainDef, treeViewCtx);
+  const moveUp = makeUniqueMap(mainDefAnnoReactNode.anno.moveUp);
+
   return (
     <div className="Editor">
       <div className="Editor-storage-panel-container Editor-panel">
         <StoragePanel programInfo={state.programInfo} mainDefinition={state.stableSelTree.mainDef} onChangeName={handleChangeProgramName} onLoadProgram={handleLoadProgram} />
       </div>
-      <HotKeys keyMap={keyMap} handlers={handlers}>
-        <ObserveKeys only={CATCH_IN_INPUTS}>
-          <div className="Editor-workspace" onKeyDown={onKeyDown} ref={editorElem}>
-            <FunctionDefinitionView node={displayedSelTree.mainDef} ctx={treeViewCtx} />
-            {state.editing && (() => {
-              const chooserTreeViewCtx: TreeViewContext = {
-                ...treeViewCtx,
-                setSelectedNode: () => {},
-                staticEnvMap: getStaticEnvMap(state.editing.initSelTree.mainDef, globalStaticEnv),
-                focusSelected: false,
-              };
+      <div className="Editor-workspace" onKeyDown={onKeyDown} ref={workspaceElem} tabIndex={0}>
+        {mainDefAnnoReactNode.reactNode}
+        {state.editing && (() => {
+          const chooserTreeViewCtx: TreeViewContext = {
+            ...treeViewCtx,
+            setSelectedNode: () => {},
+            staticEnvMap: getStaticEnvMap(state.editing.initSelTree.mainDef, globalStaticEnv),
+          };
 
-              return (
-                <div className="Editor-chooser-positioner" style={{position: 'absolute'}}>
-                  <Chooser key={state.editing.sessionId} initSelTree={state.editing.initSelTree} dispatch={dispatch} compileError={state.editing.compileError} infixMode={state.editing.infixMode} treeViewCtx={chooserTreeViewCtx} />
-                </div>
-              );
-            })()}
-          </div>
-        </ObserveKeys>
-      </HotKeys>
+          return (
+            <div className="Editor-chooser-positioner" style={{position: 'absolute'}}>
+              <Chooser key={state.editing.sessionId} initSelTree={state.editing.initSelTree} dispatch={dispatch} compileError={state.editing.compileError} infixMode={state.editing.infixMode} treeViewCtx={chooserTreeViewCtx} />
+            </div>
+          );
+        })()}
+      </div>
     </div>
   );
 }

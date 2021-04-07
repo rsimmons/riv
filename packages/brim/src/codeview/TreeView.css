@@ -1,77 +1,21 @@
-.TreeView-node {
-  width: max-content;
-}
-
-.TreeView-node:focus {
-  outline: none;
-}
-
-.TreeView-node.TreeView-selected {
-  box-shadow: 0 0 0 1px black;
-}
-
-.TreeView-rounded-node {
-  border-radius: 0.5em;
-}
-
-.TreeView-simple-node {
-  padding: 0.3em 0.5em;
-}
-
-.TreeView-simple-node-icon {
+.TreeView-literal-icon {
   height: 1em;
   vertical-align: text-bottom;
 }
 
-.TreeView-row-view-plain-text {
-  padding: 0.3em;
+.TreeView-simple-leaf {
+  padding: 0.3em 0.5em;
 }
 
-.TreeView-row-view-row {
-  display: flex;
-  align-items: center;
+.TreeView-selectable {
+  display: inline-block;
+  border: 1px solid #ccc;
 }
 
-.TreeView-row-view-row-indented {
-  margin-left: 1.5em;
-}
-
-/*
-.TreeView-row-view-row-tight:not(:last-child) {
-  margin-bottom: 0.1em;
-}
-
-.TreeView-row-view-row-loose:not(:last-child) {
-  margin-bottom: 0.5em;
-}
-*/
-
-.TreeView-logical-group-vert:not(:last-child) {
-  margin-bottom: 0.5em;
-}
-
-.TreeView-logical-horiz {
-  display: flex;
-  align-items: center;
-}
-
-.TreeView-logical-group-horiz {
-  display: flex;
-  align-items: center;
-}
-
-.TreeView-logical-plain-text {
-  padding: 0.3em;
-}
-
-.TreeView-tree-function-definition-iface-spec {
-  background-color: #ddd;
-  padding: 0.5em;
-}
-
-.TreeView-tree-function-definition-body {
-  box-shadow: inset 0 0 2px 0 rgba(0,0,0,0.5);
-  padding: 0.5em;
+/* This is hacky to refer to class from another component */
+.Editor-workspace:focus .TreeView-selected {
+  border: 1px solid black;
+  box-shadow: 0 0 5px 0 rgba(0, 0, 0, 0.5);
 }
 
 .TreeView-referent {
@@ -79,5 +23,27 @@
 }
 
 .TreeView-hovered {
-  box-shadow: 0 0 0 1px #aaa;
+  border: 1px solid #777;
+}
+
+.TreeView-layout-block {
+  display: inline-flex;
+  flex-direction: column;
+}
+
+.TreeView-layout-block-item:not(:last-child) {
+  margin-bottom: 0.5em;
+}
+
+.TreeView-layout-inline {
+  display: inline-flex;
+  align-items: center;
+}
+
+.TreeView-layout-inline-item:not(:last-child) {
+  margin-right: 0.5em;
+}
+
+.TreeView-indent {
+  padding-left: 0.5em;
 }
