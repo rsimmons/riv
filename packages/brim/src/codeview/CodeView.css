@@ -1,0 +1,16 @@
+.CodeView {
+  font-weight: 300;
+  font-size: 14px;
+}
+
+.CodeView:focus {
+  outline-style: none;
+  box-shadow: none;
+}
+
+.CodeView-selection {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px solid green;
+  pointer-events: none;
+}

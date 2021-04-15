@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Node, FunctionDefinitionNode, StreamExpressionNode, NodeKind, isStreamExpressionNode, StreamReferenceNode, ApplicationNode, FunctionInterfaceNode, NameBindingNode, ParamNode, StreamParamNode, TreeImplBodyNode, FunctionImplNode, TreeImplNode, BindingExpressionNode, StreamBindingNode, UID, TextNode } from '../compiler/Tree';
 import './TreeView.css';
-import { StaticEnvironment } from './EditReducer';
+import { StaticEnvironment } from '../editor/EditorReducer';
 // import { TemplateLayout, TextSegment, GroupEditable } from '../compiler/TemplateLayout';
 import quotesIcon from './icons/quotes.svg';
 import booleanIcon from './icons/boolean.svg';
@@ -10,16 +10,9 @@ import booleanIcon from './icons/boolean.svg';
 const BOUND_NAME_BOX_COLOR = 'rgb(111, 66, 193)';
 const STREAM_REFERENCE_BOX_COLOR = '#1d8a3b';
 
-interface MarkedNodes {
-  selected: Node;
-  referentName: Node | undefined;
-}
-
 export interface TreeViewContext {
-  markedNodes: MarkedNodes;
   staticEnvMap: ReadonlyMap<Node, StaticEnvironment>;
-  setSelectedNode: (node: Node) => void;
-  updateNode: (node: Node, newNode: Node) => void;
+  onSelectNodeId: (nid: UID) => void;
 };
 
 /*
@@ -54,7 +47,7 @@ function useSelectable(node: Node | undefined, ref: React.RefObject<HTMLDivEleme
   const handleClick = (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
     if ((e.target as Element).tagName !== 'INPUT') {
       e.stopPropagation();
-      ctx.setSelectedNode(node);
+      ctx.onSelectNode(node);
     }
   };
 
@@ -159,20 +152,20 @@ function combineSizes(sizes: ReadonlyArray<Size>): Size {
   return combinedSize;
 }
 
-function createSimplestPortAnnos(nid: UID): PortAnnotations {
+function createEmptyPortAnnos(): PortAnnotations {
   return {
-    enterTop: nid,
-    enterBottom: nid,
-    enterLeft: nid,
-    enterRight: nid,
-    exitTop: [nid],
-    exitBottom: [nid],
-    exitLeft: [nid],
-    exitRight: [nid],
+    enterTop: undefined,
+    enterBottom: undefined,
+    enterLeft: undefined,
+    enterRight: undefined,
+    exitTop: [],
+    exitBottom: [],
+    exitLeft: [],
+    exitRight: [],
   };
 }
 
-function createLeafAnnos(nid: UID): Annotations {
+function createEmptyAnnos(nid: UID): Annotations {
   return {
     moveUp: [],
     moveDown: [],
@@ -183,24 +176,24 @@ function createLeafAnnos(nid: UID): Annotations {
     canInsertUp: [],
     canInsertDown: [],
 
-    ...createSimplestPortAnnos(nid),
+    ...createEmptyPortAnnos(),
   };
 }
 
-function mergeArrays<T>(arrs: ReadonlyArray<ReadonlyArray<T>>): ReadonlyArray<T> {
+function flattenArrays<T>(arrs: ReadonlyArray<ReadonlyArray<T>>): ReadonlyArray<T> {
   return ([] as ReadonlyArray<T>).concat(...arrs);
 }
 
 function mergeAnnos(annos: ReadonlyArray<MergeableAnnotations>): MergeableAnnotations {
   return {
-    moveUp: mergeArrays(annos.map(a => a.moveUp)),
-    moveDown: mergeArrays(annos.map(a => a.moveDown)),
-    moveLeft: mergeArrays(annos.map(a => a.moveLeft)),
-    moveRight: mergeArrays(annos.map(a => a.moveRight)),
+    moveUp: flattenArrays(annos.map(a => a.moveUp)),
+    moveDown: flattenArrays(annos.map(a => a.moveDown)),
+    moveLeft: flattenArrays(annos.map(a => a.moveLeft)),
+    moveRight: flattenArrays(annos.map(a => a.moveRight)),
 
-    canDelete: mergeArrays(annos.map(a => a.canDelete)),
-    canInsertUp: mergeArrays(annos.map(a => a.canInsertUp)),
-    canInsertDown: mergeArrays(annos.map(a => a.canInsertDown)),
+    canDelete: flattenArrays(annos.map(a => a.canDelete)),
+    canInsertUp: flattenArrays(annos.map(a => a.canInsertUp)),
+    canInsertDown: flattenArrays(annos.map(a => a.canInsertDown)),
   };
 }
 
@@ -250,15 +243,13 @@ function annoLabeledItem(label: string, item: AnnoReactNode): AnnoReactNode {
   }
 }
 
-const SelectableWrapper: React.FC<{treeNode: Node, ctx: TreeViewContext}> = ({treeNode, ctx, children}) => {
+const SelectableWrapper: React.FC<{nid: UID, ctx: TreeViewContext}> = ({nid, ctx, children}) => {
   const [isHovered, setIsHovered] = useState(false);
-  const isSelected = treeNode && (ctx.markedNodes.selected === treeNode);
-  const isReferent = treeNode && (ctx.markedNodes.referentName === treeNode);
 
   const handleClick = (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
     if ((e.target as Element).tagName !== 'INPUT') {
       e.stopPropagation();
-      ctx.setSelectedNode(treeNode);
+      ctx.onSelectNodeId(nid);
     }
   };
 
@@ -273,28 +264,57 @@ const SelectableWrapper: React.FC<{treeNode: Node, ctx: TreeViewContext}> = ({tr
 
   const classes: Array<string> = ['TreeView-selectable'];
 
-  if (isSelected) {
-    classes.push('TreeView-selected');
-  }
-  if (isReferent) {
-    classes.push('TreeView-referent');
-  }
   if (isHovered) {
     classes.push('TreeView-hovered');
   }
 
   return (
-    <div className={classes.join(' ')} onClick={handleClick} onMouseOver={handleMouseOver} onMouseOut={handleMouseOut}>
+    <div data-nid={nid} className={classes.join(' ')} onClick={handleClick} onMouseOver={handleMouseOver} onMouseOut={handleMouseOut}>
       {children}
     </div>
   );
 };
 
-export function annoSelectable(node: AnnoReactNode, treeNode: Node, ctx: TreeViewContext): AnnoReactNode {
+export function annoSelectable(node: AnnoReactNode, nid: UID, ctx: TreeViewContext): AnnoReactNode {
+  let anno: Annotations;
+
+  if (node.size === undefined) {
+    // block
+    anno = {
+      ...node.anno,
+      moveUp: node.anno.moveUp.concat(node.anno.exitTop.map(exit => [exit, nid])),
+      moveLeft: node.anno.moveLeft.concat(node.anno.exitLeft.map(exit => [exit, nid])),
+      moveRight: node.anno.enterLeft ? node.anno.moveRight.concat([[nid, node.anno.enterLeft]]) : node.anno.moveRight,
+      enterTop: nid,
+      enterBottom: nid,
+      enterLeft: nid,
+      enterRight: undefined,
+      exitTop: [nid],
+      exitBottom: node.anno.exitBottom.concat([nid]),
+      exitLeft: [nid],
+      exitRight: [],
+    };
+  } else {
+    // inline
+    anno = {
+      ...node.anno,
+      moveLeft: node.anno.moveLeft.concat(node.anno.exitLeft.map(exit => [exit, nid])),
+      moveRight: node.anno.enterLeft ? node.anno.moveRight.concat([[nid, node.anno.enterLeft]]) : node.anno.moveRight,
+      enterTop: nid,
+      enterBottom: nid,
+      enterLeft: nid,
+      enterRight: node.anno.enterRight || nid,
+      exitTop: node.anno.exitTop.concat([nid]),
+      exitBottom: node.anno.exitBottom.concat([nid]),
+      exitLeft: [nid],
+      exitRight: node.anno.exitRight.length ? node.anno.exitRight : [nid],
+    };
+  }
+
   return {
-    reactNode: <SelectableWrapper treeNode={treeNode} ctx={ctx}>{node.reactNode}</SelectableWrapper>,
+    reactNode: <SelectableWrapper nid={nid} ctx={ctx}>{node.reactNode}</SelectableWrapper>,
     size: node.size,
-    anno: node.anno,
+    anno,
   };
 }
 
@@ -340,11 +360,11 @@ function annoArrayLayout(items: ReadonlyArray<AnnoReactNode>): AnnoReactNode {
     } else {
       enterTop = items[0].anno.enterTop;
       enterBottom = items[items.length-1].anno.enterBottom;
-      enterLeft = undefined;
+      enterLeft = items[0].anno.enterLeft;
       enterRight = undefined;
       exitTop = items[0].anno.exitTop;
       exitBottom = items[items.length-1].anno.exitBottom;
-      exitLeft = []; // TODO: from all items?
+      exitLeft = flattenArrays(items.map(item => item.anno.exitLeft));
       exitRight = [];
 
       for (let i = 0; i < (items.length-1); i++) {
@@ -353,7 +373,6 @@ function annoArrayLayout(items: ReadonlyArray<AnnoReactNode>): AnnoReactNode {
         for (const exit of items[i].anno.exitBottom) {
           const entrance = items[i+1].anno.enterTop;
           if (!entrance) {
-            console.log(items[i+1]);
             throw new Error();
           }
           moveDown.push([exit, entrance]);
@@ -382,8 +401,8 @@ function annoArrayLayout(items: ReadonlyArray<AnnoReactNode>): AnnoReactNode {
       enterBottom = items[0].anno.enterTop;
       enterLeft = items[0].anno.enterLeft;
       enterRight = items[items.length-1].anno.enterRight;
-      exitTop = []; // TODO: from all items?
-      exitBottom = []; // TODO: from all items?
+      exitTop = flattenArrays(items.map(item => item.anno.exitTop));
+      exitBottom = flattenArrays(items.map(item => item.anno.exitBottom))
       exitLeft = items[0].anno.exitLeft;
       exitRight = items[items.length-1].anno.exitRight;
 
@@ -444,7 +463,7 @@ function annoSimpleNodeView(treeNode: Node, content: string, bgColor: string, ct
       </div>
     ),
     size: content.length,
-    anno: createLeafAnnos(treeNode.nid),
+    anno: createEmptyAnnos(treeNode.nid),
   };
 };
 
@@ -549,14 +568,14 @@ function annoApplicationView(node: ApplicationNode, ctx: TreeViewContext): AnnoR
         if (!isStreamExpressionNode(arg)) {
           throw new Error();
         }
-        items.push(annoLabeledItem(param.bind.name.text, annoSelectable(annoStreamExpressionView(arg, ctx), arg, ctx)));
+        items.push(annoLabeledItem(param.bind.name.text, annoSelectable(annoStreamExpressionView(arg, ctx), arg.nid, ctx)));
         break;
 
       case NodeKind.FunctionParam:
         if (arg.kind !== NodeKind.FunctionDefinition) {
           throw new Error();
         }
-        items.push(annoSelectable(annoFunctionDefinitionView(arg, ctx), arg, ctx));
+        items.push(annoSelectable(annoFunctionDefinitionView(arg, ctx), arg.nid, ctx));
         break;
 
       default: {
@@ -631,7 +650,7 @@ function annoStreamParamView(node: StreamParamNode, ctx: TreeViewContext): AnnoR
   return {
     reactNode: annoNameBinding.reactNode,
     size: annoNameBinding.size,
-    anno: createLeafAnnos(node.nid),
+    anno: createEmptyAnnos(node.nid),
   };
 }
 
@@ -641,7 +660,7 @@ function annoParamView(node: ParamNode, ctx: TreeViewContext): AnnoReactNode {
       return annoStreamParamView(node, ctx);
 
     case NodeKind.FunctionParam:
-      return annoSelectable(annoFunctionInterfaceView(node.iface, ctx), node.iface, ctx);
+      return annoSelectable(annoFunctionInterfaceView(node.iface, ctx), node.iface.nid, ctx);
 
     default: {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -654,10 +673,10 @@ function annoParamView(node: ParamNode, ctx: TreeViewContext): AnnoReactNode {
 function annoFunctionInterfaceView(node: FunctionInterfaceNode, ctx: TreeViewContext): AnnoReactNode {
   const items: Array<AnnoReactNode> = [];
 
-  items.push(annoSelectable(annoTextView(node.name, ctx), node.name, ctx));
+  items.push(annoSelectable(annoTextView(node.name, ctx), node.name.nid, ctx));
 
   for (const n of node.params) {
-    items.push(annoSelectable(annoParamView(n, ctx), n, ctx));
+    items.push(annoSelectable(annoParamView(n, ctx), n.nid, ctx));
   }
 
   // TODO: handle node.output when we can. maybe use →
@@ -667,7 +686,7 @@ function annoFunctionInterfaceView(node: FunctionInterfaceNode, ctx: TreeViewCon
 
 export function annoStreamBindingView(node: StreamBindingNode, ctx: TreeViewContext): AnnoReactNode {
   const annoBindingExpr = annoBindingExpressionView(node.bexpr, ctx);
-  const annoStreamExpr = annoSelectable(annoStreamExpressionView(node.sexpr, ctx), node.sexpr, ctx);
+  const annoStreamExpr = annoSelectable(annoStreamExpressionView(node.sexpr, ctx), node.sexpr.nid, ctx);
 
   const size = combineSizes([annoBindingExpr.size, 1, annoStreamExpr.size]);
 
@@ -703,7 +722,7 @@ export function annoStreamBindingView(node: StreamBindingNode, ctx: TreeViewCont
     anno: {
       ...mergedChildAnnos,
       moveRight: newMoveRight,
-      ...createSimplestPortAnnos(node.nid), // TODO: this is not right
+      ...createEmptyPortAnnos(),
     },
   };
 }
@@ -726,14 +745,13 @@ function annoTreeImplView(node: TreeImplNode, ctx: TreeViewContext): AnnoReactNo
   const items: Array<AnnoReactNode> = [];
 
   for (const n of node.body) {
-    items.push(annoSelectable(annoTreeImplBodyNodeView(n, ctx), n, ctx));
+    items.push(annoSelectable(annoTreeImplBodyNodeView(n, ctx), n.nid, ctx));
   }
   if (node.out) {
-    const annoSexp = annoSelectable(annoStreamExpressionView(node.out, ctx), node.out, ctx);
+    const annoSexp = annoSelectable(annoStreamExpressionView(node.out, ctx), node.out.nid, ctx);
 
     items.push(annoLabeledItem('←', annoSexp));
   }
-
   return annoArrayLayout(items);
 }
 
@@ -758,18 +776,21 @@ export function annoFunctionDefinitionView(node: FunctionDefinitionNode, ctx: Tr
   const annoImpl = annoFunctionImplView(node.impl, ctx);
 
   const mergedChildAnnos = mergeAnnos([annoIface.anno, annoImpl.anno]);
-  const newMoveRight = [...mergedChildAnnos.moveRight];
-  if ((node.impl.kind === NodeKind.TreeImpl) && (node.impl.body.length > 0)) {
-    newMoveRight.push([node.nid, node.impl.body[0].nid]);
-  }
+  const enterTop = annoImpl.anno.enterTop;
+  const enterLeft = annoImpl.anno.enterLeft;
+  const exitTop = annoImpl.anno.exitTop;
+  const exitLeft = annoImpl.anno.exitLeft;
 
   return {
     reactNode: layoutNodes([annoIface.reactNode, annoImpl.reactNode], 'block'),
     size: undefined,
     anno: {
       ...mergedChildAnnos,
-      moveRight: newMoveRight,
-      ...createSimplestPortAnnos(node.nid),
+      ...createEmptyPortAnnos(),
+      enterTop,
+      enterLeft,
+      exitTop,
+      exitLeft,
     },
   };
 };

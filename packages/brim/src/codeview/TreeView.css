@@ -13,6 +13,7 @@
 }
 
 /* This is hacky to refer to class from another component */
+/*
 .Editor-workspace:focus .TreeView-selected {
   border: 1px solid black;
   box-shadow: 0 0 5px 0 rgba(0, 0, 0, 0.5);
@@ -21,6 +22,7 @@
 .TreeView-referent {
   box-shadow: 0 0 0 1px rgb(135, 135, 255);
 }
+*/
 
 .TreeView-hovered {
   border: 1px solid #777;
@@ -45,5 +47,5 @@
 }
 
 .TreeView-indent {
-  padding-left: 0.5em;
+  padding-left: 1em;
 }

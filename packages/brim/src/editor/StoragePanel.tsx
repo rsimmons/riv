@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import genuid from '../util/uid';
-import { ProgramInfo } from '../codeview/State';
+import { ProgramInfo } from './EditorReducer';
 import { FunctionDefinitionNode } from '../compiler/Tree';
 import './StoragePanel.css';
 

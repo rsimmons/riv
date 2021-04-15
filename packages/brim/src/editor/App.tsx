@@ -5,7 +5,7 @@ import Editor from './Editor';
 const App: React.FC = () => {
   return (
     <div className="App">
-      <Editor autoFocus={true} />
+      <Editor />
       {/* <div>
         <h2>Notes</h2>
         <ul>

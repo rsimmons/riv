@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import './Chooser.css';
+import { Node } from '../compiler/Tree';
 import { FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, StreamExpressionNode, ApplicationArgNode, FunctionInterfaceNode, UID, TextNode, StreamBindingNode } from '../compiler/Tree';
 import Fuse from 'fuse.js';
-import { computeParentLookup, getStaticEnvMap } from './EditReducer';
-import { SelTree } from './State';
+import { computeParentLookup, getStaticEnvMap, StaticEnvironment } from '../editor/EditorReducer';
 import { annoStreamExpressionView, TreeViewContext, annoFunctionDefinitionView, annoStreamBindingView } from './TreeView';
 import { functionInterfaceAsPlainText, defaultTreeDefFromFunctionInterface } from '../compiler/FunctionInterface';
 import genuid from '../util/uid';
+import './Chooser.css';
 
 interface Choice {
   node: StreamExpressionNode | StreamBindingNode | FunctionDefinitionNode;
@@ -50,14 +50,7 @@ function createStreamBinding(name: string): StreamBindingNode {
   };
 }
 
-const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any) => void, compileError: string | undefined, infixMode: boolean, treeViewCtx: TreeViewContext}> = ({ initSelTree, dispatch, compileError, infixMode, treeViewCtx }) => {
-  const parentLookup = useMemo(() => computeParentLookup(initSelTree.mainDef), [initSelTree.mainDef]);
-  const parent = parentLookup.get(initSelTree.selectedNode);
-  if (!parent) {
-    throw new Error();
-  }
-  const atRoot = parent.kind === NodeKind.TreeImpl;
-
+const MultiChooser: React.FC<{context: 'tdef-body' | 'subexp', existingNode: Node | null, localEnv: StaticEnvironment, onCommitChoice: (node: Node) => void}> = ({ context, existingNode, localEnv, onCommitChoice }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     inputRef.current && inputRef.current.select();
@@ -70,45 +63,24 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any)
     }
   });
 
-  if (!isStreamExpressionNode(initSelTree.selectedNode)) {
-    throw new Error();
-  }
-
-  const initNode = initSelTree.selectedNode;
-
-  const localEnv = treeViewCtx.staticEnvMap.get(initNode);
-  if (!localEnv) {
-    throw new Error();
-  }
-
   const [text, setText] = useState(() => {
-    if (infixMode) {
-      return '';
-    } else {
+    if (existingNode) {
       // Initialize text based on node
-      switch (initNode.kind) {
-        case NodeKind.UndefinedLiteral:
-          return '';
-
+      switch (existingNode.kind) {
         case NodeKind.NumberLiteral:
-          return initNode.val.toString();
+          return existingNode.val.toString();
 
         case NodeKind.TextLiteral:
-          return initNode.val;
+          return existingNode.val;
 
         case NodeKind.BooleanLiteral:
-          return initNode.val.toString();
+          return existingNode.val.toString();
 
-        case NodeKind.StreamReference:
-        case NodeKind.Application:
-          return ''; // Don't prefill with text
-
-        default: {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const exhaustive: never = initNode; // this will cause a type error if we haven't handled all cases
-          throw new Error();
-        }
+        default:
+          return '';
       }
+    } else {
+      return '';
     }
   });
 
@@ -179,7 +151,7 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any)
     const functionEnv = localEnv.functionEnv;
     functionEnv.forEach((ifaceNode, fid) => {
       const defAsText = functionInterfaceAsPlainText(ifaceNode);
-      if (atRoot || ifaceNode.output) {
+      if ((context === 'tdef-body') || ifaceNode.output) {
         searchItems.push({
           name: defAsText,
           data: {
@@ -271,7 +243,7 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any)
       }
     }
 
-    if (atRoot && text.trim() !== '') {
+    if ((context === 'tdef-body') && text.trim() !== '') {
       choices.push({
         node: createStreamBinding(text.trim()),
       });
@@ -339,7 +311,7 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any)
   const realizeChoice = (state: DropdownState): void => {
     const choice = state.choices[state.index];
 
-    dispatch({type: 'UPDATE_EDITING_NODE', newNode: choice.node});
+    // dispatch({type: 'UPDATE_EDITING_NODE', newNode: choice.node});
   };
 
   const recomputeDropdownChoices = (text: string): DropdownState => {
@@ -373,6 +345,11 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any)
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     switch (e.key) {
+      case 'Enter':
+        onCommitChoice(dropdownState.choices[dropdownState.index].node);
+        e.stopPropagation();
+        break;
+
       case 'ArrowUp':
         e.preventDefault(); // we don't want the default behavior of moving the cursor
         e.stopPropagation();
@@ -393,18 +370,14 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any)
           throw new Error();
         }
 
-        if (atRoot) {
+        if (context === 'tdef-body') {
           const inputText = inputRef.current.value;
           const newNode = createStreamBinding(inputText);
-          dispatch({type: 'UPDATE_EDITING_NODE', newNode});
-          dispatch({type: 'TOGGLE_EDIT'});
+          // dispatch({type: 'UPDATE_EDITING_NODE', newNode});
+          // dispatch({type: 'TOGGLE_EDIT'});
         }
         break;
       }
-
-      default:
-        // do nothing
-        break;
     }
   };
 
@@ -415,7 +388,7 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any)
         {dropdownState.choices.map((choice, idx) => {
           const classNames = [];
           if (idx === dropdownState.index) {
-            if (compileError) {
+            if (false/*compileError*/) {
               classNames.push('Chooser-dropdown-selected-error');
             } else {
               classNames.push('Chooser-dropdown-selected');
@@ -424,17 +397,17 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any)
 
           // a map from nodes inside our choice to their static env
           const choiceEnvMap = getStaticEnvMap(choice.node, localEnv);
-          const choiceViewCtx = {
-            ...treeViewCtx,
+          const choiceViewCtx: TreeViewContext = {
             staticEnvMap: choiceEnvMap,
+            onSelectNodeId: () => {},
           };
 
           return (
             <li key={idx} className={classNames.join(' ')} ref={(idx === dropdownState.index) ? selectedListElem : undefined}>
               <ChoiceView choice={choice} treeViewCtx={choiceViewCtx} />
-              {(compileError && (idx === dropdownState.index)) ?
+              {/* {(compileError && (idx === dropdownState.index)) ?
                 <div className="Chooser-dropdown-compile-error">{compileError}</div>
-              : null}
+              : null} */}
             </li>
           );
         })}
@@ -443,19 +416,14 @@ const ExpressionChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any)
   );
 }
 
-const TextChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any) => void}> = ({ initSelTree, dispatch }) => {
-  const initNode = initSelTree.selectedNode;
-  if (initNode.kind !== NodeKind.Text) {
-    throw new Error();
-  }
-
+const TextChooser: React.FC<{existingNode: TextNode | null, onCommitChoice: (node: Node) => void}> = ({ existingNode, onCommitChoice }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     inputRef.current && inputRef.current.select();
   }, []);
 
   const [text, setText] = useState(() => {
-    return initNode.text;
+    return existingNode ? existingNode.text : '';
   });
 
   const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -463,11 +431,20 @@ const TextChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any) => vo
 
     setText(newText);
 
-    const newNode: TextNode = {
-      ...initNode,
-      text: newText,
-    };
-    dispatch({type: 'UPDATE_EDITING_NODE', newNode: newNode});
+    let newNode: TextNode;
+    if (existingNode) {
+      newNode = {
+        ...existingNode,
+        text: newText,
+      };
+    } else {
+      newNode ={
+        kind: NodeKind.Text,
+        nid: genuid(),
+        text: newText,
+      };
+    }
+    // TODO: commit
   };
 
   return (
@@ -477,13 +454,14 @@ const TextChooser: React.FC<{initSelTree: SelTree, dispatch: (action: any) => vo
   );
 }
 
-const Chooser: React.FC<{initSelTree: SelTree, dispatch: (action: any) => void, compileError: string | undefined, infixMode: boolean, treeViewCtx: TreeViewContext}> = ({ initSelTree, dispatch, compileError, infixMode, treeViewCtx }) => {
-  if (initSelTree.selectedNode.kind === NodeKind.Text) {
-    return <TextChooser initSelTree={initSelTree} dispatch={dispatch} />
-  } else if (isStreamExpressionNode(initSelTree.selectedNode)) {
-    return <ExpressionChooser initSelTree={initSelTree} dispatch={dispatch} compileError={compileError} infixMode={infixMode} treeViewCtx={treeViewCtx} />
+const Chooser: React.FC<{context: 'tdef-body' | 'subexp' | 'text', existingNode: Node | null, localEnv: StaticEnvironment, onCommitChoice: (node: Node) => void}> = ({ context, existingNode, localEnv, onCommitChoice }) => {
+  if (context === 'text') {
+    if (existingNode && (existingNode.kind !== NodeKind.Text)) {
+      throw new Error();
+    }
+    return <TextChooser existingNode={existingNode} onCommitChoice={onCommitChoice} />
   } else {
-    throw new Error();
+    return <MultiChooser context={context} existingNode={existingNode} localEnv={localEnv} onCommitChoice={onCommitChoice} />
   }
 }
 

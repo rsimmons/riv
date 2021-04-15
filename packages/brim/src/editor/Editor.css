@@ -1,13 +1,3 @@
-.Editor-workspace {
-  font-weight: 300;
-  font-size: 14px;
-}
-
-.Editor-workspace:focus {
-  outline-style: none;
-  box-shadow: none;
-}
-
 .Editor-panel {
   margin-bottom: 1em;
   background-color: #e8e0da;

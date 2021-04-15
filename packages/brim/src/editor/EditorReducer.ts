@@ -1,13 +1,32 @@
 import genuid from '../util/uid';
-import { State, ProgramInfo, SelTree } from './State';
 import { UID, NodeKind, Node, FunctionDefinitionNode, isStreamExpressionNode, UndefinedLiteralNode, FunctionInterfaceNode, NameBindingNode, TreeImplBodyNode, TreeImplNode } from '../compiler/Tree';
-import { CompiledDefinition } from '../compiler/CompiledDefinition';
 import { compileGlobalTreeDefinition, CompilationError } from '../compiler/Compiler';
 import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
 import { createLiveFunction } from '../runner/LiveFunction';
 import Environment from '../util/Environment';
 import { iterChildren, visitChildren, replaceChild, transformChildren } from '../compiler/Traversal';
 import globalNativeFunctions from '../builtin/globalNatives';
+import { ExecutionContext } from 'riv-runtime';
+import { CompiledDefinition } from '../compiler/CompiledDefinition';
+
+export interface ProgramInfo {
+  readonly id: string;
+  readonly name: string;
+}
+
+interface ExecutionState {
+  context: ExecutionContext;
+  compiledDefinition: CompiledDefinition | null;
+  updateCompiledDefinition: (newDefinition: CompiledDefinition) => void;
+}
+
+interface State {
+  readonly programInfo: ProgramInfo;
+  readonly liveMainDef: FunctionDefinitionNode;
+  readonly dispMainDef: FunctionDefinitionNode;
+  readonly undoStack: ReadonlyArray<FunctionDefinitionNode>;
+  readonly execution: ExecutionState | null;
+}
 
 // We don't make a discriminated union of specific actions, but maybe we could
 export interface Action {
@@ -20,116 +39,6 @@ export interface Action {
 }
 
 /*
-function cutExpressionNode(program: ProgramNode, selectionPath: Path): [ProgramNode, Path] {
-  let cutNode: ExpressionNode | undefined;
-  let holeNode: ExpressionNode | undefined; // the "hole" after we remove
-
-  let newProgram = traverseTree(program, {alongPath: selectionPath}, (node, path) => {
-    if (equiv(path, selectionPath)) {
-      // We are at the node to be cut
-      if (!isExpressionNode(node)) {
-        throw new Error();
-      }
-      if (cutNode) {
-        throw new Error(); // sanity check
-      }
-
-      cutNode = node;
-
-      holeNode = {
-        type: 'UndefinedExpression',
-        streamId: genuid(),
-        identifier: null,
-      };
-
-      return [false, holeNode];
-    } else if (isUserFunctionNode(node)) {
-      if (cutNode) {
-        // Move the node to the top level of this function definition
-        const selectionPathAfter = selectionPath.slice(path.length);
-        if ((selectionPathAfter.length < 2) || (selectionPathAfter[0] !== 'expressions')) {
-          throw new Error();
-        }
-        const idx = selectionPathAfter[1];
-        if (typeof(idx) !== 'number') {
-          throw new Error();
-        }
-
-        const newNode = {
-          ...node,
-          expressions: [
-            ...node.expressions.slice(0, idx),
-            cutNode,
-            ...node.expressions.slice(idx),
-          ],
-        };
-        cutNode = undefined;
-
-        return [false, newNode];
-      }
-    }
-
-    return [false, node];
-  });
-
-  if (newProgram.type !== 'Program') {
-    throw new Error(); // sanity check
-  }
-
-  if (!holeNode) {
-    throw new Error();
-  }
-
-  const nodeToPath = computeNodeToPathMap(newProgram);
-  const newSelectionPath = nodeToPath.get(holeNode);
-  if (!newSelectionPath) {
-    throw new Error();
-  }
-
-  return [newProgram, newSelectionPath];
-}
-
-function pasteExpressionNode(pasteNode: ExpressionNode, pasteStreamId: StreamID, program: ProgramNode, selectionPath: Path): [ProgramNode, Path] {
-  let newProgram = traverseTree(program, {}, (node, path) => {
-    if (equiv(path, selectionPath)) {
-      // We are at the node to be pasted over
-      if (!isExpressionNode(node)) {
-        throw new Error();
-      }
-
-      return [false, pasteNode];
-    } else if (isUserFunctionNode(node)) {
-      // NOTE: We assume that the node must be at the top level of a function definition.
-      let removeIdx;
-      node.expressions.forEach((expr, idx) => {
-        if (expr.streamId === pasteStreamId) {
-          // This is the node to remove
-          removeIdx = idx;
-        }
-      });
-
-      if (removeIdx !== undefined) {
-        const [newNode, , ] = deleteDefinitionExpression(node, removeIdx);
-        return [false, newNode];
-      }
-    }
-
-    return [false, node];
-  });
-
-  if (newProgram.type !== 'Program') {
-    throw new Error(); // sanity check
-  }
-
-  const nodeToPath = computeNodeToPathMap(newProgram);
-  const newSelectionPath = nodeToPath.get(pasteNode);
-  if (!newSelectionPath) {
-    throw new Error();
-  }
-
-  return [newProgram, newSelectionPath];
-}
-
 function firstUndefinedNode(node: Node, after: Path | undefined = undefined): [Node, Path] | undefined {
   let passed = false; // have we passed the "after" path?
   let result: [Node, Path] | undefined;
@@ -150,7 +59,6 @@ function firstUndefinedNode(node: Node, after: Path | undefined = undefined): [N
 
   return result;
 }
-
 */
 
 export interface StaticEnvironment {
@@ -275,17 +183,23 @@ export function getReferentNode(node: Node, staticEnvMap: Map<Node, StaticEnviro
 }
 
 /**
- * Note that this returns the new _root_ of the whole tree
+ * Note that this returns the new root
  */
-function replaceNode(node: Node, newNode: Node, parentLookup: Map<Node, Node>): Node {
-  const parent = parentLookup.get(node);
-  if (!parent) {
-    return newNode;
-  }
-  return replaceNode(parent, replaceChild(parent, node, newNode), parentLookup);
+export function replaceNode(root: Node, node: Node, newNode: Node): Node {
+  const parentLookup = computeParentLookup(root);
+
+  const replaceNodeHelper = (node: Node, newNode: Node): Node => {
+    const parent = parentLookup.get(node);
+    if (!parent) {
+      return newNode;
+    }
+    return replaceNodeHelper(parent, replaceChild(parent, node, newNode));
+  };
+
+  return replaceNodeHelper(node, newNode);
 }
 
-function deleteNodeSubtree(node: Node, parentLookup: Map<Node, Node>): SelTree | void {
+export function deleteNode(root: Node, node: Node): [Node, Node] | void {
   const deleteFromArr = <T extends Node>(nodeToRemove: T, arr: ReadonlyArray<T>): [ReadonlyArray<T>, T | undefined] => {
     const idx = arr.indexOf(nodeToRemove);
     if (idx < 0) {
@@ -306,6 +220,7 @@ function deleteNodeSubtree(node: Node, parentLookup: Map<Node, Node>): SelTree |
     return [newArr, newSibSel];
   };
 
+  const parentLookup = computeParentLookup(root);
   const parent = parentLookup.get(node);
 
   if (!parent) {
@@ -318,38 +233,25 @@ function deleteNodeSubtree(node: Node, parentLookup: Map<Node, Node>): SelTree |
         kind: NodeKind.UndefinedLiteral,
         nid: genuid(),
       };
-      const newRoot = replaceNode(node, newNode, parentLookup);
+      const newRoot = replaceNode(root, node, newNode);
       if (newRoot.kind !== NodeKind.FunctionDefinition) {
         throw new Error();
       }
-      return {
-        mainDef: newRoot,
-        selectedNode: newNode,
-      };
+      return [newRoot, newNode];
     } else if (parent.kind === NodeKind.TreeImpl) {
       const [newNodes, newSibSel] = deleteFromArr(node, parent.body);
       const newParent: TreeImplNode = {
         ...parent,
         body: newNodes,
       };
-      const newRoot = replaceNode(parent, newParent, parentLookup);
+      const newRoot = replaceNode(root, parent, newParent);
       if (newRoot.kind !== NodeKind.FunctionDefinition) {
         throw new Error();
       }
-      return {
-        mainDef: newRoot,
-        selectedNode: newSibSel || newParent,
-      };
+      return [newRoot, newSibSel || newParent];
     } else {
       throw new Error();
     }
-  }
-}
-
-function handleInstantEditAction(action: Action, selTree: SelTree, parentLookup: Map<Node, Node>): SelTree | void {
-  switch (action.type) {
-    case 'DELETE_SUBTREE':
-      return deleteNodeSubtree(selTree.selectedNode, parentLookup);
   }
 }
 
@@ -369,29 +271,6 @@ export function computeParentLookup(root: Node): Map<Node, Node> {
   return parent;
 }
 
-function canBeginEditOnNode(node: Node) {
-  return isStreamExpressionNode(node) || (node.kind === NodeKind.Text);
-}
-
-function attemptBeginEditSelected(state: State): State {
-  if (canBeginEditOnNode(state.stableSelTree.selectedNode)) {
-    return {
-      ...state,
-      editing: {
-        sessionId: genuid(),
-        initSelTree: state.stableSelTree,
-        curSelTree: state.stableSelTree,
-        compileError: undefined, // we assume
-        isInsert: false,
-        infixMode: false,
-      },
-    };
-  } else {
-    console.log('Can\'t edit this node');
-    return state;
-  }
-}
-
 function arrInsertBeforeAfter<T>(arr: ReadonlyArray<T>, idx: number, before: boolean, elem: T) {
   const newIdx = before ? idx : idx+1;
   return [
@@ -401,14 +280,14 @@ function arrInsertBeforeAfter<T>(arr: ReadonlyArray<T>, idx: number, before: boo
   ];
 }
 
-function attemptInsertBeforeAfter(state: State, before: boolean): State {
-  const parentLookup = computeParentLookup(state.stableSelTree.mainDef); // TODO: memoize
+function attemptInsertBeforeAfter(root: Node, node: Node, before: boolean): [Node, Node] | void {
+  const parentLookup = computeParentLookup(root); // TODO: memoize
 
-  let n: Node = state.stableSelTree.selectedNode;
+  let n: Node = node;
   while (true) {
     const parent = parentLookup.get(n);
     if (!parent) {
-      return state;
+      return;
     }
 
     if (parent.kind === NodeKind.TreeImpl) {
@@ -421,25 +300,11 @@ function attemptInsertBeforeAfter(state: State, before: boolean): State {
         ...parent,
         body: arrInsertBeforeAfter(parent.body, idx, before, newElem),
       };
-      const newMain = replaceNode(parent, newTreeImpl, parentLookup);
+      const newMain = replaceNode(root, parent, newTreeImpl);
       if (newMain.kind !== NodeKind.FunctionDefinition) {
         throw new Error();
       }
-      const initSelTree: SelTree = {
-        mainDef: newMain,
-        selectedNode: newElem,
-      };
-      return {
-        ...state,
-        editing: {
-          sessionId: genuid(),
-          initSelTree,
-          curSelTree: initSelTree,
-          compileError: undefined, // TODO: assumed, not sure if guaranteed safe
-          isInsert: true,
-          infixMode: false,
-        },
-      };
+      return [newMain, newElem];
     } else {
       n = parent;
     }
@@ -449,14 +314,12 @@ function attemptInsertBeforeAfter(state: State, before: boolean): State {
 function pushUndo(state: State): State {
   return {
     ...state,
-    undoStack: state.undoStack.concat([state.stableSelTree]),
+    undoStack: state.undoStack.concat([state.dispMainDef]),
   };
 }
 
-function fixupDanglingRefs(selTree: SelTree, globalFunctions: ReadonlyArray<FunctionDefinitionNode>): SelTree {
+function fixupDanglingRefs(mainDef: FunctionDefinitionNode, globalFunctions: ReadonlyArray<FunctionDefinitionNode>): FunctionDefinitionNode {
   const globalEnv = initStaticEnv(globalFunctions);
-
-  const oldNodeToNew: Map<Node, Node> = new Map();
 
   const transform = (node: Node, env: StaticEnvironment): Node => {
     let newNode: Node = node;
@@ -479,38 +342,28 @@ function fixupDanglingRefs(selTree: SelTree, globalFunctions: ReadonlyArray<Func
 
     const newNewNode = transformChildren(newNode, transform, newEnv);
 
-    if (newNewNode !== node) {
-      oldNodeToNew.set(node, newNewNode);
-    }
-
     return newNewNode;
   };
 
-  const newMain = transform(selTree.mainDef, globalEnv);
+  const newMain = transform(mainDef, globalEnv);
   if (newMain.kind !== NodeKind.FunctionDefinition) {
     throw new Error();
   }
 
-  const newSelectedNode = oldNodeToNew.get(selTree.selectedNode) || selTree.selectedNode;
-  // TODO: verify that newSelectedNode is in newMain
-
   // console.log('fixupDanglingRefs', 'tree changed?', newMain !== selTree.mainDefinition, 'selnode changed?', newSelectedNode !== selTree.selectedNode);
 
-  return {
-    mainDef: newMain,
-    selectedNode: newSelectedNode,
-  };
+  return newMain;
 }
 
 // NOTE: May throw a compiler exception
-function compileSelTree(selTree: SelTree, globalFunctions: ReadonlyArray<FunctionDefinitionNode>): CompiledDefinition {
+function compileMainDef(mainDef: FunctionDefinitionNode, globalFunctions: ReadonlyArray<FunctionDefinitionNode>): CompiledDefinition {
   // NOTE: We could avoid repeating this work, but this is sort of temporary anyways
   const globalFunctionEnvironment: Environment<UID, FunctionDefinitionNode> = new Environment();
   for (const gf of globalFunctions) {
     globalFunctionEnvironment.set(gf.nid, gf);
   }
 
-  return compileGlobalTreeDefinition(selTree.mainDef, globalFunctionEnvironment);
+  return compileGlobalTreeDefinition(mainDef, globalFunctionEnvironment);
 }
 
 function updateExecution(state: State, newCompiledDefinition: CompiledDefinition): State {
@@ -544,14 +397,13 @@ function updateExecution(state: State, newCompiledDefinition: CompiledDefinition
   }
 }
 
-// If the given seltree compiles, make it the new stable one and update execution. Otherwise keep current stable one.
-// Also, end any edit.
-function attemptCommitEdit(state: State, newSelTree: SelTree): State {
-  const fixedSelTree = fixupDanglingRefs(newSelTree, state.globalFunctions);
+function updateTree(state: State, newRoot: FunctionDefinitionNode): State {
+  // TODO: put this back?
+  // const fixedSelTree = fixupDanglingRefs(newSelTree, state.globalFunctions);
 
   let compiledDefinition: CompiledDefinition | undefined;
   try {
-    compiledDefinition = compileSelTree(fixedSelTree, state.globalFunctions);
+    compiledDefinition = compileMainDef(newRoot, globalNativeFunctions);
   } catch (e) {
     if (e instanceof CompilationError) {
       compiledDefinition = undefined;
@@ -563,17 +415,18 @@ function attemptCommitEdit(state: State, newSelTree: SelTree): State {
   if (compiledDefinition) {
     return updateExecution({
       ...state,
-      stableSelTree: fixedSelTree,
-      editing: null,
+      dispMainDef: newRoot,
+      liveMainDef: newRoot,
     }, compiledDefinition);
   } else {
     return {
       ...state,
-      editing: null,
+      dispMainDef: newRoot,
     };
   }
 }
 
+/*
 function nodeIsHole(node: Node): boolean {
   return (node.kind === NodeKind.UndefinedLiteral) ||
    ((node.kind === NodeKind.Text) && !node.text);
@@ -655,6 +508,7 @@ function attemptChainEdit(state: State, tryInsert: boolean): State {
     }
   }
 }
+*/
 
 export function reducer(state: State, action: Action): State {
   console.log('action', action);
@@ -679,117 +533,19 @@ export function reducer(state: State, action: Action): State {
         name: action.newName!,
       },
     };
-  } else if (action.type === 'BEGIN_EDIT') {
-    if (!state.editing) {
-      return attemptBeginEditSelected(state);
-    }
-  } else if (action.type === 'INSERT_BEFORE') {
-    if (!state.editing) {
-      return attemptInsertBeforeAfter(state, true);
-    }
-  } else if (action.type === 'INSERT_AFTER') {
-    if (!state.editing) {
-      return attemptInsertBeforeAfter(state, false);
-    }
-  } else if (action.type === 'TOGGLE_EDIT') {
-    if (state.editing) {
-      const insertAgain = state.editing.isInsert;
-      const stateAfterCommit = attemptCommitEdit({
-        ...pushUndo(state),
-      }, state.editing.curSelTree);
-
-      return attemptChainEdit(stateAfterCommit, insertAgain);
-    } else {
-      return attemptBeginEditSelected(state);
-    }
-  } else if (action.type === 'INFIX_EDIT') {
-    if (state.editing) {
-      return {
-        ...state,
-        editing: {
-          sessionId: genuid(),
-          initSelTree: state.editing.curSelTree,
-          curSelTree: state.editing.curSelTree,
-          compileError: undefined, // we assume?
-          isInsert: false,
-          infixMode: true,
-        },
-      };
-    } else {
-      return {
-        ...state,
-        editing: {
-          sessionId: genuid(),
-          initSelTree: state.stableSelTree,
-          curSelTree: state.stableSelTree,
-          compileError: undefined, // we assume?
-          isInsert: false,
-          infixMode: true,
-        },
-      };
-    }
-  } else if (action.type === 'ABORT_EDIT') {
-    if (state.editing) {
-      return {
-        ...state,
-        editing: null,
-      };
-    }
-  } else if (action.type === 'UPDATE_EDITING_NODE') {
-    if (!state.editing) {
-      throw new Error();
-    }
-    const parentLookup = computeParentLookup(state.editing.initSelTree.mainDef); // TODO: memoize
-    const newMain = replaceNode(state.editing.initSelTree.selectedNode, action.newNode!, parentLookup);
-    if (newMain.kind !== NodeKind.FunctionDefinition) {
+  } else if (action.type === 'UPDATE_TREE') {
+    const newRoot: Node = action.newNode!;
+    if (newRoot.kind !== NodeKind.FunctionDefinition) {
       throw new Error();
     }
 
-    const fixedSelTree = fixupDanglingRefs({mainDef: newMain, selectedNode: action.newNode!}, state.globalFunctions);
-
-    // Check if tentative tree compiles
-    let compileError: string | undefined;
-    try {
-      compileSelTree(fixedSelTree, state.globalFunctions);
-      compileError = undefined;
-    } catch (e) {
-      if (e instanceof CompilationError) {
-        compileError = 'compile error: ' + e.message;
-      } else {
-        throw e;
-      }
-    }
-
-    return {
-      ...state,
-      editing: {
-        ...state.editing,
-        curSelTree: fixedSelTree,
-        compileError,
-      },
-    };
-  } else if (action.type === 'UPDATE_NODE') {
-    if (state.editing) {
-      throw new Error();
-    }
-    const parentLookup = computeParentLookup(state.stableSelTree.mainDef); // TODO: memoize
-    const newMain = replaceNode(action.node!, action.newNode!, parentLookup);
-    if (newMain.kind !== NodeKind.FunctionDefinition) {
-      throw new Error();
-    }
-
-    const fixedSelTree = fixupDanglingRefs({mainDef: newMain, selectedNode: action.newNode!}, state.globalFunctions);
-
-    const compiledDefinition = compileSelTree(fixedSelTree, state.globalFunctions);
-
-    return updateExecution({
-      ...state,
-      stableSelTree: fixedSelTree,
-    }, compiledDefinition);
+    return updateTree({
+      ...pushUndo(state),
+    }, newRoot);
   } else if (action.type === 'UNDO') {
     if (state.undoStack.length > 0) {
       const newSelTree = state.undoStack[state.undoStack.length-1];
-      return attemptCommitEdit({
+      return updateTree({
         ...state,
         undoStack: state.undoStack.slice(0, state.undoStack.length-1),
       }, newSelTree);
@@ -797,55 +553,6 @@ export function reducer(state: State, action: Action): State {
       console.log('nothing to undo');
       return state;
     }
-  } else if (action.type === 'SET_SELECTED_NODE') {
-    const newSelectedNode = action.newNode!;
-    if (newSelectedNode !== state.stableSelTree.selectedNode) {
-      return {
-        ...state,
-        stableSelTree: {
-          ...state.stableSelTree,
-          selectedNode: newSelectedNode,
-        },
-        editing: null, // abort any edits
-      };
-    } else {
-      return state;
-    }
-  }
-
-  const parentLookup = computeParentLookup(state.stableSelTree.mainDef); // TODO: memoize
-  const handleEditActionResult = handleInstantEditAction(action, state.stableSelTree, parentLookup);
-  if (handleEditActionResult) {
-    const newSelTree = handleEditActionResult;
-
-    if (newSelTree !== state.stableSelTree) {
-      return attemptCommitEdit({
-        ...pushUndo(state),
-      }, newSelTree);
-    } else {
-      return state;
-    }
-  } else if (action.type === 'CUT') {
-    /*
-    const selectedNode = nodeFromPath(newProgram, newSelectionPath);
-    if (isExpressionNode(selectedNode)) {
-      newClipboardStack = newClipboardStack.concat([{
-        mode: 'cut',
-        streamId: selectedNode.streamId,
-      }]);
-      [newProgram, newSelectionPath] = cutExpressionNode(newProgram, newSelectionPath);
-    }
-    */
-  } else if (action.type === 'PASTE') {
-    /*
-    const selectedNode = nodeFromPath(newProgram, newSelectionPath);
-    if ((newClipboardStack.length > 0) && isExpressionNode(selectedNode)) {
-      const topFrame = newClipboardStack[newClipboardStack.length-1];
-      newClipboardStack = newClipboardStack.slice(0, newClipboardStack.length-1);
-      const topNode = state.derivedLookups.streamIdToNode!.get(topFrame.streamId)!;
-      [newProgram, newSelectionPath] = pasteExpressionNode(topNode, topFrame.streamId, newProgram, newSelectionPath);
-    }
-    */
   }
 
   console.log('action not handled');
@@ -862,17 +569,13 @@ globalNativeFunctions.forEach(def => {
 nativeFunctionEnvironment.set('$copy', (x: any) => x);
 
 function initialStateFromDefinition(mainDef: FunctionDefinitionNode, programInfo: ProgramInfo): State {
-  const initSelTree: SelTree = {mainDef, selectedNode: mainDef};
-
-  const compiledDefinition = compileSelTree(initSelTree, globalNativeFunctions);
+  const compiledDefinition = compileMainDef(mainDef, globalNativeFunctions);
 
   return updateExecution({
     programInfo,
-    stableSelTree: initSelTree,
-    editing: null,
-    globalFunctions: globalNativeFunctions,
+    liveMainDef: mainDef,
+    dispMainDef: mainDef,
     undoStack: [],
-    clipboardStack: [],
     execution: null,
   }, compiledDefinition);
 }
@@ -901,71 +604,14 @@ const INITIAL_MAIN: FunctionDefinitionNode = {
         nid: genuid(),
         val: 123,
       },
+      {
+        kind: NodeKind.NumberLiteral,
+        nid: genuid(),
+        val: 456,
+      },
     ],
     out: null,
   },
-    /*
-  bodyExprs: [
-    {
-      kind: NodeKind.Application,
-      aid: generateApplicationId(),
-      fid: 'bind',
-      args: new Map([
-        [generateStreamId(), {
-          kind: NodeKind.ApplicationOut,
-          sid: mdId,
-          name: {kind: NodeKind.Name, text: 'md'},
-        }],
-        [generateStreamId(), {
-          kind: NodeKind.Application,
-          aid: generateApplicationId(),
-          fid: 'mouseDown',
-          args: new Map(),
-          rid: generateStreamId(),
-        }],
-      ]),
-      rid: undefined,
-    },
-    {
-      kind: NodeKind.Application,
-      aid: generateApplicationId(),
-      fid: 'showString',
-      args: new Map([
-        [generateStreamId(), {
-          kind: NodeKind.Application,
-          aid: generateApplicationId(),
-          fid: 'ifte',
-          args: new Map([
-            [generateStreamId(), {
-              kind: NodeKind.StreamReference,
-              ref: mdId,
-            }],
-            [generateStreamId(), {
-              kind: NodeKind.Application,
-              aid: generateApplicationId(),
-              fid: 'cos',
-              args: new Map([
-                [generateStreamId(), {
-                  kind: NodeKind.NumberLiteral,
-                  sid: generateStreamId(),
-                  val: 10,
-                }],
-              ]),
-              rid: generateStreamId(),
-            }],
-            [generateStreamId(), {
-              kind: NodeKind.NumberLiteral,
-              sid: generateStreamId(),
-              val: 20,
-            }],
-          ]),
-          rid: generateStreamId(),
-        }],
-      ]),
-      rid: undefined,
-    },
-  ],
-  */
 };
 
 export const initialState: State = initialStateFromDefinition(INITIAL_MAIN, {id: genuid(), name: 'my program'});
