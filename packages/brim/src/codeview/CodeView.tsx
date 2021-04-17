@@ -1,4 +1,4 @@
-import { annoFunctionDefinitionView, annoSelectable, TreeViewContext } from '../codeview/TreeView';
+import { layoutFunctionDefinitionNode, TreeViewContext } from '../codeview/TreeView';
 import { getStaticEnvMap, getReferentNode, initStaticEnv, deleteNode, replaceNode } from '../editor/EditorReducer';
 import Chooser from '../codeview/Chooser';
 import { useLayoutEffect, useReducer, useRef, useState } from 'react';
@@ -7,6 +7,7 @@ import globalNativeFunctions from '../builtin/globalNatives';
 import './CodeView.css';
 import { getNodeIdMap } from '../compiler/TreeUtil';
 import genuid from '../util/uid';
+import { computeSeltreeLookups, SeltreeNode } from './Seltree';
 
 const keyActions: ReadonlyArray<[string, ReadonlyArray<string>, boolean, string]> = [
   ['Enter', [], true, 'MODIFY'],
@@ -46,33 +47,6 @@ function setsEq<T>(as: ReadonlySet<T>, bs: ReadonlySet<T>): boolean {
   return true;
 }
 
-function makeUniqueMap<K, V>(pairs: ReadonlyArray<[K, V]>) : Map<K, V> {
-  const result: Map<K, V> = new Map();
-
-  for (const [k, v] of pairs) {
-    if (result.has(k)) {
-      console.log('collision', k, result.get(k), v);
-      throw new Error();
-    }
-    result.set(k, v);
-  }
-
-  return result;
-}
-
-function makeUniqueSet<T>(arr: ReadonlyArray<T>) : Set<T> {
-  const result: Set<T> = new Set();
-
-  for (const v of arr) {
-    if (result.has(v)) {
-      throw new Error();
-    }
-    result.add(v);
-  }
-
-  return result;
-}
-
 interface ChooserState {
   key: UID; // this lets us "reset" chooser if we jump directly to editing a different thing
   mode: 'before' | 'after' | 'new' | 'modify';
@@ -82,6 +56,8 @@ interface CodeViewState {
   readonly selectionId: UID;
   readonly choosing: ChooserState | null;
 }
+
+
 
 const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUpdateRoot: (newRoot: Node) => void}> = ({ autoFocus, root, onUpdateRoot }) => {
   const [state, setState] = useState<CodeViewState>({
@@ -99,13 +75,160 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
     }));
   };
 
-  const moveSelectionPerMap = (moveMap: Map<UID, UID>): void => {
-    const curSelId = state.selectionId;
-    const newSelId = moveMap.get(curSelId);
-    if (newSelId) {
-      setSelectionId(newSelId);
+  const moveSelection = (moveFunc: (selId: SeltreeNode) => SeltreeNode | undefined): void => {
+    setState(s => {
+      const seltreeNode = rootSeltreeLookups.selIdToNode.get(s.selectionId);
+      if (!seltreeNode) {
+        throw new Error();
+      }
+
+      const newSeltreeNode = moveFunc(seltreeNode);
+
+      if (newSeltreeNode === undefined) {
+        return s;
+      } else {
+        if (newSeltreeNode.selId === undefined) {
+          throw new Error();
+        }
+        return {
+          ...s,
+          selectionId: newSeltreeNode.selId,
+          choosing: null,
+        };
+      }
+    });
+  };
+
+  const selLastDesc = (node: SeltreeNode): SeltreeNode => {
+    if (node.children.length) {
+      return selLastDesc(node.children[node.children.length-1]);
+    }
+
+    return node;
+  };
+
+  const selUpInto = (node: SeltreeNode): SeltreeNode => {
+    if (node.selId) {
+      return node;
+    } else {
+      if (node.dir === 'block') {
+        return selUpInto(node.children[node.children.length-1]);
+      } else {
+        return selUpInto(node.children[0]);
+      }
     }
   };
+
+  const selFirstSelectableDesc = (node: SeltreeNode): SeltreeNode => {
+    if (node.selId) {
+      return node;
+    } else {
+      return selFirstSelectableDesc(node.children[0]);
+    }
+  };
+
+  const selUpFrom = (node: SeltreeNode): SeltreeNode | undefined => {
+    const pidx = rootSeltreeLookups.parentAndIdx.get(node);
+
+    if (!pidx) {
+      return undefined;
+    }
+
+    const [parent, idx] = pidx;
+
+    if (parent.dir === 'block') {
+      if (idx === 0) {
+        if (parent.selId) {
+          return parent;
+        } else {
+          return selUpFrom(parent);
+        }
+      } else {
+        const prevSib = parent.children[idx-1];
+
+        return selUpInto(prevSib);
+      }
+    } else {
+      return selUpFrom(parent);
+    }
+  }
+
+  const selDownFrom = (node: SeltreeNode): SeltreeNode | undefined => {
+    const pidx = rootSeltreeLookups.parentAndIdx.get(node);
+
+    if (!pidx) {
+      return undefined;
+    }
+
+    const [parent, idx] = pidx;
+
+    if (parent.dir === 'block') {
+      if (idx === (parent.children.length-1)) {
+        return selDownFrom(parent);
+      } else {
+        const nextSib = parent.children[idx+1];
+
+        return selFirstSelectableDesc(nextSib);
+      }
+    } else {
+      return selDownFrom(parent);
+    }
+  }
+
+  const selBackFrom = (node: SeltreeNode): SeltreeNode | undefined => {
+    const pidx = rootSeltreeLookups.parentAndIdx.get(node);
+
+    if (!pidx) {
+      return undefined;
+    }
+
+    const [parent, idx] = pidx;
+
+    if (parent.dir === 'block') {
+      if (parent.selId !== undefined) {
+        return parent;
+      } else {
+        return selBackFrom(parent);
+      }
+    } else {
+      if (idx === 0) {
+        if (parent.selId !== undefined) {
+          return parent;
+        } else {
+          return selBackFrom(parent);
+        }
+      } else {
+        const prevSib = parent.children[idx-1];
+        return selLastDesc(prevSib);
+      }
+    }
+  }
+
+  const selNextInlineAfter = (node: SeltreeNode): SeltreeNode | undefined => {
+    const pidx = rootSeltreeLookups.parentAndIdx.get(node);
+
+    if (!pidx) {
+      return undefined;
+    }
+
+    const [parent, idx] = pidx;
+    if (parent.dir === 'inline') {
+      if (idx === (parent.children.length-1)) {
+        return selNextInlineAfter(parent);
+      } else {
+        const nextSib = parent.children[idx+1];
+        return selFirstSelectableDesc(nextSib);
+      }
+    }
+  };
+
+  const selFwdFrom = (node: SeltreeNode): SeltreeNode | undefined => {
+    if (node.children.length) {
+      return selFirstSelectableDesc(node.children[0]);
+    } else {
+      return selNextInlineAfter(node);
+    }
+  }
 
   const deleteSeletedNode = (): void => {
     // TODO: check if selectionId is for a "placeholder"
@@ -157,19 +280,19 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
       if ((e.code === key) && setsEq(eventMods, new Set(modsArr)) && (!intoInput || handleInInput)) {
         switch (action) {
           case 'MOVE_UP':
-            moveSelectionPerMap(moveUp);
+            moveSelection(selUpFrom);
             break;
 
           case 'MOVE_DOWN':
-            moveSelectionPerMap(moveDown);
+            moveSelection(selDownFrom);
             break;
 
           case 'MOVE_LEFT':
-            moveSelectionPerMap(moveLeft);
+            moveSelection(selBackFrom);
             break;
 
           case 'MOVE_RIGHT':
-            moveSelectionPerMap(moveRight);
+            moveSelection(selFwdFrom);
             break;
 
           case 'DELETE':
@@ -290,15 +413,12 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
     }
   });
 
-  const mainDefAnnoReactNode = annoSelectable(annoFunctionDefinitionView(root, treeViewCtx), root.nid, treeViewCtx);
-  const moveUp = makeUniqueMap(mainDefAnnoReactNode.anno.moveUp);
-  const moveDown = makeUniqueMap(mainDefAnnoReactNode.anno.moveDown);
-  const moveLeft = makeUniqueMap(mainDefAnnoReactNode.anno.moveLeft);
-  const moveRight = makeUniqueMap(mainDefAnnoReactNode.anno.moveRight);
+  const {reactNode: rootReactNode, seltree: rootSeltree} = layoutFunctionDefinitionNode(root, treeViewCtx);
+  const rootSeltreeLookups = computeSeltreeLookups(rootSeltree);
 
   return (
     <div className="CodeView" onKeyDown={onKeyDown} ref={workspaceElem} tabIndex={0}>
-      {mainDefAnnoReactNode.reactNode}
+      {rootReactNode}
       {state.choosing && (() => {
         let context: 'tdef-body' | 'subexp' | 'text';
 

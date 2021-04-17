@@ -11,6 +11,16 @@
 .CodeView-selection {
   position: absolute;
   box-sizing: border-box;
-  border: 1px solid green;
   pointer-events: none;
+  border: 1px solid green;
+  transition-property: top, left, width, height;
+  transition-duration: 0.05s;
+  transition-timing-function: linear;
+}
+
+.CodeView:focus .CodeView-selection {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px solid green;
+  box-shadow: 0 0 10px -1px rgb(0 0 0 / 25%);
 }

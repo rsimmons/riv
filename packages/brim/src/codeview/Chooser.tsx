@@ -3,7 +3,7 @@ import { Node } from '../compiler/Tree';
 import { FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, StreamExpressionNode, ApplicationArgNode, FunctionInterfaceNode, UID, TextNode, StreamBindingNode } from '../compiler/Tree';
 import Fuse from 'fuse.js';
 import { computeParentLookup, getStaticEnvMap, StaticEnvironment } from '../editor/EditorReducer';
-import { annoStreamExpressionView, TreeViewContext, annoFunctionDefinitionView, annoStreamBindingView } from './TreeView';
+import { layoutStreamExpressionNode, TreeViewContext, layoutFunctionDefinitionNode, layoutStreamBindingNode } from './TreeView';
 import { functionInterfaceAsPlainText, defaultTreeDefFromFunctionInterface } from '../compiler/FunctionInterface';
 import genuid from '../util/uid';
 import './Chooser.css';
@@ -14,13 +14,13 @@ interface Choice {
 
 const ChoiceView: React.FC<{choice: Choice, treeViewCtx: TreeViewContext}> = ({ choice, treeViewCtx }) => {
   if (isStreamExpressionNode(choice.node)) {
-    const {reactNode} = annoStreamExpressionView(choice.node, treeViewCtx);
+    const {reactNode} = layoutStreamExpressionNode(choice.node, treeViewCtx);
     return <>{reactNode}</>;
   } else if (choice.node.kind === NodeKind.StreamBinding) {
-    const {reactNode} = annoStreamBindingView(choice.node, treeViewCtx);
+    const {reactNode} = layoutStreamBindingNode(choice.node, treeViewCtx);
     return <>{reactNode}</>;
   } else if (choice.node.kind === NodeKind.FunctionDefinition) {
-    const {reactNode} = annoFunctionDefinitionView(choice.node, treeViewCtx);
+    const {reactNode} = layoutFunctionDefinitionNode(choice.node, treeViewCtx);
     return <>{reactNode}</>;
   } else {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
