@@ -13,7 +13,7 @@
   box-sizing: border-box;
   pointer-events: none;
   border: 1px solid green;
-  transition-property: top, left, width, height;
+  transition-property: top, left, width, height, border-radius;
   transition-duration: 0.05s;
   transition-timing-function: linear;
 }
@@ -23,4 +23,8 @@
   box-sizing: border-box;
   border: 2px solid green;
   box-shadow: 0 0 10px -1px rgb(0 0 0 / 25%);
+}
+
+.CodeView-selection-common {
+  border-radius: 0.5em;
 }

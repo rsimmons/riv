@@ -3,13 +3,23 @@
   vertical-align: text-bottom;
 }
 
-.TreeView-simple-leaf {
+.TreeView-common-leaf {
   padding: 0.3em 0.5em;
 }
 
 .TreeView-selectable {
   display: inline-block;
+}
+
+.TreeView-selectable-common {
+  border-radius: 0.5em;
   border: 1px solid #ccc;
+  margin: -1px;
+}
+
+.TreeView-selectable-funcdef {
+  border: 2px solid #ccc;
+  margin: -2px;
 }
 
 /* This is hacky to refer to class from another component */
@@ -25,7 +35,7 @@
 */
 
 .TreeView-hovered {
-  border: 1px solid #777;
+  border-color: #777;
 }
 
 .TreeView-layout-block {
@@ -34,7 +44,7 @@
 }
 
 .TreeView-layout-block-item:not(:last-child) {
-  margin-bottom: 0.5em;
+  margin-bottom: 0.75em;
 }
 
 .TreeView-layout-inline {
@@ -43,9 +53,13 @@
 }
 
 .TreeView-layout-inline-item:not(:last-child) {
-  margin-right: 0.5em;
+  margin-right: 0.75em;
 }
 
 .TreeView-indent {
-  padding-left: 1em;
+  padding-left: 1.5em;
+}
+
+.TreeView-func-padding {
+  padding: 0.75em;
 }

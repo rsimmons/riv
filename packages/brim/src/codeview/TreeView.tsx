@@ -59,10 +59,12 @@ function combineSizes(sizes: ReadonlyArray<Size>): Size {
 
 function layoutLabeledItem(label: string, item: LayoutUnit): LayoutUnit {
   // TODO: Do we want to line-break if total size with label is too long?
+  const labelNode = <div className="TreeView-common-leaf">{label}</div>;
+
   if (item.size === undefined) {
     return {
       reactNode: layoutReactNodes([
-        label,
+        labelNode,
         indentReactNode(item.reactNode),
       ], 'block'),
       size: undefined,
@@ -74,7 +76,7 @@ function layoutLabeledItem(label: string, item: LayoutUnit): LayoutUnit {
     };
   } else {
     return {
-      reactNode: layoutReactNodes([label, item.reactNode], 'inline'),
+      reactNode: layoutReactNodes([labelNode, item.reactNode], 'inline'),
       size: item.size, // TODO: include label?
       seltree: {
         dir: 'inline',
@@ -85,7 +87,7 @@ function layoutLabeledItem(label: string, item: LayoutUnit): LayoutUnit {
   }
 }
 
-const SelectableWrapper: React.FC<{selId: UID, ctx: TreeViewContext}> = ({selId: nid, ctx, children}) => {
+const SelectableWrapper: React.FC<{selId: UID, style: 'common' | 'funcdef', ctx: TreeViewContext}> = ({selId: nid, style, ctx, children}) => {
   const [isHovered, setIsHovered] = useState(false);
 
   const handleClick = (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
@@ -104,7 +106,7 @@ const SelectableWrapper: React.FC<{selId: UID, ctx: TreeViewContext}> = ({selId:
     setIsHovered(false);
   };
 
-  const classes: Array<string> = ['TreeView-selectable'];
+  const classes: Array<string> = ['TreeView-selectable', 'TreeView-selectable-' + style];
 
   if (isHovered) {
     classes.push('TreeView-hovered');
@@ -144,8 +146,8 @@ function layoutArray(items: ReadonlyArray<LayoutUnit>, dyn: boolean): LayoutUnit
 function layoutSimpleNode(treeNode: Node, content: string, bgColor: string, ctx: TreeViewContext, icon?: [string, string]): LayoutUnit {
   return {
     reactNode: (
-      <SelectableWrapper selId={treeNode.nid} ctx={ctx}>
-        <div className='TreeView-simple-leaf' style={{color: bgColor}}>
+      <SelectableWrapper selId={treeNode.nid} style="common" ctx={ctx}>
+        <div className="TreeView-common-leaf" style={{color: bgColor}}>
           {icon && <img className="TreeView-literal-icon" src={icon[0]} alt={icon[1]} />}
           {content}
         </div>
@@ -243,10 +245,10 @@ function layoutApplicationNode(node: ApplicationNode, ctx: TreeViewContext): Lay
 
   const loArray = layoutArray(loArgs, false);
 
-  const combinedReactNode = layoutReactNodes(([] as Array<React.ReactNode>).concat([funcIface.name.text], loArgs.map(item => item.reactNode)), loArray.size === undefined ? 'block' : 'inline');
+  const combinedReactNode = layoutReactNodes(([] as Array<React.ReactNode>).concat([<div className="TreeView-common-leaf">{funcIface.name.text}</div>], loArgs.map(item => item.reactNode)), loArray.size === undefined ? 'block' : 'inline');
 
   return {
-    reactNode: <SelectableWrapper selId={node.nid} ctx={ctx}>{combinedReactNode}</SelectableWrapper>,
+    reactNode: <SelectableWrapper selId={node.nid} style="common" ctx={ctx}>{combinedReactNode}</SelectableWrapper>,
     size: loArray.size,
     seltree: {
       selId: node.nid,
@@ -332,7 +334,7 @@ function layoutParamNode(node: ParamNode, ctx: TreeViewContext): LayoutUnit {
   }
 
   return {
-    reactNode: <SelectableWrapper selId={node.nid} ctx={ctx}>{loParamChild.reactNode}</SelectableWrapper>,
+    reactNode: <SelectableWrapper selId={node.nid} style="common" ctx={ctx}>{loParamChild.reactNode}</SelectableWrapper>,
     size: loParamChild.size,
     seltree: {
       selId: node.nid,
@@ -351,7 +353,12 @@ function layoutFunctionInterfaceNode(node: FunctionInterfaceNode, ctx: TreeViewC
 
   // TODO: handle node.output when we can. maybe use →
 
-  return layoutArray([loName, loParamsArray], false);
+  const loIfaceInner = layoutArray([loName, loParamsArray], false);
+
+  return {
+    ...loIfaceInner,
+    reactNode: <div className="TreeView-func-padding">{loIfaceInner.reactNode}</div>,
+  }
 }
 
 export function layoutStreamBindingNode(node: StreamBindingNode, ctx: TreeViewContext): LayoutUnit {
@@ -366,7 +373,7 @@ export function layoutStreamBindingNode(node: StreamBindingNode, ctx: TreeViewCo
   if (size === undefined) {
     // block
     reactNode = (
-      <SelectableWrapper selId={node.nid} ctx={ctx}>
+      <SelectableWrapper selId={node.nid} style="common" ctx={ctx}>
         <div>
           <div>{loBindingExpr.reactNode} =</div>
           <div>{loStreamExpr.reactNode}</div>
@@ -382,7 +389,7 @@ export function layoutStreamBindingNode(node: StreamBindingNode, ctx: TreeViewCo
   } else {
     // inline
     reactNode = (
-      <SelectableWrapper selId={node.nid} ctx={ctx}>
+      <SelectableWrapper selId={node.nid} style="common" ctx={ctx}>
         <span>{loBindingExpr.reactNode} = {loStreamExpr.reactNode}</span>
       </SelectableWrapper>
     );
@@ -426,7 +433,12 @@ function layoutTreeImplNode(node: TreeImplNode, ctx: TreeViewContext): LayoutUni
 
     items.push(layoutLabeledItem('←', annoSexp));
   }
-  return layoutArray(items, true);
+  const loImplInner = layoutArray(items, true);
+
+  return {
+    ...loImplInner,
+    reactNode: <div className="TreeView-func-padding">{loImplInner.reactNode}</div>,
+  }
 }
 
 function layoutFunctionImplNode(node: FunctionImplNode, ctx: TreeViewContext): LayoutUnit {
@@ -450,7 +462,7 @@ export function layoutFunctionDefinitionNode(node: FunctionDefinitionNode, ctx: 
   const loImpl = layoutFunctionImplNode(node.impl, ctx);
 
   return {
-    reactNode: <SelectableWrapper selId={node.nid} ctx={ctx}>{layoutReactNodes([loIface.reactNode, loImpl.reactNode], 'block')}</SelectableWrapper>,
+    reactNode: <SelectableWrapper selId={node.nid} style="funcdef" ctx={ctx}>{layoutReactNodes([loIface.reactNode, loImpl.reactNode], 'block')}</SelectableWrapper>,
     size: undefined,
     seltree: {
       selId: node.nid,

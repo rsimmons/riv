@@ -463,6 +463,14 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
     if (!selHighlightElem.current) {
       throw new Error();
     }
+
+    const sheClasses = ['CodeView-selection'];
+    // TODO: improve this
+    if (selectedElem.classList.contains('TreeView-selectable-common')) {
+      sheClasses.push('CodeView-selection-common');
+    }
+    selHighlightElem.current.className = sheClasses.join(' ');
+
     const sheStyle = selHighlightElem.current.style;
     sheStyle.top = selectedElemRect.top + 'px';
     sheStyle.left = selectedElemRect.left + 'px';
