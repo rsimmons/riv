@@ -1,11 +1,11 @@
 import { layoutFunctionDefinitionNode, TreeViewContext } from '../codeview/TreeView';
-import { getStaticEnvMap, getReferentNode, initStaticEnv, deleteNode, replaceNode } from '../editor/EditorReducer';
+import { getStaticEnvMap, getReferentNode, initStaticEnv } from '../editor/EditorReducer';
 import Chooser from '../codeview/Chooser';
 import { useLayoutEffect, useReducer, useRef, useState } from 'react';
 import { FunctionDefinitionNode, Node, NodeKind, UID } from '../compiler/Tree';
 import globalNativeFunctions from '../builtin/globalNatives';
 import './CodeView.css';
-import { getNodeIdMap } from '../compiler/TreeUtil';
+import { deleteNode, getNodeIdMap, insertBeforeOrAfter, replaceNode } from '../compiler/TreeUtil';
 import genuid from '../util/uid';
 import { computeSeltreeLookups, SeltreeNode } from './Seltree';
 
@@ -13,8 +13,6 @@ const keyActions: ReadonlyArray<[string, ReadonlyArray<string>, boolean, string]
   ['Enter', [], true, 'MODIFY'],
   ['Escape', [], true, 'ABORT_CHOOSER'],
   ['Backspace', [], false, 'DELETE'],
-  ['ArrowUp', ['Shift'], false, 'INSERT_BEFORE'],
-  ['ArrowDown', ['Shift'], false, 'INSERT_AFTER'],
   ['Enter', ['Shift'], true, 'INFIX_EDIT'],
   ['Tab', [], true, 'EDIT_NEXT_UNDEFINED'],
   ['KeyZ', ['Meta'], false, 'UNDO'],
@@ -24,6 +22,10 @@ const keyActions: ReadonlyArray<[string, ReadonlyArray<string>, boolean, string]
   ['ArrowDown', [], false, 'MOVE_DOWN'],
   ['ArrowLeft', [], false, 'MOVE_LEFT'],
   ['ArrowRight', [], false, 'MOVE_RIGHT'],
+  ['ArrowUp', ['Shift'], false, 'INSERT_UP'],
+  ['ArrowDown', ['Shift'], false, 'INSERT_DOWN'],
+  ['ArrowLeft', ['Shift'], false, 'INSERT_LEFT'],
+  ['ArrowRight', ['Shift'], false, 'INSERT_RIGHT'],
 ];
 
 // These are "normal" character keys that we use as commands. We identify them because we don't want
@@ -47,17 +49,16 @@ function setsEq<T>(as: ReadonlySet<T>, bs: ReadonlySet<T>): boolean {
   return true;
 }
 
+type ChooserMode = 'before' | 'after' | 'new' | 'modify';
 interface ChooserState {
   key: UID; // this lets us "reset" chooser if we jump directly to editing a different thing
-  mode: 'before' | 'after' | 'new' | 'modify';
+  mode: ChooserMode;
 }
 
 interface CodeViewState {
   readonly selectionId: UID;
   readonly choosing: ChooserState | null;
 }
-
-
 
 const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUpdateRoot: (newRoot: Node) => void}> = ({ autoFocus, root, onUpdateRoot }) => {
   const [state, setState] = useState<CodeViewState>({
@@ -261,6 +262,51 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
     }));
   };
 
+  const insertInDir = (dir: 'up' | 'down' | 'back' | 'fwd'): void => {
+    setState(s => {
+      const seltreeNode = rootSeltreeLookups.selIdToNode.get(s.selectionId);
+      if (!seltreeNode) {
+        throw new Error();
+      }
+
+      const pidx = rootSeltreeLookups.parentAndIdx.get(seltreeNode);
+      if (!pidx) {
+        return s;
+      }
+      const [parent, ] = pidx;
+
+      if (!parent.flags.dyn) {
+        return s;
+      }
+
+      const chooseInMode = (mode: ChooserMode): CodeViewState => {
+        return {
+          ...s,
+          choosing: {
+            key: genuid(),
+            mode,
+          },
+        };
+      }
+
+      if (parent.dir === 'block') {
+        if (dir === 'up') {
+          return chooseInMode('before');
+        } else if (dir === 'down') {
+          return chooseInMode('after');
+        }
+      } else {
+        if (dir === 'back') {
+          return chooseInMode('before');
+        } else if (dir === 'fwd') {
+          return chooseInMode('after');
+        }
+      }
+
+      return s;
+    });
+  };
+
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     // find the set of key modifiers for this press
     const eventMods: Set<string> = new Set();
@@ -299,6 +345,22 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
             deleteSeletedNode();
             break;
 
+          case 'INSERT_UP':
+            insertInDir('up');
+            break;
+
+          case 'INSERT_DOWN':
+            insertInDir('down');
+            break;
+
+          case 'INSERT_LEFT':
+            insertInDir('back');
+            break;
+
+          case 'INSERT_RIGHT':
+            insertInDir('fwd');
+            break;
+
           case 'MODIFY':
             modifySelectedNode();
             break;
@@ -325,14 +387,24 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
         throw new Error();
       }
 
-      if ((state.choosing.mode === 'modify')) {
-        // TODO: check if selectionId is for a "placeholder"
-        const nodeToReplace = nodeIdToNode.get(state.selectionId);
-        if (!nodeToReplace) {
-          throw new Error();
-        }
+      // TODO: check if selectionId is for a "placeholder"
+      const selectedNode = nodeIdToNode.get(state.selectionId);
+      if (!selectedNode) {
+        throw new Error();
+      }
 
-        const newRoot = replaceNode(root, nodeToReplace, node);
+      if ((state.choosing.mode === 'modify')) {
+        const newRoot = replaceNode(root, selectedNode, node);
+
+        onUpdateRoot(newRoot);
+
+        return {
+          ...s,
+          selectionId: node.nid,
+          choosing: null,
+        };
+      } else if ((state.choosing.mode === 'before') || (state.choosing.mode === 'after')) {
+        const newRoot = insertBeforeOrAfter(root, selectedNode, node, (state.choosing.mode === 'before'));
 
         onUpdateRoot(newRoot);
 
@@ -440,7 +512,7 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
 
         return (
           <div className="CodeView-chooser-positioner" style={{position: 'absolute'}}>
-            <Chooser key={state.choosing.key} context={context} existingNode={existingNode} localEnv={localEnv} onCommitChoice={handleCommitChoice} />
+            <Chooser key={state.choosing.key} context={context} existingNode={(state.choosing.mode === 'modify') ? existingNode : null} localEnv={localEnv} onCommitChoice={handleCommitChoice} />
           </div>
         );
       })()}

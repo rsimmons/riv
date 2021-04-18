@@ -123,7 +123,7 @@ function layoutTextNode(node: TextNode, ctx: TreeViewContext): LayoutUnit {
 
 const MAX_ROW_WIDTH = 30;
 
-function layoutArray(items: ReadonlyArray<LayoutUnit>): LayoutUnit {
+function layoutArray(items: ReadonlyArray<LayoutUnit>, dyn: boolean): LayoutUnit {
   const size = combineSizes(items.map(item => item.size));
 
   const layoutDir = (size === undefined) ? 'block' : 'inline';
@@ -134,7 +134,9 @@ function layoutArray(items: ReadonlyArray<LayoutUnit>): LayoutUnit {
     seltree: {
       dir: layoutDir,
       children: items.map(item => item.seltree),
-      flags: {},
+      flags: {
+        dyn,
+      },
     },
   }
 }
@@ -239,7 +241,7 @@ function layoutApplicationNode(node: ApplicationNode, ctx: TreeViewContext): Lay
     }
   }
 
-  const loArray = layoutArray(loArgs);
+  const loArray = layoutArray(loArgs, false);
 
   const combinedReactNode = layoutReactNodes(([] as Array<React.ReactNode>).concat([funcIface.name.text], loArgs.map(item => item.reactNode)), loArray.size === undefined ? 'block' : 'inline');
 
@@ -342,17 +344,14 @@ function layoutParamNode(node: ParamNode, ctx: TreeViewContext): LayoutUnit {
 }
 
 function layoutFunctionInterfaceNode(node: FunctionInterfaceNode, ctx: TreeViewContext): LayoutUnit {
-  const items: Array<LayoutUnit> = [];
+  const loName = layoutTextNode(node.name, ctx);
 
-  items.push(layoutTextNode(node.name, ctx));
-
-  for (const n of node.params) {
-    items.push(layoutParamNode(n, ctx));
-  }
+  const loParams = node.params.map(n => layoutParamNode(n, ctx));
+  const loParamsArray = layoutArray(loParams, true);
 
   // TODO: handle node.output when we can. maybe use →
 
-  return layoutArray(items);
+  return layoutArray([loName, loParamsArray], false);
 }
 
 export function layoutStreamBindingNode(node: StreamBindingNode, ctx: TreeViewContext): LayoutUnit {
@@ -427,7 +426,7 @@ function layoutTreeImplNode(node: TreeImplNode, ctx: TreeViewContext): LayoutUni
 
     items.push(layoutLabeledItem('←', annoSexp));
   }
-  return layoutArray(items);
+  return layoutArray(items, true);
 }
 
 function layoutFunctionImplNode(node: FunctionImplNode, ctx: TreeViewContext): LayoutUnit {

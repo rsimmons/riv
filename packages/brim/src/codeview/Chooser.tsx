@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Node } from '../compiler/Tree';
 import { FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, StreamExpressionNode, ApplicationArgNode, FunctionInterfaceNode, UID, TextNode, StreamBindingNode } from '../compiler/Tree';
 import Fuse from 'fuse.js';
-import { computeParentLookup, getStaticEnvMap, StaticEnvironment } from '../editor/EditorReducer';
+import { getStaticEnvMap, StaticEnvironment } from '../editor/EditorReducer';
 import { layoutStreamExpressionNode, TreeViewContext, layoutFunctionDefinitionNode, layoutStreamBindingNode } from './TreeView';
 import { functionInterfaceAsPlainText, defaultTreeDefFromFunctionInterface } from '../compiler/FunctionInterface';
 import genuid from '../util/uid';

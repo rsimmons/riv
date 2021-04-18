@@ -1,9 +1,9 @@
 import { UID } from "../compiler/Tree";
 
 interface SeltreeFlags {
-  canDelete?: boolean;
-  canInsertBefore?: boolean;
-  canInsertAfter?: boolean;
+  // Is this node a "dynamic array", whose children can
+  // be deleted or have siblings inserted before/after?
+  dyn?: boolean;
 }
 
 export interface SeltreeNode {
