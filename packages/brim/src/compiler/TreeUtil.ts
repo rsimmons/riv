@@ -33,6 +33,12 @@ export function computeParentLookup(root: Node): Map<Node, Node> {
   return parent;
 }
 
+export function getNodeParent(node: Node, root: Node): Node | undefined {
+  // TODO: memoize this!
+  const parentLookup = computeParentLookup(root);
+  return parentLookup.get(node);
+}
+
 /**
  * Note that this returns the new root
  */

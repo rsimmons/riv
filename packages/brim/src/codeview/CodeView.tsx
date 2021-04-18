@@ -5,7 +5,7 @@ import { useLayoutEffect, useReducer, useRef, useState } from 'react';
 import { FunctionDefinitionNode, Node, NodeKind, UID } from '../compiler/Tree';
 import globalNativeFunctions from '../builtin/globalNatives';
 import './CodeView.css';
-import { deleteNode, getNodeIdMap, insertBeforeOrAfter, replaceNode } from '../compiler/TreeUtil';
+import { deleteNode, getNodeIdMap, getNodeParent, insertBeforeOrAfter, replaceNode } from '../compiler/TreeUtil';
 import genuid from '../util/uid';
 import { computeSeltreeLookups, SeltreeNode } from './Seltree';
 
@@ -427,16 +427,16 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
   const referentNameNode = undefined;
 
   // Move focus back to workspace after chooser has closed. This is hacky, but don't know better way to handle.
-  const workspaceElem = useRef<HTMLDivElement>(null);
+  const rootElem = useRef<HTMLDivElement>(null);
   const firstRender = useRef(true);
   const previouslyChoosing = useRef<boolean>(false);
-  const focusWasOnTree: boolean = !!workspaceElem.current && workspaceElem.current.contains(document.activeElement);
+  const focusWasOnTree: boolean = !!rootElem.current && rootElem.current.contains(document.activeElement);
   const focusWorkspaceNow: boolean = (autoFocus && firstRender.current) || (!state.choosing && (focusWasOnTree || previouslyChoosing.current));
   previouslyChoosing.current = !!state.choosing;
   firstRender.current = false;
   useLayoutEffect(() => {
-    if (focusWorkspaceNow && workspaceElem.current) {
-      workspaceElem.current.focus();
+    if (focusWorkspaceNow && rootElem.current) {
+      rootElem.current.focus();
     }
   });
 
@@ -489,30 +489,45 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
   const rootSeltreeLookups = computeSeltreeLookups(rootSeltree);
 
   return (
-    <div className="CodeView" onKeyDown={onKeyDown} ref={workspaceElem} tabIndex={0}>
+    <div className="CodeView" onKeyDown={onKeyDown} ref={rootElem} tabIndex={0}>
       {rootReactNode}
       {state.choosing && (() => {
         let context: 'tdef-body' | 'subexp' | 'text';
 
         // TODO: make this stuff correct
-        const existingNode = nodeIdToNode.get(state.selectionId);
-        if (!existingNode) {
+        const selectedNode = nodeIdToNode.get(state.selectionId);
+        if (!selectedNode) {
           throw new Error();
         }
-        if (existingNode.kind === NodeKind.Text) {
+        if (selectedNode.kind === NodeKind.Text) {
           context = 'text';
         } else {
-          context = 'subexp';
+          const parentOfSelectedNode = getNodeParent(selectedNode, root);
+          if (parentOfSelectedNode) {
+            if (parentOfSelectedNode.kind === NodeKind.TreeImpl) {
+              context = 'tdef-body';
+            } else if (parentOfSelectedNode.kind === NodeKind.Application) {
+              context = 'subexp';
+            } else {
+              // TODO: this is not right
+              context = 'subexp';
+            }
+          } else {
+            // TODO: this is not right
+            context = 'subexp';
+          }
         }
 
-        const localEnv = staticEnvMap.get(existingNode);
+        const existingNode = (state.choosing.mode === 'modify') ? selectedNode : null;
+
+        const localEnv = staticEnvMap.get(selectedNode);
         if (!localEnv) {
           throw new Error();
         }
 
         return (
           <div className="CodeView-chooser-positioner" style={{position: 'absolute'}}>
-            <Chooser key={state.choosing.key} context={context} existingNode={(state.choosing.mode === 'modify') ? existingNode : null} localEnv={localEnv} onCommitChoice={handleCommitChoice} />
+            <Chooser key={state.choosing.key} context={context} existingNode={existingNode} localEnv={localEnv} onCommitChoice={handleCommitChoice} />
           </div>
         );
       })()}
