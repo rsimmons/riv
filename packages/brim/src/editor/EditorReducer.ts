@@ -1,10 +1,10 @@
 import genuid from '../util/uid';
-import { UID, NodeKind, Node, FunctionDefinitionNode, isStreamExpressionNode, UndefinedLiteralNode, FunctionInterfaceNode, NameBindingNode, TreeImplBodyNode, TreeImplNode } from '../compiler/Tree';
+import { UID, NodeKind, Node, FunctionDefinitionNode, FunctionInterfaceNode, NameBindingNode, TreeImplNode } from '../compiler/Tree';
 import { compileGlobalTreeDefinition, CompilationError } from '../compiler/Compiler';
 import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
 import { createLiveFunction } from '../runner/LiveFunction';
 import Environment from '../util/Environment';
-import { iterChildren, visitChildren, replaceChild, transformChildren } from '../compiler/Traversal';
+import { visitChildren, transformChildren } from '../compiler/Traversal';
 import globalNativeFunctions from '../builtin/globalNatives';
 import { ExecutionContext } from 'riv-runtime';
 import { CompiledDefinition } from '../compiler/CompiledDefinition';

@@ -131,7 +131,7 @@ type AbbrevFunctionInterface = [/*name*/ string, /*params*/ ReadonlyArray<[/*kin
 
 const strtextNativeFunctions: ReadonlyArray<[string, AbbrevFunctionInterface, Function]> = [
   // simple
-  ['ifte', ['ifte', [['s', 'if', 'boolean'], ['s', 'then', 'A'], ['s', 'otherwise', 'A']], 'A', ''], (cond: any, _then: any, _else: any) => (cond ? _then : _else)],
+  ['ifte', ['ifte', [['s', 'if', 'boolean'], ['s', 'then', 'A'], ['s', 'else', 'A']], 'A', ''], (cond: any, _then: any, _else: any) => (cond ? _then : _else)],
   ['equals', ['equals', [['s', '', 'A'], ['s', '', 'A']], 'boolean', '$0 equals $1'], (a: any, b: any) => Object.is(a, b)],
 
 /*

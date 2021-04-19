@@ -1,7 +1,7 @@
 import { layoutFunctionDefinitionNode, TreeViewContext } from '../codeview/TreeView';
-import { getStaticEnvMap, getReferentNode, initStaticEnv } from '../editor/EditorReducer';
+import { getStaticEnvMap, initStaticEnv } from '../editor/EditorReducer';
 import Chooser from '../codeview/Chooser';
-import { useLayoutEffect, useReducer, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { FunctionDefinitionNode, Node, NodeKind, UID } from '../compiler/Tree';
 import globalNativeFunctions from '../builtin/globalNatives';
 import './CodeView.css';
@@ -424,7 +424,6 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
 
   const staticEnvMap = getStaticEnvMap(root, globalStaticEnv);
   // const referentNameNode = getReferentNode(displayedSelTree.selectedNode, displayedStaticEnvMap);
-  const referentNameNode = undefined;
 
   // Move focus back to workspace after chooser has closed. This is hacky, but don't know better way to handle.
   const rootElem = useRef<HTMLDivElement>(null);
@@ -458,6 +457,10 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
       throw new Error();
     }
     const selectedElemRect = selectedElem.getBoundingClientRect();
+    const selElemTop = selectedElemRect.top + window.scrollY;
+    const selElemLeft = selectedElemRect.left + window.scrollX;
+    const selElemWidth = selectedElemRect.width;
+    const selElemHeight = selectedElemRect.height;
 
     // Draw node highlights (selection, etc)
     if (!selHighlightElem.current) {
@@ -472,10 +475,10 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
     selHighlightElem.current.className = sheClasses.join(' ');
 
     const sheStyle = selHighlightElem.current.style;
-    sheStyle.top = selectedElemRect.top + 'px';
-    sheStyle.left = selectedElemRect.left + 'px';
-    sheStyle.width = selectedElemRect.width + 'px';
-    sheStyle.height = selectedElemRect.height + 'px';
+    sheStyle.top = selElemTop + 'px';
+    sheStyle.left = selElemLeft + 'px';
+    sheStyle.width = selElemWidth + 'px';
+    sheStyle.height = selElemHeight + 'px';
 
     // Position the chooser
     const chooserKey = state.choosing ? state.choosing.key : undefined;
@@ -485,8 +488,8 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
       const cpElem = document.querySelector('.CodeView-chooser-positioner') as HTMLElement;
       if (cpElem) {
         // const cpRect = cpElem.getBoundingClientRect();
-        cpElem.style.left = selectedElemRect.left + 'px';
-        cpElem.style.top = (selectedElemRect.bottom + 2) + 'px';
+        cpElem.style.left = selElemLeft + 'px';
+        cpElem.style.top = (selElemTop + selElemHeight + 2) + 'px';
       }
 
       positionedForChooserKey.current = chooserKey;

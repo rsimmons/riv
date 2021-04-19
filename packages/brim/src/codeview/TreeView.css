@@ -38,22 +38,61 @@
   border-color: #777;
 }
 
-.TreeView-layout-block {
+.TreeView-array-block {
   display: inline-flex;
   flex-direction: column;
 }
 
-.TreeView-layout-block-item:not(:last-child) {
+.TreeView-array-block-item:not(:last-child) {
   margin-bottom: 0.75em;
 }
 
-.TreeView-layout-inline {
+.TreeView-array-inline {
   display: inline-flex;
   align-items: center;
 }
 
-.TreeView-layout-inline-item:not(:last-child) {
+.TreeView-array-inline-item:not(:last-child) {
   margin-right: 0.75em;
+}
+
+.TreeView-ls-text {
+  padding: 0.3em 0;
+}
+
+.TreeView-ls-block {
+  display: inline-flex;
+  flex-direction: column;
+}
+
+.TreeView-ls-block-item:not(:last-child) {
+  margin-bottom: 0.75em;
+}
+
+.TreeView-ls-inline {
+  display: inline-flex;
+}
+
+.TreeView-ls-inline-item:not(:last-child) {
+  margin-right: 1em;
+}
+
+.TreeView-ls-node-block {
+  display: inline-flex;
+  flex-direction: column;
+}
+
+.TreeView-ls-node-inline {
+  display: inline-flex;
+  align-items: center;
+}
+
+.TreeView-ls-node-prelabel {
+  padding: 0.3em 0.5em 0.3em 0;
+}
+
+.TreeView-ls-node-postlabel {
+  padding: 0.3em 0 0.3em 0.5em;
 }
 
 .TreeView-indent {
@@ -62,4 +101,20 @@
 
 .TreeView-func-padding {
   padding: 0.75em;
+}
+
+.TreeView-funcdef-iface {
+  border-bottom: 1px dashed #ccc;
+}
+
+.TreeView-app-inline {
+  padding: 0 0.5em;
+}
+
+.TreeView-app-block {
+  padding-left: 0.5em;
+}
+
+.TreeView-stream-binding-binding {
+  margin-bottom: 0.5em;
 }

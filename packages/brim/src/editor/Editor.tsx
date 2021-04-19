@@ -1,6 +1,6 @@
 import React, { useRef, useCallback, useState } from 'react';
 import { StoragePanel } from './StoragePanel';
-import { Node, FunctionDefinitionNode, NodeKind } from '../compiler/Tree';
+import { Node, FunctionDefinitionNode } from '../compiler/Tree';
 import CodeView from '../codeview/CodeView';
 import { ProgramInfo, initialState, reducer as editorReducer } from './EditorReducer';
 import './Editor.css';
@@ -17,7 +17,7 @@ function useEffectfulReducer<S, A>(reducer: (s: S, a: A) => S, initialArg: S): [
     const newState = reducer(authoritativeState.current, action);
     authoritativeState.current = newState;
     setCopiedState(newState);
-  }, []);
+  }, [reducer]);
 
   return [copiedState, memoizedDispatch];
 }

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Node, FunctionDefinitionNode, StreamExpressionNode, NodeKind, isStreamExpressionNode, StreamReferenceNode, ApplicationNode, FunctionInterfaceNode, NameBindingNode, ParamNode, StreamParamNode, TreeImplBodyNode, FunctionImplNode, TreeImplNode, BindingExpressionNode, StreamBindingNode, UID, TextNode } from '../compiler/Tree';
+import { Node, FunctionDefinitionNode, StreamExpressionNode, NodeKind, isStreamExpressionNode, StreamReferenceNode, ApplicationNode, FunctionInterfaceNode, NameBindingNode, ParamNode, TreeImplBodyNode, FunctionImplNode, TreeImplNode, BindingExpressionNode, StreamBindingNode, UID, TextNode } from '../compiler/Tree';
 import './TreeView.css';
 import { StaticEnvironment } from '../editor/EditorReducer';
 // import { TemplateLayout, TextSegment, GroupEditable } from '../compiler/TemplateLayout';
@@ -15,16 +15,6 @@ export interface TreeViewContext {
   staticEnvMap: ReadonlyMap<Node, StaticEnvironment>;
   onSelectNodeId: (nid: UID) => void;
 };
-
-function layoutReactNodes(nodes: ReadonlyArray<React.ReactNode>, dir: 'block' | 'inline'): React.ReactNode {
-  return (
-    <div className={'TreeView-layout-' + dir}>
-      {nodes.map(node => (
-        <div className={'TreeView-layout-' + dir + '-item'}>{node}</div>
-      ))}
-    </div>
-  );
-}
 
 function indentReactNode(node: React.ReactNode): React.ReactNode {
   return <div className='TreeView-indent'>{node}</div>
@@ -57,37 +47,89 @@ function combineSizes(sizes: ReadonlyArray<Size>): Size {
   return combinedSize;
 }
 
-function layoutLabeledItem(label: string, item: LayoutUnit): LayoutUnit {
-  // TODO: Do we want to line-break if total size with label is too long?
-  const labelNode = <div className="TreeView-common-leaf">{label}</div>;
+/**
+ * LABELED LAYOUT
+ */
+interface LSTextItem {
+  kind: 'text';
+  text: string;
+}
+interface LSNodeItem {
+  kind: 'node';
+  preLabel: string;
+  postLabel: string;
+  node: LayoutUnit;
+}
+type LabeledStructureItem = LSTextItem | LSNodeItem;
+type LabeledStructure = ReadonlyArray<LabeledStructureItem>;
 
-  if (item.size === undefined) {
-    return {
-      reactNode: layoutReactNodes([
-        labelNode,
-        indentReactNode(item.reactNode),
-      ], 'block'),
-      size: undefined,
-      seltree: {
-        dir: 'block',
-        children: [item.seltree],
-        flags: {},
-      },
-    };
-  } else {
-    return {
-      reactNode: layoutReactNodes([labelNode, item.reactNode], 'inline'),
-      size: item.size, // TODO: include label?
-      seltree: {
-        dir: 'inline',
-        children: [item.seltree],
-        flags: {},
-      },
-    };
+function layoutLabeledStructure(struct: LabeledStructure): LayoutUnit {
+  const reactNodes: Array<React.ReactNode> = [];
+  const seltreeChildren: Array<SeltreeNode> = [];
+
+  const size = combineSizes(struct.map(item => {
+    if (item.kind === 'text') {
+      return item.text.length;
+    } else {
+      if (item.node.size === undefined) {
+        return undefined;
+      } else {
+        return item.preLabel.length + item.postLabel.length + item.node.size;
+      }
+    }
+  }));
+
+  for (const item of struct) {
+    if (item.kind === 'text') {
+      reactNodes.push(
+        <div className="TreeView-ls-text">{item.text}</div>
+      );
+    } else {
+      // NOTE: It is intentional that we only go block if the item node is block, and not if the total length with labels is too long.
+      const itemSize = (item.node.size === undefined) ? undefined : (item.preLabel.length + item.postLabel.length + item.node.size);
+
+      seltreeChildren.push(item.node.seltree);
+
+      if (itemSize === undefined) {
+        reactNodes.push(
+          <div className="TreeView-ls-node-block">
+            {item.preLabel && <div className="TreeView-ls-node-prelabel">{item.preLabel}</div>}
+            {indentReactNode(item.node.reactNode)}
+            {item.postLabel && <div className="TreeView-ls-node-postlabel">{item.postLabel}</div>}
+          </div>
+        );
+      } else {
+        reactNodes.push(
+          <div className="TreeView-ls-node-inline">
+            {item.preLabel && <div className="TreeView-ls-node-prelabel">{item.preLabel}</div>}
+            {item.node.reactNode}
+            {item.postLabel && <div className="TreeView-ls-node-postlabel">{item.postLabel}</div>}
+          </div>
+        );
+      }
+    }
   }
+
+  const dir = (size === undefined) ? 'block' : 'inline';
+
+  return {
+    reactNode: (
+      <div className={'TreeView-ls-' + dir}>
+        {reactNodes.map(node => (
+          <div className={'TreeView-ls-' + dir + '-item'}>{node}</div>
+        ))}
+      </div>
+    ),
+    size,
+    seltree: {
+      dir,
+      children: seltreeChildren,
+      flags: {},
+    },
+  };
 }
 
-const SelectableWrapper: React.FC<{selId: UID, style: 'common' | 'funcdef', ctx: TreeViewContext}> = ({selId: nid, style, ctx, children}) => {
+const SelectableWrapper: React.FC<{selId: UID, styling: 'common' | 'funcdef', ctx: TreeViewContext}> = ({selId: nid, styling, ctx, children}) => {
   const [isHovered, setIsHovered] = useState(false);
 
   const handleClick = (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
@@ -106,7 +148,7 @@ const SelectableWrapper: React.FC<{selId: UID, style: 'common' | 'funcdef', ctx:
     setIsHovered(false);
   };
 
-  const classes: Array<string> = ['TreeView-selectable', 'TreeView-selectable-' + style];
+  const classes: Array<string> = ['TreeView-selectable', 'TreeView-selectable-' + styling];
 
   if (isHovered) {
     classes.push('TreeView-hovered');
@@ -125,13 +167,19 @@ function layoutTextNode(node: TextNode, ctx: TreeViewContext): LayoutUnit {
 
 const MAX_ROW_WIDTH = 30;
 
-function layoutArray(items: ReadonlyArray<LayoutUnit>, dyn: boolean): LayoutUnit {
+function layoutArray(items: ReadonlyArray<LayoutUnit>, dyn: boolean, forceBlock: boolean): LayoutUnit {
   const size = combineSizes(items.map(item => item.size));
 
-  const layoutDir = (size === undefined) ? 'block' : 'inline';
+  const layoutDir = forceBlock ? 'block' : ((size === undefined) ? 'block' : 'inline');
 
   return {
-    reactNode: layoutReactNodes(items.map(item => item.reactNode), layoutDir),
+    reactNode: (
+      <div className={'TreeView-array-' + layoutDir}>
+        {items.map(item => (
+          <div className={'TreeView-array-' + layoutDir + '-item'}>{item.reactNode}</div>
+        ))}
+      </div>
+    ),
     size,
     seltree: {
       dir: layoutDir,
@@ -146,7 +194,7 @@ function layoutArray(items: ReadonlyArray<LayoutUnit>, dyn: boolean): LayoutUnit
 function layoutSimpleNode(treeNode: Node, content: string, bgColor: string, ctx: TreeViewContext, icon?: [string, string]): LayoutUnit {
   return {
     reactNode: (
-      <SelectableWrapper selId={treeNode.nid} style="common" ctx={ctx}>
+      <SelectableWrapper key={treeNode.nid} selId={treeNode.nid} styling="common" ctx={ctx}>
         <div className="TreeView-common-leaf" style={{color: bgColor}}>
           {icon && <img className="TreeView-literal-icon" src={icon[0]} alt={icon[1]} />}
           {content}
@@ -162,8 +210,6 @@ function layoutSimpleNode(treeNode: Node, content: string, bgColor: string, ctx:
     },
   };
 };
-
-
 
 function layoutStreamReferenceNode(node: StreamReferenceNode, ctx: TreeViewContext): LayoutUnit {
   const env = ctx.staticEnvMap.get(node);
@@ -212,7 +258,12 @@ function layoutApplicationNode(node: ApplicationNode, ctx: TreeViewContext): Lay
     throw new Error();
   }
 
-  const loArgs: Array<LayoutUnit> = [];
+  const lsItems: Array<LabeledStructureItem> = [];
+
+  lsItems.push({
+    kind: 'text',
+    text: funcIface.name.text,
+  });
 
   for (const param of funcIface.params) {
     const arg = node.args.get(param.nid);
@@ -225,14 +276,24 @@ function layoutApplicationNode(node: ApplicationNode, ctx: TreeViewContext): Lay
         if (!isStreamExpressionNode(arg)) {
           throw new Error();
         }
-        loArgs.push(layoutLabeledItem(param.bind.name.text, layoutStreamExpressionNode(arg, ctx)));
+        lsItems.push({
+          kind: 'node',
+          preLabel: param.bind.name.text,
+          postLabel: '',
+          node: layoutStreamExpressionNode(arg, ctx),
+        });
         break;
 
       case NodeKind.FunctionParam:
         if (arg.kind !== NodeKind.FunctionDefinition) {
           throw new Error();
         }
-        loArgs.push(layoutFunctionDefinitionNode(arg, ctx));
+        lsItems.push({
+          kind: 'node',
+          preLabel: '',
+          postLabel: '',
+          node: layoutFunctionDefinitionNode(arg, ctx),
+        });
         break;
 
       default: {
@@ -243,17 +304,23 @@ function layoutApplicationNode(node: ApplicationNode, ctx: TreeViewContext): Lay
     }
   }
 
-  const loArray = layoutArray(loArgs, false);
+  const loStructure = layoutLabeledStructure(lsItems);
 
-  const combinedReactNode = layoutReactNodes(([] as Array<React.ReactNode>).concat([<div className="TreeView-common-leaf">{funcIface.name.text}</div>], loArgs.map(item => item.reactNode)), loArray.size === undefined ? 'block' : 'inline');
+  const dir = loStructure.size === undefined ? 'block' : 'inline';
 
   return {
-    reactNode: <SelectableWrapper selId={node.nid} style="common" ctx={ctx}>{combinedReactNode}</SelectableWrapper>,
-    size: loArray.size,
+    reactNode: (
+      <SelectableWrapper key={node.nid} selId={node.nid} styling="common" ctx={ctx}>
+        <div className={'TreeView-app-' + dir}>
+          {loStructure.reactNode}
+        </div>
+      </SelectableWrapper>
+    ),
+    size: loStructure.size,
     seltree: {
       selId: node.nid,
-      dir: loArray.size === undefined ? 'block' : 'inline',
-      children: [loArray.seltree],
+      dir,
+      children: loStructure.seltree.children.length ? [loStructure.seltree] : [], // avoid creating empty child
       flags: {},
     },
   };
@@ -334,7 +401,7 @@ function layoutParamNode(node: ParamNode, ctx: TreeViewContext): LayoutUnit {
   }
 
   return {
-    reactNode: <SelectableWrapper selId={node.nid} style="common" ctx={ctx}>{loParamChild.reactNode}</SelectableWrapper>,
+    reactNode: <SelectableWrapper key={node.nid} selId={node.nid} styling="common" ctx={ctx}>{loParamChild.reactNode}</SelectableWrapper>,
     size: loParamChild.size,
     seltree: {
       selId: node.nid,
@@ -349,11 +416,12 @@ function layoutFunctionInterfaceNode(node: FunctionInterfaceNode, ctx: TreeViewC
   const loName = layoutTextNode(node.name, ctx);
 
   const loParams = node.params.map(n => layoutParamNode(n, ctx));
-  const loParamsArray = layoutArray(loParams, true);
+  const loParamsArray = layoutArray(loParams, true, false);
 
   // TODO: handle node.output when we can. maybe use →
 
-  const loIfaceInner = layoutArray([loName, loParamsArray], false);
+  // We avoid creating an empty params seltree for now, until we do the thing where we have a dummy node
+  const loIfaceInner = layoutArray([loName].concat(loParamsArray.seltree.children.length ? [loParamsArray] : []), false, false);
 
   return {
     ...loIfaceInner,
@@ -373,10 +441,10 @@ export function layoutStreamBindingNode(node: StreamBindingNode, ctx: TreeViewCo
   if (size === undefined) {
     // block
     reactNode = (
-      <SelectableWrapper selId={node.nid} style="common" ctx={ctx}>
+      <SelectableWrapper key={node.nid} selId={node.nid} styling="common" ctx={ctx}>
         <div>
-          <div>{loBindingExpr.reactNode} =</div>
-          <div>{loStreamExpr.reactNode}</div>
+          <div className="TreeView-stream-binding-binding">{loBindingExpr.reactNode} =</div>
+          {indentReactNode(loStreamExpr.reactNode)}
         </div>
       </SelectableWrapper>
     );
@@ -389,13 +457,13 @@ export function layoutStreamBindingNode(node: StreamBindingNode, ctx: TreeViewCo
   } else {
     // inline
     reactNode = (
-      <SelectableWrapper selId={node.nid} style="common" ctx={ctx}>
+      <SelectableWrapper key={node.nid} selId={node.nid} styling="common" ctx={ctx}>
         <span>{loBindingExpr.reactNode} = {loStreamExpr.reactNode}</span>
       </SelectableWrapper>
     );
     seltree = {
       selId: node.nid,
-      dir: 'block',
+      dir: 'inline',
       children: [loBindingExpr.seltree, loStreamExpr.seltree],
       flags: {},
     };
@@ -422,7 +490,7 @@ function layoutTreeImplBodyNode(node: TreeImplBodyNode, ctx: TreeViewContext): L
   }
 };
 
-function layoutTreeImplNode(node: TreeImplNode, ctx: TreeViewContext): LayoutUnit {
+function layoutTreeImplNode(node: TreeImplNode, forceBlock: boolean, ctx: TreeViewContext): LayoutUnit {
   const items: Array<LayoutUnit> = [];
 
   for (const n of node.body) {
@@ -431,9 +499,17 @@ function layoutTreeImplNode(node: TreeImplNode, ctx: TreeViewContext): LayoutUni
   if (node.out) {
     const annoSexp = layoutStreamExpressionNode(node.out, ctx);
 
-    items.push(layoutLabeledItem('←', annoSexp));
+    items.push(layoutLabeledStructure([
+      {kind: 'text', text: '←'},
+      {
+        kind: 'node',
+        preLabel: '',
+        postLabel: '',
+        node: annoSexp,
+      },
+    ]));
   }
-  const loImplInner = layoutArray(items, true);
+  const loImplInner = layoutArray(items, true, forceBlock);
 
   return {
     ...loImplInner,
@@ -441,13 +517,13 @@ function layoutTreeImplNode(node: TreeImplNode, ctx: TreeViewContext): LayoutUni
   }
 }
 
-function layoutFunctionImplNode(node: FunctionImplNode, ctx: TreeViewContext): LayoutUnit {
+function layoutFunctionImplNode(node: FunctionImplNode, forceBlock: boolean, ctx: TreeViewContext): LayoutUnit {
   switch (node.kind) {
     case NodeKind.NativeImpl:
       throw new Error('unimplemented');
 
     case NodeKind.TreeImpl:
-      return layoutTreeImplNode(node, ctx);
+      return layoutTreeImplNode(node, forceBlock, ctx);
 
     default: {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -459,10 +535,17 @@ function layoutFunctionImplNode(node: FunctionImplNode, ctx: TreeViewContext): L
 
 export function layoutFunctionDefinitionNode(node: FunctionDefinitionNode, ctx: TreeViewContext): LayoutUnit {
   const loIface = layoutFunctionInterfaceNode(node.iface, ctx);
-  const loImpl = layoutFunctionImplNode(node.impl, ctx);
+  const loImpl = layoutFunctionImplNode(node.impl, true, ctx);
 
   return {
-    reactNode: <SelectableWrapper selId={node.nid} style="funcdef" ctx={ctx}>{layoutReactNodes([loIface.reactNode, loImpl.reactNode], 'block')}</SelectableWrapper>,
+    reactNode: (
+      <SelectableWrapper key={node.nid} selId={node.nid} styling="funcdef" ctx={ctx}>
+        <div className="TreeView-funcdef">
+          <div className="TreeView-funcdef-iface">{loIface.reactNode}</div>
+          <div className="TreeView-funcdef-impl">{loImpl.reactNode}</div>
+        </div>
+      </SelectableWrapper>
+    ),
     size: undefined,
     seltree: {
       selId: node.nid,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Node } from '../compiler/Tree';
 import { FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, StreamExpressionNode, ApplicationArgNode, FunctionInterfaceNode, UID, TextNode, StreamBindingNode } from '../compiler/Tree';
 import Fuse from 'fuse.js';
@@ -309,9 +309,7 @@ const MultiChooser: React.FC<{context: 'tdef-body' | 'subexp', existingNode: Nod
 
   // Update the expression node to reflect the current choice
   const realizeChoice = (state: DropdownState): void => {
-    const choice = state.choices[state.index];
-
-    // dispatch({type: 'UPDATE_EDITING_NODE', newNode: choice.node});
+    // const choice = state.choices[state.index];
   };
 
   const recomputeDropdownChoices = (text: string): DropdownState => {
@@ -371,8 +369,9 @@ const MultiChooser: React.FC<{context: 'tdef-body' | 'subexp', existingNode: Nod
         }
 
         if (context === 'tdef-body') {
-          const inputText = inputRef.current.value;
-          const newNode = createStreamBinding(inputText);
+          // TODO: bring this behavior back?
+          // const inputText = inputRef.current.value;
+          // const newNode = createStreamBinding(inputText);
           // dispatch({type: 'UPDATE_EDITING_NODE', newNode});
           // dispatch({type: 'TOGGLE_EDIT'});
         }
@@ -431,6 +430,7 @@ const TextChooser: React.FC<{existingNode: TextNode | null, onCommitChoice: (nod
 
     setText(newText);
 
+    /*
     let newNode: TextNode;
     if (existingNode) {
       newNode = {
@@ -444,7 +444,7 @@ const TextChooser: React.FC<{existingNode: TextNode | null, onCommitChoice: (nod
         text: newText,
       };
     }
-    // TODO: commit
+    */
   };
 
   return (
