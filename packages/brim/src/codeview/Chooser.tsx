@@ -133,7 +133,7 @@ const MultiChooser: React.FC<{context: 'tdef-body' | 'subexp', existingNode: Nod
     const searchItems: Array<SearchItem> = [];
 
     const streamEnv = localEnv.streamEnv;
-    streamEnv.forEach((sdef, ) => {
+    streamEnv.forEach((sdef, sid) => {
       // TODO: we used to check for a self-reference here. do we still need to?
       searchItems.push({
         name: sdef.name.text || ' ',
@@ -142,7 +142,7 @@ const MultiChooser: React.FC<{context: 'tdef-body' | 'subexp', existingNode: Nod
           node: {
             kind: NodeKind.StreamReference,
             nid: genuid(),
-            ref: sdef.nid,
+            ref: sid,
           },
         },
       });

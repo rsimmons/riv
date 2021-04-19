@@ -39,6 +39,9 @@ function compileTreeFuncDef(def: FunctionDefinitionNode, outerStreamEnv: Compila
     if (!internalId) {
       throw new Error();
     }
+
+    pids.push(internalId);
+
     switch (param.kind) {
       case NodeKind.StreamParam:
         localStreamEnv.set(internalId, null);

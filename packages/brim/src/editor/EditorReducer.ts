@@ -234,7 +234,9 @@ function compileMainDef(mainDef: FunctionDefinitionNode, globalFunctions: Readon
     globalFunctionEnvironment.set(gf.nid, gf);
   }
 
-  return compileGlobalTreeDefinition(mainDef, globalFunctionEnvironment);
+  const compiledResult = compileGlobalTreeDefinition(mainDef, globalFunctionEnvironment);
+  console.log('compiled:', compiledResult);
+  return compiledResult;
 }
 
 function updateExecution(state: State, newCompiledDefinition: CompiledDefinition): State {

@@ -127,7 +127,8 @@ function decodeAudioFileToArray(fileData: any) {
   return serializeAsyncToStreamFunc<any, ArrayLike>(fileData, worker, [0]);
 }
 
-type AbbrevFunctionInterface = [/*name*/ string, /*params*/ ReadonlyArray<[/*kind*/ string, /*name*/ string, /*type/iface*/ string | AbbrevFunctionInterface]>, /*return*/ string, /*tmpl*/ string];
+type AbbrevFunctionParam = ['s', /*name*/ string, /*type*/ string] | ['f', AbbrevFunctionInterface];
+type AbbrevFunctionInterface = [/*name*/ string, /*params*/ ReadonlyArray<AbbrevFunctionParam>, /*return*/ string, /*tmpl*/ string];
 
 const strtextNativeFunctions: ReadonlyArray<[string, AbbrevFunctionInterface, Function]> = [
   // simple
@@ -141,9 +142,10 @@ const strtextNativeFunctions: ReadonlyArray<[string, AbbrevFunctionInterface, Fu
 
   // math
   ['add', ['add', [['s', 'a', 'number'], ['s', 'b', 'number']], 'number', ''], (a: number, b: number) => a + b],
+  ['mul', ['mul', [['s', 'a', 'number'], ['s', 'b', 'number']], 'number', ''], (a: number, b: number) => a * b],
 /*
   ['sub', '{0::number} - {1::number} => {::number}', (a: number, b: number) => a - b],
-  ['mult', '{0::number} * {1::number} => {::number}', (a: number, b: number) => a * b],
+  ['mul', '{0::number} * {1::number} => {::number}', (a: number, b: number) => a * b],
   ['div', '{0::number} / {1::number} => {::number}', (a: number, b: number) => a / b],
   ['sqr', '{0::number} squared => {::number}', (v: number) => v*v],
   ['exp', 'e^ {0::number} => {::number}', (v: number) => Math.exp(v)],
@@ -212,12 +214,19 @@ const strtextNativeFunctions: ReadonlyArray<[string, AbbrevFunctionInterface, Fu
       ];
     }
   ],
+*/
 
   // higher-order
+  ['audioDriver', ['play generated audio', [
+    ['f', ['compute sample', [
+      ['s', 'audio time', 'step<number>'],
+      ['s', 'next sample', 'event<nothing>'],
+      ['s', 'sample rate', 'step<number>'],
+    ], 'step<number>', '']],
+  ], 'void', ''], audioDriver],
+/*
   ['streamMap', 'map over {0::list<A>} with {f0::transform {0:element:A} => {:new element:B}} => {::list<B>}',
     (arr: Array<any>, f: (v: any) => any) => streamMap(f, arr)],
-
-  ['audioDriver', 'play audio with {f0::{0:audio time:step<number>} {1:next sample:event<nothing>} {2:sample rate:step<number>} => {y0:sample:step<number>}} => void', audioDriver],
 
   ['integrate', 'integrate | {f0::derivative at value {0:value:step<number>} time {1:time:step<number>} => {:derivative:step<number>}} | over time {0:time:number} | from initial value {1:initial value:number} => {::number}', robustIntegral],
 */
@@ -233,9 +242,10 @@ function expandInterface(abbrevIface: AbbrevFunctionInterface): FunctionInterfac
     nid: genuid(),
     name: {kind: NodeKind.Text, nid: genuid(), text: name},
     params: abbrevParams.map((abbrevParam, idx) => {
-      const [pkind, pname, ptype] = abbrevParam;
-      switch (pkind) {
+      switch (abbrevParam[0]) {
         case 's':
+          const pname = abbrevParam[1];
+          // const ptype = abbrevParam[2];
           return {
             kind: NodeKind.StreamParam,
             nid: genuid(),
@@ -246,12 +256,14 @@ function expandInterface(abbrevIface: AbbrevFunctionInterface): FunctionInterfac
             },
           };
 
-        case 'f':
+        case 'f': {
+          const piface = abbrevParam[1];
           return {
             kind: NodeKind.FunctionParam,
             nid: genuid(),
-            iface: expandInterface(ptype as AbbrevFunctionInterface),
+            iface: expandInterface(piface),
           };
+        }
 
         default:
           throw new Error();
