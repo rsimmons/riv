@@ -1,9 +1,7 @@
-import { useCallbackReducer, ExecutionContext, useEventEmitter, useRequestUpdate, useDynamic, useInitialize } from 'riv-runtime';
-import { NodeKind, NativeImplNode, ApplicationSettings, FunctionInterfaceNode, FunctionDefinitionNode, UID } from '../compiler/Tree';
+import { useCallbackReducer, ExecutionContext, useEventEmitter, useVar, useEventReceiver, useRequestUpdate, useDynamic, useInitialize, useReducer } from 'riv-runtime';
+import { NodeKind, FunctionInterfaceNode, FunctionDefinitionNode } from '../compiler/Tree';
 import genuid from '../util/uid';
 import { TemplateGroup } from '../compiler/TemplateLayout';
-import { FunctionType } from '../compiler/Types';
-import { useVar, useEventMultiReceiver } from 'riv-runtime';
 
 const { showString, animationTime, mouseDown, changeCount, streamMap, audioDriver, random, mouseClickEvts, redCircle, mousePosition } = require('riv-demo-lib');
 
@@ -155,12 +153,13 @@ const strtextNativeFunctions: ReadonlyArray<[string, AbbrevFunctionInterface, Fu
   // dom/browser
   ['showString', ['show', [['s', 'value', 'A']], 'void', ''], showString],
   ['animationTime', ['animation time', [], 'number', ''], animationTime],
+  ['random', ['random from 0 to 1', [['s', 'repick', 'event<T>']], 'number', ''], random],
   ['mouseDown', ['mouse button is down', [], 'boolean', ''], mouseDown],
+  ['mouseClick', ['mouse clicks', [], 'event<nothing>', ''], mouseClickEvts],
+  ['mousePosition', ['mouse position', [], 'vec2', ''], mousePosition],
+  ['redCircle', ['draw red circle', [['s', 'position', 'vec2'], ['s', 'radius', 'number']], 'nothing', ''], redCircle],
+
 /*
-  ['mousePosition', 'mouse position => {}', mousePosition],
-  ['mouseClickEvts', 'mouse clicks => {}', mouseClickEvts],
-  ['redCircle', 'draw red circle at {0:position} with radius {1:radius} => void', redCircle],
-  ['random', 'random from 0 to 1, | repick on {0::event<A>} => {::number}', random],
 
   // vec2
   ['vec2zero', 'zero 2d vector => {}', () => ({x: 0, y: 0})],
@@ -217,6 +216,23 @@ const strtextNativeFunctions: ReadonlyArray<[string, AbbrevFunctionInterface, Fu
 */
 
   // higher-order
+  ['reduce', ['reduce', [
+    ['s', 'events', 'event<A>'],
+    ['f', ['get new state', [
+      ['s', 'old', 'S'],
+      ['s', 'val', 'A'],
+    ], 'step<S>', '']],
+    ['s', 'init', 'S'],
+  ], 'S', ''], (evts: any, reducer: any, ival: any) => {
+     const state = useVar(ival);
+     const evt = useEventReceiver(evts);
+     if (evt) {
+       // NOTE: we have to use runForOneInstant to create a sub-ExecutionContext for reducer
+       state.current = runForOneInstant(reducer, [state.current, evt.value]);
+     }
+     return state.current;
+  }],
+
   ['audioDriver', ['play generated audio', [
     ['f', ['compute sample', [
       ['s', 'audio time', 'step<number>'],
@@ -286,7 +302,6 @@ strtextNativeFunctions.forEach(([fid, abbrevIface, jsImpl]) => {
   });
 });
 
-/*
 function runForOneInstant(streamFunc: Function, args: Array<any>): any {
   const ctx = new ExecutionContext(streamFunc, () => {});
   const retval = ctx.update(...args);
@@ -294,6 +309,7 @@ function runForOneInstant(streamFunc: Function, args: Array<any>): any {
   return retval;
 }
 
+/*
 globalNativeFunctions.push(
   {
     kind: NodeKind.NativeFunctionDefinition,
