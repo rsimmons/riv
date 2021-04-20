@@ -1,4 +1,4 @@
-import { ApplicationSettings, NodeKind, FunctionInterfaceNode, TreeImplBodyNode, FunctionDefinitionNode, UndefinedLiteralNode, UID } from './Tree';
+import { ApplicationSettings, NodeKind, FunctionInterfaceNode, FunctionDefinitionNode, UndefinedLiteralNode, UID } from './Tree';
 import genuid from '../util/uid';
 
 export type DynamicInterfaceEditAction = 'insert-before' | 'insert-after' | 'delete';

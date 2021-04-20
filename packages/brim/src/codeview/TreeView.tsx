@@ -6,10 +6,6 @@ import { StaticEnvironment } from '../editor/EditorReducer';
 import quotesIcon from './icons/quotes.svg';
 import booleanIcon from './icons/boolean.svg';
 import { SeltreeNode } from './Seltree';
-// import { DynamicInterfaceEditAction, DynamicInterfaceChange } from '../compiler/FunctionInterface';
-
-const BOUND_NAME_BOX_COLOR = 'rgb(111, 66, 193)';
-const STREAM_REFERENCE_BOX_COLOR = '#1d8a3b';
 
 export interface TreeViewContext {
   staticEnvMap: ReadonlyMap<Node, StaticEnvironment>;
@@ -162,7 +158,7 @@ const SelectableWrapper: React.FC<{selId: UID, styling: 'common' | 'funcdef', ct
 };
 
 function layoutTextNode(node: TextNode, ctx: TreeViewContext): LayoutUnit {
-  return layoutSimpleNode(node, node.text || '\xa0\xa0\xa0\xa0', BOUND_NAME_BOX_COLOR, ctx);
+  return layoutSimpleNode(node, node.text || '\xa0\xa0\xa0\xa0', 'name', ctx);
 }
 
 const MAX_ROW_WIDTH = 30;
@@ -191,11 +187,11 @@ function layoutArray(items: ReadonlyArray<LayoutUnit>, dyn: boolean, forceBlock:
   }
 }
 
-function layoutSimpleNode(treeNode: Node, content: string, bgColor: string, ctx: TreeViewContext, icon?: [string, string]): LayoutUnit {
+function layoutSimpleNode(treeNode: Node, content: string, styling: string, ctx: TreeViewContext, icon?: [string, string]): LayoutUnit {
   return {
     reactNode: (
       <SelectableWrapper key={treeNode.nid} selId={treeNode.nid} styling="common" ctx={ctx}>
-        <div className="TreeView-common-leaf" style={{color: bgColor}}>
+        <div className={'TreeView-common-leaf TreeView-leaf-styling-' + styling}>
           {icon && <img className="TreeView-literal-icon" src={icon[0]} alt={icon[1]} />}
           {content}
         </div>
@@ -221,7 +217,7 @@ function layoutStreamReferenceNode(node: StreamReferenceNode, ctx: TreeViewConte
     throw new Error();
   }
 
-  return layoutSimpleNode(node, nameBinding.name.text || '\xa0\xa0\xa0\xa0', STREAM_REFERENCE_BOX_COLOR, ctx);
+  return layoutSimpleNode(node, nameBinding.name.text || '\xa0\xa0\xa0\xa0', 'streamref', ctx);
 };
 
 /*
@@ -341,16 +337,16 @@ function layoutApplicationNode(node: ApplicationNode, ctx: TreeViewContext): Lay
 export function layoutStreamExpressionNode(node: StreamExpressionNode, ctx: TreeViewContext): LayoutUnit {
   switch (node.kind) {
     case NodeKind.UndefinedLiteral:
-      return layoutSimpleNode(node, '\xa0\xa0\xa0\xa0', '#faa', ctx);
+      return layoutSimpleNode(node, '\xa0\xa0\xa0\xa0', 'undefined', ctx);
 
     case NodeKind.NumberLiteral:
-      return layoutSimpleNode(node, node.val.toString(), 'rgb(0, 92, 197)', ctx);
+      return layoutSimpleNode(node, node.val.toString(), 'number', ctx);
 
     case NodeKind.TextLiteral:
-      return layoutSimpleNode(node, node.val, 'rgb(3, 47, 98)', ctx, [quotesIcon, 'text']);
+      return layoutSimpleNode(node, node.val, 'text', ctx, [quotesIcon, 'text']);
 
     case NodeKind.BooleanLiteral:
-      return layoutSimpleNode(node, node.val.toString(), 'rgb(0, 92, 197)', ctx, [booleanIcon, 'boolean']);
+      return layoutSimpleNode(node, node.val.toString(), 'boolean', ctx, [booleanIcon, 'boolean']);
 
     case NodeKind.StreamReference:
       return layoutStreamReferenceNode(node, ctx);

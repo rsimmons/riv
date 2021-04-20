@@ -7,6 +7,31 @@
   padding: 0.3em 0.5em;
 }
 
+.TreeView-leaf-styling-undefined {
+  background-color: #f77;
+  border-radius: 0.5em;
+}
+
+.TreeView-leaf-styling-number {
+  color: rgb(0, 92, 197);
+}
+
+.TreeView-leaf-styling-text {
+  color: rgb(3, 47, 98);
+}
+
+.TreeView-leaf-styling-boolean {
+  color: rgb(0, 92, 197);
+}
+
+.TreeView-leaf-styling-streamref {
+  color: #1d8a3b;
+}
+
+.TreeView-leaf-styling-name {
+  color: rgb(111, 66, 193);
+}
+
 .TreeView-selectable {
   display: inline-block;
 }
