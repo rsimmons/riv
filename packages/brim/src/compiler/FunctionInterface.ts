@@ -23,8 +23,6 @@ export function functionInterfaceAsPlainText(ifaceNode: FunctionInterfaceNode): 
 export function defaultTreeDefFromFunctionInterface(iface: FunctionInterfaceNode): FunctionDefinitionNode {
   const pids: ReadonlyMap<UID, UID> = new Map(iface.params.map(param => [param.nid, genuid()]));
 
-  const body: Array<TreeImplBodyNode> = [];
-
   const out: UndefinedLiteralNode | null = iface.output ? {
     kind: NodeKind.UndefinedLiteral,
     nid: genuid(),
@@ -38,7 +36,12 @@ export function defaultTreeDefFromFunctionInterface(iface: FunctionInterfaceNode
       kind: NodeKind.TreeImpl,
       nid: genuid(),
       pids,
-      body,
+      body: [
+        {
+          kind: NodeKind.UndefinedLiteral,
+          nid: genuid(),
+        },
+      ],
       out,
     }
   };

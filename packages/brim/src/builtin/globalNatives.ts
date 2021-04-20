@@ -140,13 +140,13 @@ const strtextNativeFunctions: ReadonlyArray<[string, AbbrevFunctionInterface, Fu
 
   // math
   ['add', ['add', [['s', 'a', 'number'], ['s', 'b', 'number']], 'number', ''], (a: number, b: number) => a + b],
+  ['sub', ['sub', [['s', 'a', 'number'], ['s', 'b', 'number']], 'number', ''], (a: number, b: number) => a - b],
   ['mul', ['mul', [['s', 'a', 'number'], ['s', 'b', 'number']], 'number', ''], (a: number, b: number) => a * b],
+  ['exp', ['exp', [['s', 'x', 'number']], 'number', ''], (v: number) => Math.exp(v)],
 /*
-  ['sub', '{0::number} - {1::number} => {::number}', (a: number, b: number) => a - b],
   ['mul', '{0::number} * {1::number} => {::number}', (a: number, b: number) => a * b],
   ['div', '{0::number} / {1::number} => {::number}', (a: number, b: number) => a / b],
   ['sqr', '{0::number} squared => {::number}', (v: number) => v*v],
-  ['exp', 'e^ {0::number} => {::number}', (v: number) => Math.exp(v)],
 */
   ['cos', ['cosine of', [['s', 'radians', 'number']], 'number', ''], Math.cos],
 
