@@ -1,7 +1,6 @@
 import { useCallbackReducer, ExecutionContext, useEventEmitter, useVar, useEventReceiver, useRequestUpdate, useDynamic, useInitialize, useReducer } from 'riv-runtime';
 import { NodeKind, FunctionInterfaceNode, FunctionDefinitionNode } from '../compiler/Tree';
 import genuid from '../util/uid';
-import { TemplateGroup } from '../compiler/TemplateLayout';
 
 const { showString, animationTime, mouseDown, changeCount, streamMap, audioDriver, random, mouseClickEvts, redCircle, mousePosition } = require('riv-demo-lib');
 
@@ -130,8 +129,8 @@ type AbbrevFunctionInterface = [/*name*/ string, /*params*/ ReadonlyArray<Abbrev
 
 const strtextNativeFunctions: ReadonlyArray<[string, AbbrevFunctionInterface, Function]> = [
   // simple
-  ['ifte', ['ifte', [['s', 'if', 'boolean'], ['s', 'then', 'A'], ['s', 'else', 'A']], 'A', ''], (cond: any, _then: any, _else: any) => (cond ? _then : _else)],
-  ['equals', ['equals', [['s', '', 'A'], ['s', '', 'A']], 'boolean', '$0 equals $1'], (a: any, b: any) => Object.is(a, b)],
+  ['ifte', ['ifte', [['s', 'if', 'boolean'], ['s', 'then', 'A'], ['s', 'else', 'A']], 'A', 'if $0|then $1|else $2'], (cond: any, _then: any, _else: any) => (cond ? _then : _else)],
+  ['equals', ['equals', [['s', '', 'A'], ['s', '', 'A']], 'boolean', '$0|equals|$1'], (a: any, b: any) => Object.is(a, b)],
 
 /*
   // events
@@ -139,10 +138,10 @@ const strtextNativeFunctions: ReadonlyArray<[string, AbbrevFunctionInterface, Fu
 */
 
   // math
-  ['add', ['add', [['s', 'a', 'number'], ['s', 'b', 'number']], 'number', ''], (a: number, b: number) => a + b],
-  ['sub', ['sub', [['s', 'a', 'number'], ['s', 'b', 'number']], 'number', ''], (a: number, b: number) => a - b],
-  ['mul', ['mul', [['s', 'a', 'number'], ['s', 'b', 'number']], 'number', ''], (a: number, b: number) => a * b],
-  ['exp', ['exp', [['s', 'x', 'number']], 'number', ''], (v: number) => Math.exp(v)],
+  ['add', ['add', [['s', 'a', 'number'], ['s', 'b', 'number']], 'number', '$0|+|$1'], (a: number, b: number) => a + b],
+  ['sub', ['sub', [['s', 'a', 'number'], ['s', 'b', 'number']], 'number', '$0|-|$1'], (a: number, b: number) => a - b],
+  ['mul', ['mul', [['s', 'a', 'number'], ['s', 'b', 'number']], 'number', '$0|*|$1'], (a: number, b: number) => a * b],
+  ['exp', ['exp', [['s', 'x', 'number']], 'number', 'exp $0'], (v: number) => Math.exp(v)],
 /*
   ['mul', '{0::number} * {1::number} => {::number}', (a: number, b: number) => a * b],
   ['div', '{0::number} / {1::number} => {::number}', (a: number, b: number) => a / b],
@@ -217,13 +216,13 @@ const strtextNativeFunctions: ReadonlyArray<[string, AbbrevFunctionInterface, Fu
 
   // higher-order
   ['reduce', ['reduce', [
-    ['s', 'events', 'event<A>'],
-    ['f', ['get new state', [
-      ['s', 'old', 'S'],
-      ['s', 'val', 'A'],
-    ], 'step<S>', '']],
     ['s', 'init', 'S'],
-  ], 'S', ''], (evts: any, reducer: any, ival: any) => {
+    ['s', 'events', 'event<A>'],
+    ['f', ['compute new val', [
+      ['s', 'old', 'S'],
+      ['s', 'event', 'A'],
+    ], 'step<S>', '']],
+  ], 'S', 'set|initially to $0|then when $1|$2'], (ival: any, evts: any, reducer: any) => {
      const state = useVar(ival);
      const evt = useEventReceiver(evts);
      if (evt) {
@@ -286,6 +285,7 @@ function expandInterface(abbrevIface: AbbrevFunctionInterface): FunctionInterfac
       }
     }),
     output: (ret !== 'void'),
+    template: tmpl ? tmpl : undefined,
   };
 }
 

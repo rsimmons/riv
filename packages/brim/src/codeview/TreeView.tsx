@@ -6,6 +6,7 @@ import { StaticEnvironment } from '../editor/EditorReducer';
 import quotesIcon from './icons/quotes.svg';
 import booleanIcon from './icons/boolean.svg';
 import { SeltreeNode } from './Seltree';
+import { parseTemplateString } from './FITemplate';
 
 export interface TreeViewContext {
   staticEnvMap: ReadonlyMap<Node, StaticEnvironment>;
@@ -161,7 +162,7 @@ function layoutTextNode(node: TextNode, ctx: TreeViewContext): LayoutUnit {
   return layoutSimpleNode(node, node.text || '\xa0\xa0\xa0\xa0', 'name', ctx);
 }
 
-const MAX_ROW_WIDTH = 30;
+const MAX_ROW_WIDTH = 50;
 
 function layoutArray(items: ReadonlyArray<LayoutUnit>, dyn: boolean, forceBlock: boolean): LayoutUnit {
   const size = combineSizes(items.map(item => item.size));
@@ -255,47 +256,91 @@ function layoutApplicationNode(node: ApplicationNode, ctx: TreeViewContext): Lay
   }
 
   const lsItems: Array<LabeledStructureItem> = [];
+  if (funcIface.template) {
+    const parsedTemplate = parseTemplateString(funcIface.template, funcIface.params);
 
-  lsItems.push({
-    kind: 'text',
-    text: funcIface.name.text,
-  });
+    for (const seg of parsedTemplate) {
+      if (seg.kind === 'text') {
+        lsItems.push({
+          kind: 'text',
+          text: seg.text,
+        });
+      } else {
+        const param = funcIface.params.find(param => param.nid === seg.pid);
+        if (!param) {
+          throw new Error();
+        }
 
-  for (const param of funcIface.params) {
-    const arg = node.args.get(param.nid);
-    if (!arg) {
-      throw new Error();
+        const arg = node.args.get(param.nid);
+        if (!arg) {
+          throw new Error();
+        }
+
+        let loNode: LayoutUnit;
+        if (param.kind === NodeKind.StreamParam) {
+          if (!isStreamExpressionNode(arg)) {
+            throw new Error();
+          }
+          loNode = layoutStreamExpressionNode(arg, ctx);
+        } else if (param.kind === NodeKind.FunctionParam) {
+          if (arg.kind !== NodeKind.FunctionDefinition) {
+            throw new Error();
+          }
+          loNode = layoutFunctionDefinitionNode(arg, ctx);
+        } else {
+          throw new Error();
+        }
+
+        lsItems.push({
+          kind: 'node',
+          preLabel: seg.preLabel,
+          postLabel: seg.postLabel,
+          node: loNode,
+        });
+      }
     }
+  } else {
+    lsItems.push({
+      kind: 'text',
+      text: funcIface.name.text,
+    });
 
-    switch (param.kind) {
-      case NodeKind.StreamParam:
-        if (!isStreamExpressionNode(arg)) {
-          throw new Error();
-        }
-        lsItems.push({
-          kind: 'node',
-          preLabel: param.bind.name.text,
-          postLabel: '',
-          node: layoutStreamExpressionNode(arg, ctx),
-        });
-        break;
-
-      case NodeKind.FunctionParam:
-        if (arg.kind !== NodeKind.FunctionDefinition) {
-          throw new Error();
-        }
-        lsItems.push({
-          kind: 'node',
-          preLabel: '',
-          postLabel: '',
-          node: layoutFunctionDefinitionNode(arg, ctx),
-        });
-        break;
-
-      default: {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const exhaustive: never = param; // this will cause a type error if we haven't handled all cases
+    for (const param of funcIface.params) {
+      const arg = node.args.get(param.nid);
+      if (!arg) {
         throw new Error();
+      }
+
+      switch (param.kind) {
+        case NodeKind.StreamParam:
+          if (!isStreamExpressionNode(arg)) {
+            throw new Error();
+          }
+          lsItems.push({
+            kind: 'node',
+            preLabel: param.bind.name.text,
+            postLabel: '',
+            node: layoutStreamExpressionNode(arg, ctx),
+          });
+          break;
+
+        case NodeKind.FunctionParam:
+          if (arg.kind !== NodeKind.FunctionDefinition) {
+            throw new Error();
+          }
+          lsItems.push({
+            kind: 'node',
+            preLabel: '',
+            postLabel: '',
+            node: layoutFunctionDefinitionNode(arg, ctx),
+          });
+          break;
+
+        default: {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const exhaustive: never = param; // this will cause a type error if we haven't handled all cases
+          throw new Error();
+        }
       }
     }
   }

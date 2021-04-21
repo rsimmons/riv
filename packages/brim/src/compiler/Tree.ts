@@ -155,7 +155,7 @@ export interface FunctionInterfaceNode {
   readonly name: TextNode;
   readonly params: ReadonlyArray<ParamNode>;
   readonly output: boolean; // this will eventually become a type?
-  // readonly customTmpl?: FunctionTemplateNode;
+  readonly template?: string; // this will eventually become a TextNode?
   // readonly createCustomUI?: (underNode: HTMLElement, settings: ApplicationSettings, onChange: (change: ApplicationSettings) => void) => (() => void); // returns "shutdown" closure
 }
 

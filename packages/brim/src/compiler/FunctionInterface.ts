@@ -1,18 +1,5 @@
-import { ApplicationSettings, NodeKind, FunctionInterfaceNode, FunctionDefinitionNode, UndefinedLiteralNode, UID } from './Tree';
+import { NodeKind, FunctionInterfaceNode, FunctionDefinitionNode, UndefinedLiteralNode, UID } from './Tree';
 import genuid from '../util/uid';
-
-export type DynamicInterfaceEditAction = 'insert-before' | 'insert-after' | 'delete';
-
-export type DynamicInterfaceChange = {
-  readonly newSettings: ApplicationSettings;
-  readonly remap?: {
-    // for each of these, the array is of indexes into the old params/yields
-    streamParams: ReadonlyArray<number | undefined>;
-    funcParams: ReadonlyArray<number | undefined>;
-    yields: ReadonlyArray<number | undefined>;
-  }
-  readonly newSelectedKey?: string | 'parent';
-}
 
 export function functionInterfaceAsPlainText(ifaceNode: FunctionInterfaceNode): string {
   // return templateToPlainText(functionInterfaceFromNode(ifaceNode).tmpl);
