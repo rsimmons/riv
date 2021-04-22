@@ -1,5 +1,16 @@
-const gen32 = (): string => Math.random().toString(16).substring(2, 10);
+function gen32Random(): string {
+  return Math.random().toString(16).substring(2, 10);
+}
 
-const genuid = (): string => gen32() + gen32();
+function genuidRandom(): string {
+  return gen32Random() + gen32Random();
+}
 
-export default genuid;
+let seqnum = 0;
+function genuidSeq(): string {
+  const s = 'uid' + seqnum.toString(16);
+  seqnum++;
+  return s;
+}
+
+export default genuidSeq;
