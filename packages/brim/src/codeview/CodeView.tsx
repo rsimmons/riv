@@ -1,4 +1,4 @@
-import { layoutFunctionDefinitionNode, TreeViewContext } from '../codeview/TreeView';
+import { layoutAnyNode, layoutFunctionDefinitionNode, TreeViewContext } from '../codeview/TreeView';
 import { getStaticEnvMap, initStaticEnv } from '../editor/EditorReducer';
 import Chooser from '../codeview/Chooser';
 import { useLayoutEffect, useRef, useState } from 'react';
@@ -7,7 +7,7 @@ import globalNativeFunctions from '../builtin/globalNatives';
 import './CodeView.css';
 import { deleteNode, getNodeIdMap, getNodeParent, insertBeforeOrAfter, replaceNode } from '../compiler/TreeUtil';
 import genuid from '../util/uid';
-import { computeSeltreeLookups, SeltreeNode } from './Seltree';
+import { computeSeltreeLookups, findFirstUndef, SeltreeNode } from './Seltree';
 
 const keyActions: ReadonlyArray<[string, ReadonlyArray<string>, boolean, string]> = [
   ['Enter', [], true, 'MODIFY'],
@@ -66,7 +66,33 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
     choosing: null,
   });
 
+  // this shouldn't be repeated every render
+  const globalStaticEnv = initStaticEnv(globalNativeFunctions);
+
+  const staticEnvMap = getStaticEnvMap(root, globalStaticEnv);
+  // const referentNameNode = getReferentNode(displayedSelTree.selectedNode, displayedStaticEnvMap);
+
   const nodeIdToNode = getNodeIdMap(root);
+
+  // TODO: make this stuff correct
+  const selectedNode = nodeIdToNode.get(state.selectionId);
+  if (!selectedNode) {
+    throw new Error();
+  }
+
+  const selectedNodeLocalEnv = staticEnvMap.get(selectedNode);
+  if (!selectedNodeLocalEnv) {
+    throw new Error();
+  }
+
+  const treeViewCtx: TreeViewContext = {
+    // clipboardTopNode: (state.clipboardStack.length > 0) ? state.derivedLookups.streamIdToNode!.get(state.clipboardStack[state.clipboardStack.length-1].streamId) : null,
+    // clipboardRestNodes: state.clipboardStack.slice(0, -1).map(frame => state.derivedLookups.streamIdToNode!.get(frame.streamId)),
+    staticEnvMap,
+    onSelectNodeId: (nid: UID) => {
+      setSelectionId(nid);
+    },
+  };
 
   const setSelectionId = (nid: UID): void => {
     setState(s => ({
@@ -387,11 +413,14 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
         throw new Error();
       }
 
-      // TODO: check if selectionId is for a "placeholder"
-      const selectedNode = nodeIdToNode.get(state.selectionId);
-      if (!selectedNode) {
-        throw new Error();
-      }
+      // This section is sort of crazy. We do all this just to find the next undef
+      const newNodeEnvMap = getStaticEnvMap(node, selectedNodeLocalEnv);
+      const newNodeViewCtx: TreeViewContext = {
+        staticEnvMap: newNodeEnvMap,
+        onSelectNodeId: () => {},
+      };
+      const {seltree: newSeltree} = layoutAnyNode(node, newNodeViewCtx);
+      const firstUndefSelId = findFirstUndef(newSeltree);
 
       if ((state.choosing.mode === 'modify')) {
         const newRoot = replaceNode(root, selectedNode, node);
@@ -400,8 +429,8 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
 
         return {
           ...s,
-          selectionId: node.nid,
-          choosing: null,
+          selectionId: firstUndefSelId || node.nid,
+          choosing: firstUndefSelId ? {key: genuid(), mode: 'modify'} : null,
         };
       } else if ((state.choosing.mode === 'before') || (state.choosing.mode === 'after')) {
         const newRoot = insertBeforeOrAfter(root, selectedNode, node, (state.choosing.mode === 'before'));
@@ -410,20 +439,14 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
 
         return {
           ...s,
-          selectionId: node.nid,
-          choosing: null,
+          selectionId: firstUndefSelId || node.nid,
+          choosing: firstUndefSelId ? {key: genuid(), mode: 'modify'} : null,
         };
       } else {
         throw new Error('unimplemented');
       }
     });
   };
-
-  // this shouldn't be repeated every render
-  const globalStaticEnv = initStaticEnv(globalNativeFunctions);
-
-  const staticEnvMap = getStaticEnvMap(root, globalStaticEnv);
-  // const referentNameNode = getReferentNode(displayedSelTree.selectedNode, displayedStaticEnvMap);
 
   // Move focus back to workspace after chooser has closed. This is hacky, but don't know better way to handle.
   const rootElem = useRef<HTMLDivElement>(null);
@@ -438,15 +461,6 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
       rootElem.current.focus();
     }
   });
-
-  const treeViewCtx: TreeViewContext = {
-    // clipboardTopNode: (state.clipboardStack.length > 0) ? state.derivedLookups.streamIdToNode!.get(state.clipboardStack[state.clipboardStack.length-1].streamId) : null,
-    // clipboardRestNodes: state.clipboardStack.slice(0, -1).map(frame => state.derivedLookups.streamIdToNode!.get(frame.streamId)),
-    staticEnvMap,
-    onSelectNodeId: (nid: UID) => {
-      setSelectionId(nid);
-    },
-  };
 
   const positionedForChooserKey: React.MutableRefObject<string | undefined> = useRef();
   const selHighlightElem = useRef<HTMLDivElement>(null);
@@ -505,11 +519,6 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
       {state.choosing && (() => {
         let context: 'tdef-body' | 'subexp' | 'text';
 
-        // TODO: make this stuff correct
-        const selectedNode = nodeIdToNode.get(state.selectionId);
-        if (!selectedNode) {
-          throw new Error();
-        }
         if (selectedNode.kind === NodeKind.Text) {
           context = 'text';
         } else {
@@ -531,14 +540,9 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
 
         const existingNode = (state.choosing.mode === 'modify') ? selectedNode : null;
 
-        const localEnv = staticEnvMap.get(selectedNode);
-        if (!localEnv) {
-          throw new Error();
-        }
-
         return (
           <div className="CodeView-chooser-positioner" style={{position: 'absolute'}}>
-            <Chooser key={state.choosing.key} context={context} existingNode={existingNode} localEnv={localEnv} onCommitChoice={handleCommitChoice} />
+            <Chooser key={state.choosing.key} context={context} existingNode={existingNode} localEnv={selectedNodeLocalEnv} onCommitChoice={handleCommitChoice} />
           </div>
         );
       })()}

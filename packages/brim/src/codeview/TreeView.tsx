@@ -188,7 +188,7 @@ function layoutArray(items: ReadonlyArray<LayoutUnit>, dyn: boolean, forceBlock:
   }
 }
 
-function layoutSimpleNode(treeNode: Node, content: string, styling: string, ctx: TreeViewContext, icon?: [string, string]): LayoutUnit {
+function layoutSimpleNode(treeNode: Node, content: string, styling: string, ctx: TreeViewContext, icon?: [string, string], undef?: boolean): LayoutUnit {
   return {
     reactNode: (
       <SelectableWrapper key={treeNode.nid} selId={treeNode.nid} styling="common" ctx={ctx}>
@@ -203,7 +203,7 @@ function layoutSimpleNode(treeNode: Node, content: string, styling: string, ctx:
       selId: treeNode.nid,
       dir: 'inline',
       children: [],
-      flags: {},
+      flags: undef ? {undef: true} : {},
     },
   };
 };
@@ -382,7 +382,7 @@ function layoutApplicationNode(node: ApplicationNode, ctx: TreeViewContext): Lay
 export function layoutStreamExpressionNode(node: StreamExpressionNode, ctx: TreeViewContext): LayoutUnit {
   switch (node.kind) {
     case NodeKind.UndefinedLiteral:
-      return layoutSimpleNode(node, '\xa0\xa0\xa0\xa0', 'undefined', ctx);
+      return layoutSimpleNode(node, '\xa0\xa0\xa0\xa0', 'undefined', ctx, undefined, true);
 
     case NodeKind.NumberLiteral:
       return layoutSimpleNode(node, node.val.toString(), 'number', ctx);
@@ -596,3 +596,13 @@ export function layoutFunctionDefinitionNode(node: FunctionDefinitionNode, ctx: 
     },
   };
 };
+
+export function layoutAnyNode(node: Node, ctx: TreeViewContext): LayoutUnit {
+  if (isStreamExpressionNode(node)) {
+    return layoutStreamExpressionNode(node, ctx);
+  } else if (node.kind === NodeKind.FunctionDefinition) {
+    return layoutFunctionDefinitionNode(node, ctx);
+  } else {
+    throw new Error();
+  }
+}

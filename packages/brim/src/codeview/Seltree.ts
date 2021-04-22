@@ -4,6 +4,9 @@ interface SeltreeFlags {
   // Is this node a "dynamic array", whose children can
   // be deleted or have siblings inserted before/after?
   dyn?: boolean;
+
+  // Is this node undefined, i.e. a "hole" to be filled?
+  undef?: boolean;
 }
 
 export interface SeltreeNode {
@@ -43,4 +46,19 @@ export function computeSeltreeLookups(root: SeltreeNode): SeltreeLookups {
     parentAndIdx,
     selIdToNode,
   };
+}
+
+export function findFirstUndef(root: SeltreeNode): UID | undefined {
+  if (root.flags.undef && root.selId) {
+    return root.selId;
+  }
+
+  for (const child of root.children) {
+    const childFirst = findFirstUndef(child);
+    if (childFirst) {
+      return childFirst;
+    }
+  }
+
+  return undefined;
 }
