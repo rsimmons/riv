@@ -408,44 +408,56 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
   };
 
   const handleCommitChoice = (node: Node): void => {
-    setState(s => {
-      if (!state.choosing) {
-        throw new Error();
-      }
+    /**
+     * The following code is in some sense "wrong" in that if we update state based on previous state,
+     * we should be using a "functional update" where we pass setState a function. However, based on
+     * the current state, we need to make a call to onUpdateRoot, which has side effects. If we do
+     * that in a functional update, that causes problems.
+     * I'm not sure if there is a better way to handle this, but if we "miss" an update due to referencing
+     * old state, it seems that at least things will still be consistent.
+     */
+    if (!state.choosing) {
+      throw new Error();
+    }
 
-      // This section is sort of crazy. We do all this just to find the next undef
-      const newNodeEnvMap = getStaticEnvMap(node, selectedNodeLocalEnv);
-      const newNodeViewCtx: TreeViewContext = {
-        staticEnvMap: newNodeEnvMap,
-        onSelectNodeId: () => {},
-      };
-      const {seltree: newSeltree} = layoutAnyNode(node, newNodeViewCtx);
-      const firstUndefSelId = findFirstUndef(newSeltree);
+    // This section is sort of crazy. We do all this just to find the next undef
+    const newNodeEnvMap = getStaticEnvMap(node, selectedNodeLocalEnv);
+    const newNodeViewCtx: TreeViewContext = {
+      staticEnvMap: newNodeEnvMap,
+      onSelectNodeId: () => {},
+    };
+    const {seltree: newSeltree} = layoutAnyNode(node, newNodeViewCtx);
+    const firstUndefSelId = newSeltree.flags.undef ? undefined : findFirstUndef(newSeltree); // doesn't count if the node itself is undef
 
-      if ((state.choosing.mode === 'modify')) {
-        const newRoot = replaceNode(root, selectedNode, node);
+    if ((state.choosing.mode === 'modify')) {
+      const newRoot = replaceNode(root, selectedNode, node);
 
-        onUpdateRoot(newRoot);
+      onUpdateRoot(newRoot);
 
-        return {
-          ...s,
-          selectionId: firstUndefSelId || node.nid,
-          choosing: firstUndefSelId ? {key: genuid(), mode: 'modify'} : null,
-        };
-      } else if ((state.choosing.mode === 'before') || (state.choosing.mode === 'after')) {
-        const newRoot = insertBeforeOrAfter(root, selectedNode, node, (state.choosing.mode === 'before'));
+      const newSelectionId: UID = firstUndefSelId || node.nid;
+      const newChoosing: ChooserState | null = firstUndefSelId ? {key: genuid(), mode: 'modify'} : null;
 
-        onUpdateRoot(newRoot);
+      setState(s => ({
+        ...s,
+        selectionId: newSelectionId,
+        choosing: newChoosing,
+      }));
+    } else if ((state.choosing.mode === 'before') || (state.choosing.mode === 'after')) {
+      const newRoot = insertBeforeOrAfter(root, selectedNode, node, (state.choosing.mode === 'before'));
 
-        return {
-          ...s,
-          selectionId: firstUndefSelId || node.nid,
-          choosing: firstUndefSelId ? {key: genuid(), mode: 'modify'} : null,
-        };
-      } else {
-        throw new Error('unimplemented');
-      }
-    });
+      onUpdateRoot(newRoot);
+
+      const newSelectionId: UID = firstUndefSelId || node.nid;
+      const newChoosing: ChooserState | null = firstUndefSelId ? {key: genuid(), mode: 'modify'} : null;
+
+      setState(s => ({
+        ...s,
+        selectionId: newSelectionId,
+        choosing: newChoosing,
+      }));
+    } else {
+      throw new Error('unimplemented');
+    }
   };
 
   // Move focus back to workspace after chooser has closed. This is hacky, but don't know better way to handle.
