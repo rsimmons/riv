@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Node } from '../compiler/Tree';
+import { Node, UndefinedLiteralNode } from '../compiler/Tree';
 import { FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, StreamExpressionNode, ApplicationArgNode, FunctionInterfaceNode, UID, TextNode, StreamBindingNode } from '../compiler/Tree';
 import Fuse from 'fuse.js';
 import { getStaticEnvMap, StaticEnvironment } from '../editor/EditorReducer';
 import { layoutStreamExpressionNode, TreeViewContext, layoutFunctionDefinitionNode, layoutStreamBindingNode } from './TreeView';
-import { functionInterfaceAsPlainText, defaultTreeDefFromFunctionInterface } from '../compiler/FunctionInterface';
 import genuid from '../util/uid';
 import './Chooser.css';
+import { parseTemplateString, templateToPlainText } from './FITemplate';
 
 interface Choice {
   node: StreamExpressionNode | StreamBindingNode | FunctionDefinitionNode;
@@ -47,6 +47,41 @@ function createStreamBinding(name: string): StreamBindingNode {
       kind: NodeKind.UndefinedLiteral,
       nid: genuid(),
     },
+  };
+}
+
+export function functionInterfaceAsPlainText(ifaceNode: FunctionInterfaceNode): string {
+  if (ifaceNode.template) {
+    return templateToPlainText(parseTemplateString(ifaceNode.template, ifaceNode.params));
+  } else {
+    return ifaceNode.name.text;
+  }
+}
+
+export function defaultTreeDefFromFunctionInterface(iface: FunctionInterfaceNode): FunctionDefinitionNode {
+  const pids: ReadonlyMap<UID, UID> = new Map(iface.params.map(param => [param.nid, genuid()]));
+
+  const out: UndefinedLiteralNode | null = iface.output ? {
+    kind: NodeKind.UndefinedLiteral,
+    nid: genuid(),
+  } : null;
+
+  return {
+    kind: NodeKind.FunctionDefinition,
+    nid: genuid(),
+    iface,
+    impl: {
+      kind: NodeKind.TreeImpl,
+      nid: genuid(),
+      pids,
+      body: [
+        {
+          kind: NodeKind.UndefinedLiteral,
+          nid: genuid(),
+        },
+      ],
+      out,
+    }
   };
 }
 
