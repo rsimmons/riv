@@ -450,48 +450,41 @@ const MultiChooser: React.FC<{context: 'tdef-body' | 'subexp', existingNode: Nod
   );
 }
 
-const TextChooser: React.FC<{existingNode: TextNode | null, onCommitChoice: (node: Node) => void}> = ({ existingNode, onCommitChoice }) => {
+const TextChooser: React.FC<{existingNode: TextNode, onCommitChoice: (node: Node) => void}> = ({ existingNode, onCommitChoice }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     inputRef.current && inputRef.current.select();
   }, []);
 
   const [text, setText] = useState(() => {
-    return existingNode ? existingNode.text : '';
+    return existingNode.text;
   });
 
   const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newText = e.target.value;
 
     setText(newText);
+  };
 
-    /*
-    let newNode: TextNode;
-    if (existingNode) {
-      newNode = {
-        ...existingNode,
-        text: newText,
-      };
-    } else {
-      newNode ={
-        kind: NodeKind.Text,
-        nid: genuid(),
-        text: newText,
-      };
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    switch (e.key) {
+      case 'Enter':
+        onCommitChoice({...existingNode, text});
+        e.stopPropagation();
+        break;
     }
-    */
   };
 
   return (
     <div className="Chooser">
-      <input className="Chooser-input" value={text} onChange={onChange} ref={inputRef} autoFocus />
+      <input className="Chooser-input" value={text} onChange={onChange} onKeyDown={onKeyDown} ref={inputRef} autoFocus />
     </div>
   );
 }
 
 const Chooser: React.FC<{context: 'tdef-body' | 'subexp' | 'text', existingNode: Node | null, localEnv: StaticEnvironment, onCommitChoice: (node: Node) => void}> = ({ context, existingNode, localEnv, onCommitChoice }) => {
   if (context === 'text') {
-    if (existingNode && (existingNode.kind !== NodeKind.Text)) {
+    if (!existingNode || (existingNode.kind !== NodeKind.Text)) {
       throw new Error();
     }
     return <TextChooser existingNode={existingNode} onCommitChoice={onCommitChoice} />
