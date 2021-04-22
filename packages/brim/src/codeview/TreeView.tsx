@@ -602,6 +602,8 @@ export function layoutAnyNode(node: Node, ctx: TreeViewContext): LayoutUnit {
     return layoutStreamExpressionNode(node, ctx);
   } else if (node.kind === NodeKind.FunctionDefinition) {
     return layoutFunctionDefinitionNode(node, ctx);
+  } else if (node.kind === NodeKind.StreamBinding) {
+    return layoutStreamBindingNode(node, ctx);
   } else {
     throw new Error();
   }
