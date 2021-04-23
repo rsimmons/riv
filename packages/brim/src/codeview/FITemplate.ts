@@ -22,6 +22,13 @@ export function templateToPlainText(template: FITemplate): string {
   for (const segment of template) {
     if (segment.kind === 'text') {
       resultPieces.push(segment.text);
+    } else {
+      if (segment.preLabel) {
+        resultPieces.push(segment.preLabel);
+      }
+      if (segment.postLabel) {
+        resultPieces.push(segment.postLabel);
+      }
     }
   }
 
