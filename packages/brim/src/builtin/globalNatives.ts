@@ -2,7 +2,7 @@ import { useCallbackReducer, ExecutionContext, useEventEmitter, useVar, useEvent
 import { NodeKind, FunctionInterfaceNode, FunctionDefinitionNode } from '../compiler/Tree';
 import genuid from '../util/uid';
 
-const { showString, animationTime, mouseDown, changeCount, streamMap, audioDriver, random, mouseClickEvts, redCircle, mousePosition } = require('riv-demo-lib');
+const { showString, animationTime, mouseDown, changeCount, streamMap, audioDriver, random, mouseClickEvts, drawCircle, mousePosition } = require('riv-demo-lib');
 
 interface Vec2d {
   x: number;
@@ -129,7 +129,7 @@ type AbbrevFunctionInterface = [/*name*/ string, /*params*/ ReadonlyArray<Abbrev
 
 const strtextNativeFunctions: ReadonlyArray<[string, AbbrevFunctionInterface, Function]> = [
   // simple
-  ['ifte', ['ifte', [['s', 'if', 'boolean'], ['s', 'then', 'A'], ['s', 'else', 'A']], 'A', 'if $0|then $1|else $2'], (cond: any, _then: any, _else: any) => (cond ? _then : _else)],
+  ['ifte', ['ifte', [['s', 'cond', 'boolean'], ['s', 'then', 'A'], ['s', 'else', 'A']], 'A', 'if $0|then $1|else $2'], (cond: any, _then: any, _else: any) => (cond ? _then : _else)],
   ['equals', ['equals', [['s', '', 'A'], ['s', '', 'A']], 'boolean', '$0|equals|$1'], (a: any, b: any) => Object.is(a, b)],
 
 /*
@@ -156,7 +156,7 @@ const strtextNativeFunctions: ReadonlyArray<[string, AbbrevFunctionInterface, Fu
   ['mouseDown', ['mouse button is down', [], 'boolean', ''], mouseDown],
   ['mouseClick', ['mouse clicks', [], 'event<nothing>', ''], mouseClickEvts],
   ['mousePosition', ['mouse position', [], 'vec2', ''], mousePosition],
-  ['redCircle', ['draw red circle', [['s', 'position', 'vec2'], ['s', 'radius', 'number']], 'nothing', ''], redCircle],
+  ['drawCircle', ['draw circle', [['s', 'position', 'vec2'], ['s', 'radius', 'number'], ['s', 'color', 'string']], 'nothing', ''], drawCircle],
 
 /*
 

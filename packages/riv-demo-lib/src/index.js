@@ -258,7 +258,7 @@ export function expFollow(targetValue, speedConstant, time, initialValue) {
   return integral(currentValue => speedConstant*(targetValue - currentValue), time, initialValue);
 }
 
-export function redCircle(position, radius = 25) {
+export function drawCircle(position, radius, color) {
   const p = position || {x: 0, y: 0};
   if (radius < 0) {
     radius = 0;
@@ -268,7 +268,7 @@ export function redCircle(position, radius = 25) {
   const vnode = h('div', {style: {
     position: 'absolute',
     borderRadius: '50%',
-    background: 'red',
+    background: color,
     pointerEvents: 'none',
     userSelect: 'none',
     left: (p.x - halfRadius) + 'px',
@@ -278,6 +278,10 @@ export function redCircle(position, radius = 25) {
   }});
 
   renderDOMAppendedToBody(vnode);
+}
+
+export function redCircle(position, radius = 25) {
+  drawCircle(position, radius);
 }
 
 export function followAtSpeed2d(target, speed, time, initial) {
