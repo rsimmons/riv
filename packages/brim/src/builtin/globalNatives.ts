@@ -249,19 +249,21 @@ const strtextNativeFunctions: ReadonlyArray<[string, AbbrevFunctionInterface, Fu
 
 const globalNativeFunctions: Array<FunctionDefinitionNode> = [];
 
-function expandInterface(abbrevIface: AbbrevFunctionInterface): FunctionInterfaceNode {
+// NOTE: We ensure that parameter-ids are stable, so that we can save/load code that uses builtins
+function expandInterface(abbrevIface: AbbrevFunctionInterface, idPrefix: string): FunctionInterfaceNode {
   const [name, abbrevParams, ret, tmpl] = abbrevIface;
 
   return {
     kind: NodeKind.FunctionInterface,
     nid: genuid(),
     name: {kind: NodeKind.Text, nid: genuid(), text: name},
-    params: abbrevParams.map(([pname, ptype]) => {
+    params: abbrevParams.map(([pname, ptype], idx) => {
+      const pid = idPrefix + idx;
       const paramNode: ParamNode = {
         kind: NodeKind.Param,
-        nid: genuid(),
+        nid: pid,
         name: {kind: NodeKind.Text, nid: genuid(), text: pname},
-        type: (typeof(ptype) === 'string') ? null : expandInterface(ptype),
+        type: (typeof(ptype) === 'string') ? null : expandInterface(ptype, pid + '-'),
       };
       return paramNode;
     }),
@@ -274,7 +276,7 @@ strtextNativeFunctions.forEach(([fid, abbrevIface, jsImpl]) => {
   globalNativeFunctions.push({
     kind: NodeKind.FunctionDefinition,
     nid: fid,
-    iface: expandInterface(abbrevIface),
+    iface: expandInterface(abbrevIface, fid + '-'),
     impl: {
       kind: NodeKind.NativeImpl,
       nid: genuid(),
