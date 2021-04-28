@@ -5,11 +5,10 @@ import Environment from '../util/Environment';
 export class CompilationError extends Error {
 };
 
-// Streams don't map to anything currently, but may map to type info in the future?
-type CompilationStreamEnvironment = Environment<UID, null>;
-type CompilationFunctionEnvironment = Environment<UID, FunctionInterfaceNode>;
+// Value of map is type, but we only do types of functions for now, which is just their interface
+type CompilationEnvironment = Environment<UID, null | FunctionInterfaceNode>;
 
-function compileTreeFuncDef(def: FunctionDefinitionNode, outerStreamEnv: CompilationStreamEnvironment, outerFuncEnv: CompilationFunctionEnvironment): [CompiledDefinition, Set<UID>, Set<UID>] {
+function compileTreeFuncDef(def: FunctionDefinitionNode, outerEnv: CompilationEnvironment): [CompiledDefinition, Set<UID>] {
   const impl = def.impl;
   if (impl.kind !== NodeKind.TreeImpl) {
     throw new Error();
@@ -17,20 +16,17 @@ function compileTreeFuncDef(def: FunctionDefinitionNode, outerStreamEnv: Compila
 
   // TODO: verify that pids match the interface?
 
-  // Note that these don't include all local stream and function ids, but rather only
+  // Note that these don't include all local ids, but rather only
   // the ones that are at the "top level" and are valid to be referenced
-  const localStreamEnv: Map<UID, null> = new Map();
-  // This is a subset of the local stream env, doesn't contain internal parameters
-  const localStreamBinding: Map<UID, NameBindingNode> = new Map();
+  const localEnv: Map<UID, null | FunctionInterfaceNode> = new Map();
 
-  const localFuncEnv: Map<UID, FunctionInterfaceNode> = new Map();
-  // This is a subset of the local function env, doesn't contain internal parameters
-  const localFuncDef: Map<UID, FunctionDefinitionNode> = new Map();
+  // For local ids, what node "creates" them, i.e. that they depend on.
+  // The keys are a subset of the localEnv keys, as they don't contain internal parameters
+  const localCreator: Map<UID, NameBindingNode | FunctionDefinitionNode> = new Map();
 
   // These combined environments share the same local env objects,
   // so setting in local envs will affect these.
-  const combinedStreamEnv: CompilationStreamEnvironment = new Environment(outerStreamEnv, localStreamEnv);
-  const combinedFuncEnv: CompilationFunctionEnvironment = new Environment(outerFuncEnv, localFuncEnv);
+  const combinedEnv: CompilationEnvironment = new Environment(outerEnv, localEnv);
 
   // Add parameters to local environment, and extract internal parameter ids
   const pids: Array<UID> = [];
@@ -42,21 +38,7 @@ function compileTreeFuncDef(def: FunctionDefinitionNode, outerStreamEnv: Compila
 
     pids.push(internalId);
 
-    switch (param.kind) {
-      case NodeKind.StreamParam:
-        localStreamEnv.set(internalId, null);
-        break;
-
-      case NodeKind.FunctionParam:
-        localFuncEnv.set(internalId, param.iface);
-        break;
-
-      default: {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const exhaustive: never = param; // this will cause a type error if we haven't handled all cases
-        throw new Error();
-      }
-    }
+    localEnv.set(internalId, param.type);
   });
 
   // Iterate over stream bindings and top-level function definitions,
@@ -69,12 +51,12 @@ function compileTreeFuncDef(def: FunctionDefinitionNode, outerStreamEnv: Compila
     if (bnode.kind === NodeKind.StreamBinding) {
       // NOTE: When we have nested binding expressions (destructuring),
       // we will want to recursively traverse the LHS binding expression.
-      localStreamEnv.set(bnode.bexpr.nid, null);
-      localStreamBinding.set(bnode.bexpr.nid, bnode.bexpr);
+      localEnv.set(bnode.bexpr.nid, null);
+      localCreator.set(bnode.bexpr.nid, bnode.bexpr);
       bindingExprParent.set(bnode.bexpr, bnode);
     } else if (bnode.kind === NodeKind.FunctionDefinition) {
-      localFuncEnv.set(bnode.nid, bnode.iface);
-      localFuncDef.set(bnode.nid, bnode);
+      localEnv.set(bnode.nid, bnode.iface);
+      localCreator.set(bnode.nid, bnode);
     }
     // top-level (unbound) stream expressions are ignored
   });
@@ -93,77 +75,24 @@ function compileTreeFuncDef(def: FunctionDefinitionNode, outerStreamEnv: Compila
   const consts: Array<ConstStreamSpec> = [];
   const apps: Array<AppSpec> = [];
   const compiledSubdefs: Array<CompiledDefinition> = [];
-  const outerReferencedStreamIds: Set<UID> = new Set();
-  const outerReferencedFunctionIds: Set<UID> = new Set();
+  const outerReferencedIds: Set<UID> = new Set();
 
-  const traverseToStreamId = (sid: UID): void => {
-    if (localStreamEnv.has(sid)) {
-      if (outerStreamEnv.has(sid)) {
+  const traverseToId = (id: UID): void => {
+    if (localEnv.has(id)) {
+      if (outerEnv.has(id)) {
         throw new Error();
       }
-      const target = localStreamBinding.get(sid);
-      if (target) {
-        // target must be a local NameBindingNode
-        traverseToBindingExpr(target);
+      const creator = localCreator.get(id);
+      if (creator && (creator.kind === NodeKind.NameBinding)) {
+        traverseToBindingExpr(creator);
+      } else if (creator && (creator.kind === NodeKind.FunctionDefinition)) {
+        traverseToStreamExpr(creator);
       }
-      // otherwise, it's a local parameter, which we can ignore
-    } else if (outerStreamEnv.has(sid)) {
-      outerReferencedStreamIds.add(sid);
+    } else if (outerEnv.has(id)) {
+      outerReferencedIds.add(id);
     } else {
       throw new Error();
     }
-  };
-
-  const traverseToFunctionId = (fid: UID): void => {
-    if (localFuncEnv.has(fid)) {
-      if (outerFuncEnv.has(fid)) {
-        throw new Error();
-      }
-      const target = localFuncDef.get(fid);
-      if (target) {
-        traverseToFunctionDef(target);
-      }
-    } else if (outerFuncEnv.has(fid)) {
-      outerReferencedFunctionIds.add(fid);
-    } else {
-      throw new Error();
-    }
-  };
-
-  // returns the id of the function def
-  const traverseToFunctionDef = (subdef: FunctionDefinitionNode): UID => {
-    if (permanentMarked.has(subdef)) {
-      return subdef.nid;
-    }
-    if (temporaryMarked.has(subdef)) {
-      throw new CompilationError('graph cycle');
-    }
-    temporaryMarked.add(subdef);
-
-    if (subdef.impl.kind === NodeKind.NativeImpl) {
-      // do nothing
-    } else if (subdef.impl.kind === NodeKind.TreeImpl) {
-
-      // Compile
-      const [compiledSubdef, outerStreamRefs, outerFuncRefs] = compileTreeFuncDef(subdef, combinedStreamEnv, combinedFuncEnv);
-      compiledSubdefs.push(compiledSubdef);
-
-      // Traverse to all dependencies (stream and function)
-      for (const sid of outerStreamRefs) {
-        traverseToStreamId(sid);
-      }
-      for (const fid of outerFuncRefs) {
-        traverseToFunctionId(fid);
-      }
-
-    } else {
-      throw new Error();
-    }
-
-    temporaryMarked.delete(subdef);
-    permanentMarked.add(subdef);
-
-    return subdef.nid;
   };
 
   // Do what is needed to ensure this stream id defines all its "output" ids
@@ -222,7 +151,7 @@ function compileTreeFuncDef(def: FunctionDefinitionNode, outerStreamEnv: Compila
         break;
 
       case NodeKind.StreamReference:
-        traverseToStreamId(node.ref);
+        traverseToId(node.ref);
 
         // Emit a copy from the referenced id to this node's id
         apps.push({
@@ -235,9 +164,9 @@ function compileTreeFuncDef(def: FunctionDefinitionNode, outerStreamEnv: Compila
 
       case NodeKind.Application: {
         // Traverse to applied function id, as it is a dependency
-        traverseToFunctionId(node.fid);
+        traverseToId(node.fid);
 
-        const funcIface = combinedFuncEnv.get(node.fid);
+        const funcIface = combinedEnv.get(node.fid);
         if (!funcIface) {
           throw new CompilationError('applied func iface not found in env');
         }
@@ -254,31 +183,8 @@ function compileTreeFuncDef(def: FunctionDefinitionNode, outerStreamEnv: Compila
             throw new Error();
           }
 
-          switch (param.kind) {
-            case NodeKind.StreamParam: {
-              if (!isStreamExpressionNode(argNode)) {
-                throw new Error();
-              }
-              const sid = traverseToStreamExpr(argNode);
-              compiledArgs.push(sid);
-              break;
-            }
-
-            case NodeKind.FunctionParam: {
-              if (argNode.kind !== NodeKind.FunctionDefinition) {
-                throw new Error();
-              }
-              const fid = traverseToFunctionDef(argNode);
-              compiledArgs.push(fid);
-              break;
-            }
-
-            default: {
-              // eslint-disable-next-line @typescript-eslint/no-unused-vars
-              const exhaustive: never = param; // this will cause a type error if we haven't handled all cases
-              throw new Error();
-            }
-          }
+          const sid = traverseToStreamExpr(argNode);
+          compiledArgs.push(sid);
         }
 
         apps.push({
@@ -287,6 +193,27 @@ function compileTreeFuncDef(def: FunctionDefinitionNode, outerStreamEnv: Compila
           args: compiledArgs,
           oid: funcIface.output ? node.nid : null,
         });
+        break;
+      }
+
+      case NodeKind.FunctionDefinition: {
+        if (node.impl.kind === NodeKind.NativeImpl) {
+          // do nothing
+        } else if (node.impl.kind === NodeKind.TreeImpl) {
+
+          // Compile
+          const [compiledSubdef, outerIdRefs] = compileTreeFuncDef(node, combinedEnv);
+          compiledSubdefs.push(compiledSubdef);
+
+          // Traverse to all dependencies (stream and function)
+          for (const id of outerIdRefs) {
+            traverseToId(id);
+          }
+
+        } else {
+          throw new Error();
+        }
+
         break;
       }
 
@@ -311,8 +238,6 @@ function compileTreeFuncDef(def: FunctionDefinitionNode, outerStreamEnv: Compila
       // TODO: we also need to traverse the LHS, because all those streams may
       // be referenced by inner definitions even if we don't reference them locally.
       traverseToStreamExpr(node.sexpr);
-    } else if (node.kind === NodeKind.FunctionDefinition) {
-      traverseToFunctionDef(node);
     } else {
       throw new Error();
     }
@@ -330,23 +255,16 @@ function compileTreeFuncDef(def: FunctionDefinitionNode, outerStreamEnv: Compila
     oid: impl.out ? impl.out.nid : null,
   };
 
-  return [compiledDefinition, outerReferencedStreamIds, outerReferencedFunctionIds];
+  return [compiledDefinition, outerReferencedIds];
 }
 
 export function compileGlobalTreeDefinition(def: FunctionDefinitionNode, globalFunctionEnvironment: Environment<UID, FunctionDefinitionNode>): CompiledDefinition {
-  const streamEnv: CompilationStreamEnvironment = new Environment();
-
-  const compGlobalFuncEnv: CompilationFunctionEnvironment = new Environment();
+  const compGlobalEnv: CompilationEnvironment = new Environment();
   globalFunctionEnvironment.forEach((defNode, fid) => {
-    compGlobalFuncEnv.set(fid, defNode.iface);
+    compGlobalEnv.set(fid, defNode.iface);
   });
-  const funcEnv: CompilationFunctionEnvironment = new Environment(compGlobalFuncEnv);
 
-  const [compiledDefinition, outerReferencedStreamIds, outerReferencedFunctionIds] = compileTreeFuncDef(def, streamEnv, funcEnv);
-
-  if (outerReferencedStreamIds.size > 0) {
-    throw new Error();
-  }
+  const [compiledDefinition, /*outerReferencedIds*/] = compileTreeFuncDef(def, compGlobalEnv);
 
   return compiledDefinition;
 }

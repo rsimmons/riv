@@ -1,4 +1,4 @@
-import { NodeKind, Node, StreamExpressionNode, isStreamExpressionNode, FunctionInterfaceNode, ApplicationArgNode, ApplicationArgs, isApplicationArgNode, BindingExpressionNode, isBindingExpressionNode, isTreeImplBodyNode, TreeImplBodyNode, FunctionImplNode, isFunctionImplNode, ParamNode, isParamNode, TextNode, NameBindingNode } from './Tree';
+import { NodeKind, Node, StreamExpressionNode, isStreamExpressionNode, FunctionInterfaceNode, ApplicationArgs, BindingExpressionNode, isBindingExpressionNode, isTreeImplBodyNode, TreeImplBodyNode, FunctionImplNode, isFunctionImplNode, ParamNode, TextNode } from './Tree';
 
 export function firstChild(node: Node): Node | undefined {
   const res = iterChildren(node).next();
@@ -29,12 +29,11 @@ export function* iterChildren(node: Node): Generator<Node, void, undefined> {
       yield node.name;
       break;
 
-    case NodeKind.StreamParam:
-      yield node.bind;
-      break;
-
-    case NodeKind.FunctionParam:
-      yield node.iface;
+    case NodeKind.Param:
+      yield node.name;
+      if (node.type) {
+        yield node.type;
+      }
       break;
 
     case NodeKind.FunctionInterface:
@@ -99,11 +98,8 @@ export function visitChildren<N, C>(node: Node, visit: (node: Node, ctx: C) => N
     case NodeKind.NameBinding:
       return visit(node.name, ctx);
 
-    case NodeKind.StreamParam:
-      return visit(node.bind, ctx);
-
-    case NodeKind.FunctionParam:
-      return visit(node.iface, ctx);
+    case NodeKind.Param:
+      return visit(node.name, ctx) || (node.type ? visit(node.type, ctx) : undefined)
 
     case NodeKind.FunctionInterface:
       return visit(node.name, ctx) || visitArray(node.params, visit, ctx);
@@ -149,10 +145,10 @@ export function transformChildren<C>(node: Node, transform: (node: Node, ctx: C)
 
   const xAppArgs = (args: ApplicationArgs): ApplicationArgs => {
     let changed = false;
-    const newArgs: Map<string, ApplicationArgNode> = new Map();
+    const newArgs: Map<string, StreamExpressionNode> = new Map();
     args.forEach((value, key) => {
       const nval = transform(value, ctx);
-      if (!isApplicationArgNode(nval)) {
+      if (!isStreamExpressionNode(nval)) {
         throw new Error();
       }
       if (nval !== value) {
@@ -171,14 +167,6 @@ export function transformChildren<C>(node: Node, transform: (node: Node, ctx: C)
     }
     return tn;
   };
-
-  const xNameBinding = (n: NameBindingNode): NameBindingNode => {
-    const tn = transform(n, ctx);
-    if (tn.kind !== NodeKind.NameBinding) {
-      throw new Error();
-    }
-    return tn;
-  }
 
   const xBindingExpr = (n: BindingExpressionNode): BindingExpressionNode => {
     const tn = transform(n, ctx);
@@ -207,7 +195,7 @@ export function transformChildren<C>(node: Node, transform: (node: Node, ctx: C)
     let changed = false;
     const newArr = arr.map(el => {
       const nel = transform(el, ctx);
-      if (!isParamNode(nel)) {
+      if (nel.kind !== NodeKind.Param) {
         throw new Error();
       }
       if (nel !== el) {
@@ -259,26 +247,16 @@ export function transformChildren<C>(node: Node, transform: (node: Node, ctx: C)
         };
       }
 
-    case NodeKind.StreamParam: {
-      const newBind = xNameBinding(node.bind);
-      if (newBind === node.bind) {
+    case NodeKind.Param: {
+      const newName = xText(node.name);
+      const newType = node.type ? xIface(node.type) : null;
+      if ((newName === node.name) && (newType === node.type)) {
         return node;
       } else {
         return {
           ...node,
-          bind: newBind,
-        };
-      }
-    }
-
-    case NodeKind.FunctionParam: {
-      const newIface = xIface(node.iface);
-      if (newIface === node.iface) {
-        return node;
-      } else {
-        return {
-          ...node,
-          iface: newIface,
+          name: newName,
+          type: newType,
         };
       }
     }
@@ -385,17 +363,6 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
     }
   };
 
-  const replaceNameBinding = (n: NameBindingNode): NameBindingNode => {
-    if (n === oldChild) {
-      if (newChild.kind !== NodeKind.NameBinding) {
-        throw new Error();
-      }
-      return newChild;
-    } else {
-      return n;
-    }
-  };
-
   const replaceImpl = (n: FunctionImplNode): FunctionImplNode => {
     if (n === oldChild) {
       if (!isFunctionImplNode(newChild)) {
@@ -421,10 +388,10 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
   };
 
   const replaceAppArgs = (args: ApplicationArgs): ApplicationArgs => {
-    const newArgs: Map<string, ApplicationArgNode> = new Map();
+    const newArgs: Map<string, StreamExpressionNode> = new Map();
     args.forEach((n, key) => {
       if (n === oldChild) {
-        if (!isApplicationArgNode(newChild)) {
+        if (!isStreamExpressionNode(newChild)) {
           throw new Error();
         }
         newArgs.set(key, newChild);
@@ -449,7 +416,7 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
   const replaceParams = (arr: ReadonlyArray<ParamNode>): ReadonlyArray<ParamNode> => {
     return arr.map(n => {
       if (n === oldChild) {
-        if (!isParamNode(newChild)) {
+        if (newChild.kind !== NodeKind.Param) {
           throw new Error();
         }
         return newChild;
@@ -480,16 +447,11 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
         name: replaceText(node.name),
       }
 
-    case NodeKind.StreamParam:
+    case NodeKind.Param:
       return {
         ...node,
-        bind: replaceNameBinding(node.bind),
-      };
-
-    case NodeKind.FunctionParam:
-      return {
-        ...node,
-        iface: replaceIface(node.iface),
+        name: replaceText(node.name),
+        type: node.type ? replaceIface(node.type) : null,
       };
 
     case NodeKind.FunctionInterface:

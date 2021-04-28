@@ -1,5 +1,5 @@
 import { useCallbackReducer, ExecutionContext, useEventEmitter, useVar, useEventReceiver, useRequestUpdate, useDynamic, useInitialize, useReducer } from 'riv-runtime';
-import { NodeKind, FunctionInterfaceNode, FunctionDefinitionNode } from '../compiler/Tree';
+import { NodeKind, FunctionInterfaceNode, FunctionDefinitionNode, ParamNode } from '../compiler/Tree';
 import genuid from '../util/uid';
 
 const { showString, animationTime, mouseDown, changeCount, streamMap, audioDriver, random, mouseClickEvts, drawCircle, mousePosition } = require('riv-demo-lib');
@@ -124,13 +124,13 @@ function decodeAudioFileToArray(fileData: any) {
   return serializeAsyncToStreamFunc<any, ArrayLike>(fileData, worker, [0]);
 }
 
-type AbbrevFunctionParam = ['s', /*name*/ string, /*type*/ string] | ['f', AbbrevFunctionInterface];
+type AbbrevFunctionParam = [/*name*/ string, /*type*/ string | AbbrevFunctionInterface]
 type AbbrevFunctionInterface = [/*name*/ string, /*params*/ ReadonlyArray<AbbrevFunctionParam>, /*return*/ string, /*tmpl*/ string];
 
 const strtextNativeFunctions: ReadonlyArray<[string, AbbrevFunctionInterface, Function]> = [
   // simple
-  ['ifte', ['ifte', [['s', 'cond', 'boolean'], ['s', 'then', 'A'], ['s', 'else', 'A']], 'A', 'if $0|then $1|else $2'], (cond: any, _then: any, _else: any) => (cond ? _then : _else)],
-  ['equals', ['equals', [['s', '', 'A'], ['s', '', 'A']], 'boolean', '$0|equals|$1'], (a: any, b: any) => Object.is(a, b)],
+  ['ifte', ['ifte', [['cond', 'boolean'], ['then', 'A'], ['else', 'A']], 'A', 'if $0|then $1|else $2'], (cond: any, _then: any, _else: any) => (cond ? _then : _else)],
+  ['equals', ['equals', [['', 'A'], ['', 'A']], 'boolean', '$0|equals|$1'], (a: any, b: any) => Object.is(a, b)],
 
 /*
   // events
@@ -138,25 +138,25 @@ const strtextNativeFunctions: ReadonlyArray<[string, AbbrevFunctionInterface, Fu
 */
 
   // math
-  ['add', ['add', [['s', 'a', 'number'], ['s', 'b', 'number']], 'number', '$0|+|$1'], (a: number, b: number) => a + b],
-  ['sub', ['sub', [['s', 'a', 'number'], ['s', 'b', 'number']], 'number', '$0|-|$1'], (a: number, b: number) => a - b],
-  ['mul', ['mul', [['s', 'a', 'number'], ['s', 'b', 'number']], 'number', '$0|*|$1'], (a: number, b: number) => a * b],
-  ['exp', ['exp', [['s', 'x', 'number']], 'number', 'exp $0'], (v: number) => Math.exp(v)],
+  ['add', ['add', [['a', 'number'], ['b', 'number']], 'number', '$0|+|$1'], (a: number, b: number) => a + b],
+  ['sub', ['sub', [['a', 'number'], ['b', 'number']], 'number', '$0|-|$1'], (a: number, b: number) => a - b],
+  ['mul', ['mul', [['a', 'number'], ['b', 'number']], 'number', '$0|*|$1'], (a: number, b: number) => a * b],
+  ['exp', ['exp', [['x', 'number']], 'number', 'exp $0'], (v: number) => Math.exp(v)],
 /*
   ['mul', '{0::number} * {1::number} => {::number}', (a: number, b: number) => a * b],
   ['div', '{0::number} / {1::number} => {::number}', (a: number, b: number) => a / b],
   ['sqr', '{0::number} squared => {::number}', (v: number) => v*v],
 */
-  ['cos', ['cosine of', [['s', 'radians', 'number']], 'number', ''], Math.cos],
+  ['cos', ['cosine of', [['radians', 'number']], 'number', ''], Math.cos],
 
   // dom/browser
-  ['showString', ['show', [['s', 'value', 'A']], 'void', ''], showString],
+  ['showString', ['show', [['value', 'A']], 'void', ''], showString],
   ['animationTime', ['animation time', [], 'number', ''], animationTime],
-  ['random', ['random from 0 to 1', [['s', 'repick', 'event<T>']], 'number', ''], random],
+  ['random', ['random from 0 to 1', [['repick', 'event<T>']], 'number', ''], random],
   ['mouseDown', ['mouse button is down', [], 'boolean', ''], mouseDown],
   ['mouseClick', ['mouse clicks', [], 'event<nothing>', ''], mouseClickEvts],
   ['mousePosition', ['mouse position', [], 'vec2', ''], mousePosition],
-  ['drawCircle', ['draw circle', [['s', 'position', 'vec2'], ['s', 'radius', 'number'], ['s', 'color', 'string']], 'nothing', ''], drawCircle],
+  ['drawCircle', ['draw circle', [['position', 'vec2'], ['radius', 'number'], ['color', 'string']], 'nothing', ''], drawCircle],
 
 /*
 
@@ -216,11 +216,11 @@ const strtextNativeFunctions: ReadonlyArray<[string, AbbrevFunctionInterface, Fu
 
   // higher-order
   ['reduce', ['reduce', [
-    ['s', 'init', 'S'],
-    ['s', 'events', 'event<A>'],
-    ['f', ['compute new val', [
-      ['s', 'old', 'S'],
-      ['s', 'event', 'A'],
+    ['init', 'S'],
+    ['events', 'event<A>'],
+    ['', ['compute new val', [
+      ['old', 'S'],
+      ['event', 'A'],
     ], 'step<S>', '']],
   ], 'S', 'set|initially to $0|then when $1|$2'], (ival: any, evts: any, reducer: any) => {
      const state = useVar(ival);
@@ -233,10 +233,10 @@ const strtextNativeFunctions: ReadonlyArray<[string, AbbrevFunctionInterface, Fu
   }],
 
   ['audioDriver', ['play generated audio', [
-    ['f', ['compute sample', [
-      ['s', 'audio time', 'step<number>'],
-      ['s', 'next sample', 'event<nothing>'],
-      ['s', 'sample rate', 'step<number>'],
+    ['', ['compute sample', [
+      ['audio time', 'step<number>'],
+      ['next sample', 'event<nothing>'],
+      ['sample rate', 'step<number>'],
     ], 'step<number>', '']],
   ], 'void', ''], audioDriver],
 /*
@@ -256,33 +256,14 @@ function expandInterface(abbrevIface: AbbrevFunctionInterface): FunctionInterfac
     kind: NodeKind.FunctionInterface,
     nid: genuid(),
     name: {kind: NodeKind.Text, nid: genuid(), text: name},
-    params: abbrevParams.map((abbrevParam, idx) => {
-      switch (abbrevParam[0]) {
-        case 's':
-          const pname = abbrevParam[1];
-          // const ptype = abbrevParam[2];
-          return {
-            kind: NodeKind.StreamParam,
-            nid: genuid(),
-            bind: {
-              kind: NodeKind.NameBinding,
-              nid: genuid(),
-              name: {kind: NodeKind.Text, nid: genuid(), text: pname},
-            },
-          };
-
-        case 'f': {
-          const piface = abbrevParam[1];
-          return {
-            kind: NodeKind.FunctionParam,
-            nid: genuid(),
-            iface: expandInterface(piface),
-          };
-        }
-
-        default:
-          throw new Error();
-      }
+    params: abbrevParams.map(([pname, ptype]) => {
+      const paramNode: ParamNode = {
+        kind: NodeKind.Param,
+        nid: genuid(),
+        name: {kind: NodeKind.Text, nid: genuid(), text: pname},
+        type: (typeof(ptype) === 'string') ? null : expandInterface(ptype),
+      };
+      return paramNode;
     }),
     output: (ret !== 'void'),
     template: tmpl ? tmpl : undefined,

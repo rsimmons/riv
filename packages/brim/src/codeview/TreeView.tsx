@@ -213,12 +213,17 @@ function layoutStreamReferenceNode(node: StreamReferenceNode, ctx: TreeViewConte
   if (!env) {
     throw new Error();
   }
-  const nameBinding = env.streamEnv.get(node.ref);
-  if (!nameBinding) {
+  const envValue = env.get(node.ref);
+  if (!envValue) {
     throw new Error();
   }
 
-  return layoutSimpleNode(node, nameBinding.name.text || '\xa0\xa0\xa0\xa0', 'streamref', ctx);
+  // TODO: If the referent is a function, we don't handle this correctly
+  if (envValue.name) {
+    return layoutSimpleNode(node, envValue.name.text || '\xa0\xa0\xa0\xa0', 'streamref', ctx);
+  } else {
+    throw new Error();
+  }
 };
 
 /*
@@ -250,10 +255,14 @@ function layoutApplicationNode(node: ApplicationNode, ctx: TreeViewContext): Lay
   if (!env) {
     throw new Error();
   }
-  const funcIface = env.functionEnv.get(node.fid);
-  if (!funcIface) {
+  const envValue = env.get(node.fid);
+  if (!envValue) {
     throw new Error();
   }
+  if (!envValue.type || (envValue.type.kind !== NodeKind.FunctionInterface)) {
+    throw new Error();
+  }
+  const funcIface = envValue.type;
 
   const lsItems: Array<LabeledStructureItem> = [];
   if (funcIface.template) {
@@ -276,20 +285,7 @@ function layoutApplicationNode(node: ApplicationNode, ctx: TreeViewContext): Lay
           throw new Error();
         }
 
-        let loNode: LayoutUnit;
-        if (param.kind === NodeKind.StreamParam) {
-          if (!isStreamExpressionNode(arg)) {
-            throw new Error();
-          }
-          loNode = layoutStreamExpressionNode(arg, ctx);
-        } else if (param.kind === NodeKind.FunctionParam) {
-          if (arg.kind !== NodeKind.FunctionDefinition) {
-            throw new Error();
-          }
-          loNode = layoutFunctionDefinitionNode(arg, ctx);
-        } else {
-          throw new Error();
-        }
+        const loNode = layoutStreamExpressionNode(arg, ctx);
 
         lsItems.push({
           kind: 'node',
@@ -311,37 +307,12 @@ function layoutApplicationNode(node: ApplicationNode, ctx: TreeViewContext): Lay
         throw new Error();
       }
 
-      switch (param.kind) {
-        case NodeKind.StreamParam:
-          if (!isStreamExpressionNode(arg)) {
-            throw new Error();
-          }
-          lsItems.push({
-            kind: 'node',
-            preLabel: param.bind.name.text,
-            postLabel: '',
-            node: layoutStreamExpressionNode(arg, ctx),
-          });
-          break;
-
-        case NodeKind.FunctionParam:
-          if (arg.kind !== NodeKind.FunctionDefinition) {
-            throw new Error();
-          }
-          lsItems.push({
-            kind: 'node',
-            preLabel: '',
-            postLabel: '',
-            node: layoutFunctionDefinitionNode(arg, ctx),
-          });
-          break;
-
-        default: {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const exhaustive: never = param; // this will cause a type error if we haven't handled all cases
-          throw new Error();
-        }
-      }
+      lsItems.push({
+        kind: 'node',
+        preLabel: param.name.text,
+        postLabel: '',
+        node: layoutStreamExpressionNode(arg, ctx),
+      });
     }
   }
 
@@ -399,6 +370,9 @@ export function layoutStreamExpressionNode(node: StreamExpressionNode, ctx: Tree
     case NodeKind.Application:
       return layoutApplicationNode(node, ctx);
 
+    case NodeKind.FunctionDefinition:
+      return layoutFunctionDefinitionNode(node, ctx);
+
     default: {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const exhaustive: never = node; // this will cause a type error if we haven't handled all cases
@@ -425,20 +399,11 @@ function layoutBindingExpressionNode(node: BindingExpressionNode, ctx: TreeViewC
 function layoutParamNode(node: ParamNode, ctx: TreeViewContext): LayoutUnit {
   let loParamChild: LayoutUnit;
 
-  switch (node.kind) {
-    case NodeKind.StreamParam:
-      loParamChild = layoutNameBindingNode(node.bind, ctx);
-      break;
-
-    case NodeKind.FunctionParam:
-      loParamChild = layoutFunctionInterfaceNode(node.iface, ctx);
-      break;
-
-    default: {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const exhaustive: never = node; // this will cause a type error if we haven't handled all cases
-      throw new Error();
-    }
+  // TODO: We don't yet properly support a param having a name AND a type
+  if (node.type === null) {
+    loParamChild = layoutTextNode(node.name, ctx);
+  } else {
+    loParamChild = layoutFunctionInterfaceNode(node.type, ctx);
   }
 
   return {
@@ -522,8 +487,6 @@ function layoutTreeImplBodyNode(node: TreeImplBodyNode, ctx: TreeViewContext): L
     return layoutStreamExpressionNode(node, ctx);
   } else if (node.kind === NodeKind.StreamBinding) {
     return layoutStreamBindingNode(node, ctx);
-  } else if (node.kind === NodeKind.FunctionDefinition) {
-    return layoutFunctionDefinitionNode(node, ctx);
   } else {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const exhaustive: never = node; // this will cause a type error if we haven't handled all cases
@@ -600,8 +563,6 @@ export function layoutFunctionDefinitionNode(node: FunctionDefinitionNode, ctx: 
 export function layoutAnyNode(node: Node, ctx: TreeViewContext): LayoutUnit {
   if (isStreamExpressionNode(node)) {
     return layoutStreamExpressionNode(node, ctx);
-  } else if (node.kind === NodeKind.FunctionDefinition) {
-    return layoutFunctionDefinitionNode(node, ctx);
   } else if (node.kind === NodeKind.StreamBinding) {
     return layoutStreamBindingNode(node, ctx);
   } else if (node.kind === NodeKind.Text) {

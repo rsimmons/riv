@@ -25,8 +25,7 @@ export enum NodeKind {
 
   // function interfaces
   FunctionName = 'fname',
-  StreamParam = 'sparam',
-  FunctionParam = 'fparam',
+  Param = 'param',
   FunctionInterface = 'fint',
 
   // functions implementations, definitions
@@ -90,13 +89,8 @@ export interface StreamReferenceNode {
   readonly ref: UID; // the stream we are referencing
 }
 
-export type ApplicationArgNode = StreamExpressionNode | FunctionDefinitionNode;
-export function isApplicationArgNode(node: Node): node is ApplicationArgNode {
-  return isStreamExpressionNode(node) || (node.kind === NodeKind.FunctionDefinition);
-}
-
 export type ApplicationSettings = any;
-export type ApplicationArgs = ReadonlyMap<UID, ApplicationArgNode>;
+export type ApplicationArgs = ReadonlyMap<UID, StreamExpressionNode>;
 
 export interface ApplicationNode {
   readonly kind: NodeKind.Application;
@@ -106,9 +100,9 @@ export interface ApplicationNode {
   readonly settings?: ApplicationSettings;
 }
 
-export type StreamExpressionNode = SimpleLiteralNode | StreamReferenceNode | ApplicationNode;
+export type StreamExpressionNode = SimpleLiteralNode | StreamReferenceNode | ApplicationNode | FunctionDefinitionNode;
 export function isStreamExpressionNode(node: Node): node is StreamExpressionNode {
-  return isSimpleLiteralNode(node) || (node.kind === NodeKind.StreamReference) || (node.kind === NodeKind.Application);
+  return isSimpleLiteralNode(node) || (node.kind === NodeKind.StreamReference) || (node.kind === NodeKind.Application) || (node.kind === NodeKind.FunctionDefinition);
 }
 
 /**
@@ -119,7 +113,6 @@ export interface NameBindingNode {
   readonly kind: NodeKind.NameBinding;
   readonly nid: UID;
   readonly name: TextNode;
-  // TODO: type
 }
 
 export type BindingExpressionNode = NameBindingNode;
@@ -132,21 +125,11 @@ export function isBindingExpressionNode(node: Node): node is BindingExpressionNo
  * FUNCTION INTERFACES
  */
 
-export interface StreamParamNode {
-  readonly kind: NodeKind.StreamParam;
+export interface ParamNode {
+  readonly kind: NodeKind.Param;
   readonly nid: UID; // this doubles as the id used to identify parameters in applications
-  readonly bind: NameBindingNode;
-}
-
-export interface FunctionParamNode {
-  readonly kind: NodeKind.FunctionParam;
-  readonly nid: UID; // this doubles as the id used to identify parameters in applications
-  readonly iface: FunctionInterfaceNode;
-}
-
-export type ParamNode = StreamParamNode | FunctionParamNode;
-export function isParamNode(node: Node): node is ParamNode {
-  return (node.kind === NodeKind.StreamParam) || (node.kind === NodeKind.FunctionParam);
+  readonly name: TextNode;
+  readonly type: null | FunctionInterfaceNode;
 }
 
 export interface FunctionInterfaceNode {
@@ -177,9 +160,9 @@ export interface StreamBindingNode {
   readonly sexpr: StreamExpressionNode; // RHS
 }
 
-export type TreeImplBodyNode = StreamExpressionNode | StreamBindingNode | FunctionDefinitionNode;
+export type TreeImplBodyNode = StreamExpressionNode | StreamBindingNode;
 export function isTreeImplBodyNode(node: Node): node is TreeImplBodyNode {
-  return isStreamExpressionNode(node) || (node.kind === NodeKind.StreamBinding) || (node.kind === NodeKind.FunctionDefinition);
+  return isStreamExpressionNode(node) || (node.kind === NodeKind.StreamBinding);
 }
 
 export interface TreeImplNode {
@@ -225,4 +208,4 @@ export type ValueTypeNode = ValueTypeAppNode | ValueTypeVarNode;
  * NODE UNION TYPE
  */
 
-export type Node = TextNode | StreamExpressionNode | BindingExpressionNode | ParamNode | FunctionInterfaceNode | StreamBindingNode | FunctionImplNode | FunctionDefinitionNode;
+export type Node = TextNode | StreamExpressionNode | BindingExpressionNode | ParamNode | FunctionInterfaceNode | StreamBindingNode | FunctionImplNode;

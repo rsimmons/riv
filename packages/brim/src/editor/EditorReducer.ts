@@ -1,5 +1,5 @@
 import genuid from '../util/uid';
-import { UID, NodeKind, Node, FunctionDefinitionNode, FunctionInterfaceNode, NameBindingNode, TreeImplNode } from '../compiler/Tree';
+import { UID, NodeKind, Node, FunctionDefinitionNode, FunctionInterfaceNode, NameBindingNode, TreeImplNode, ParamNode, TextNode } from '../compiler/Tree';
 import { compileGlobalTreeDefinition, CompilationError } from '../compiler/Compiler';
 import { createNullaryVoidRootExecutionContext, beginBatch, endBatch } from 'riv-runtime';
 import { createLiveFunction } from '../runner/LiveFunction';
@@ -38,44 +38,23 @@ export interface Action {
   newProgram?: any;
 }
 
-/*
-function firstUndefinedNode(node: Node, after: Path | undefined = undefined): [Node, Path] | undefined {
-  let passed = false; // have we passed the "after" path?
-  let result: [Node, Path] | undefined;
-
-  traverseTree(node, {}, (node, path) => {
-    if (after && pathIsPrefix(after, path)) {
-      passed = true;
-    }
-
-    if (node.type === 'UndefinedLiteral') {
-      if (passed || !after) {
-        result = [node, path];
-        return [true, node];
-      }
-    }
-    return [false, node];
-  });
-
-  return result;
+interface StaticEnvironmentValue {
+  creator: NameBindingNode | FunctionDefinitionNode | ParamNode;
+  name?: TextNode;
+  type: null | FunctionInterfaceNode;
 }
-*/
-
-export interface StaticEnvironment {
-  streamEnv: Environment<UID, NameBindingNode>;
-  functionEnv: Environment<UID, FunctionInterfaceNode>;
-}
+export type StaticEnvironment = Environment<UID, StaticEnvironmentValue>;
 
 export function initStaticEnv(globalFunctions: ReadonlyArray<FunctionDefinitionNode>): StaticEnvironment {
-  const globalFunctionEnv: Environment<UID, FunctionInterfaceNode> = new Environment();
+  const globalEnv: Environment<UID, StaticEnvironmentValue> = new Environment();
   for (const fdef of globalFunctions) {
-    globalFunctionEnv.set(fdef.nid, fdef.iface);
+    globalEnv.set(fdef.nid, {
+      creator: fdef,
+      type: fdef.iface,
+    });
   }
 
-  return {
-    streamEnv: new Environment(),
-    functionEnv: globalFunctionEnv,
-  };
+  return globalEnv;
 }
 
 function extendStaticEnv(outer: StaticEnvironment, def: FunctionDefinitionNode): StaticEnvironment {
@@ -84,46 +63,47 @@ function extendStaticEnv(outer: StaticEnvironment, def: FunctionDefinitionNode):
   }
   const treeImpl: TreeImplNode = def.impl;
 
-  const streamEnv: Environment<UID, NameBindingNode> = new Environment(outer.streamEnv);
-  const functionEnv: Environment<UID, FunctionInterfaceNode> = new Environment(outer.functionEnv);
+  const env: Environment<UID, StaticEnvironmentValue> = new Environment(outer);
 
   def.iface.params.forEach(param => {
     const internalId = treeImpl.pids.get(param.nid);
     if (!internalId) {
       throw new Error();
     }
-    if (param.kind === NodeKind.StreamParam) {
-      if (streamEnv.has(internalId)) {
-        throw new Error();
-      }
-      streamEnv.set(internalId, param.bind);
-    } else if (param.kind === NodeKind.FunctionParam) {
-      if (functionEnv.has(internalId)) {
-        throw new Error();
-      }
-      functionEnv.set(internalId, param.iface);
-    } else {
+    if (env.has(internalId)) {
       throw new Error();
     }
+    env.set(internalId, {
+      creator: param,
+      name: param.name,
+      type: param.type,
+    });
   });
 
   const visit = (node: Node): void => {
     if (node.kind === NodeKind.StreamBinding) {
       if (node.bexpr.kind === NodeKind.NameBinding) {
-        if (streamEnv.has(node.bexpr.nid)) {
+        if (env.has(node.bexpr.nid)) {
           throw new Error('stream ids must be unique');
         }
-        streamEnv.set(node.bexpr.nid, node.bexpr);
+        env.set(node.bexpr.nid, {
+          creator: node.bexpr,
+          name: node.bexpr.name,
+          type: null, // TODO: this is not correct, but OK for now. if we bind a function, this should have the function's type
+        });
       } else {
         throw new Error();
       }
     }
 
     if (node.kind === NodeKind.FunctionDefinition) {
-      if (functionEnv.has(node.nid)) {
+      if (env.has(node.nid)) {
         throw new Error('function ids must be unique');
       }
-      functionEnv.set(node.nid, node.iface);
+      env.set(node.nid, {
+        creator: node,
+        type: node.iface,
+      });
     } else {
       visitChildren(node, visit, undefined);
     }
@@ -131,10 +111,7 @@ function extendStaticEnv(outer: StaticEnvironment, def: FunctionDefinitionNode):
 
   visitChildren(def, visit, undefined);
 
-  return {
-    streamEnv,
-    functionEnv,
-  };
+  return env;
 }
 
 // compute a map from every node to its static env
@@ -174,11 +151,11 @@ export function getReferentNode(node: Node, staticEnvMap: Map<Node, StaticEnviro
     if (!env) {
       throw new Error();
     }
-    const nameBinding = env.streamEnv.get(node.ref);
-    if (!nameBinding) {
+    const referent = env.get(node.ref);
+    if (!referent) {
       throw new Error();
     }
-    return nameBinding;
+    return referent.creator;
   }
 }
 
@@ -189,6 +166,7 @@ function pushUndo(state: State): State {
   };
 }
 
+/*
 function fixupDanglingRefs(mainDef: FunctionDefinitionNode, globalFunctions: ReadonlyArray<FunctionDefinitionNode>): FunctionDefinitionNode {
   const globalEnv = initStaticEnv(globalFunctions);
 
@@ -225,6 +203,7 @@ function fixupDanglingRefs(mainDef: FunctionDefinitionNode, globalFunctions: Rea
 
   return newMain;
 }
+*/
 
 // NOTE: May throw a compiler exception
 function compileMainDef(mainDef: FunctionDefinitionNode, globalFunctions: ReadonlyArray<FunctionDefinitionNode>): CompiledDefinition {

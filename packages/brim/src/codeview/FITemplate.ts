@@ -38,8 +38,6 @@ export function templateToPlainText(template: FITemplate): string {
 export function parseTemplateString(tmpl: string, params: ReadonlyArray<ParamNode>): FITemplate {
   const result: Array<FITemplateSegment> = [];
 
-  const segs = tmpl.split(/(\$[0-9]+)/); // NOTE: not robust, doesn't support escaping $
-
   const paramIdxToId = new Map(params.map((param, idx) => [idx, param.nid]));
   const getParamId = (idx: number) => {
     const pid = paramIdxToId.get(idx);

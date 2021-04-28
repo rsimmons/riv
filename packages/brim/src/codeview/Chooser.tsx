@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Node, UndefinedLiteralNode } from '../compiler/Tree';
-import { FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, StreamExpressionNode, ApplicationArgNode, FunctionInterfaceNode, UID, TextNode, StreamBindingNode } from '../compiler/Tree';
+import { FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, StreamExpressionNode, FunctionInterfaceNode, UID, TextNode, StreamBindingNode } from '../compiler/Tree';
 import Fuse from 'fuse.js';
 import { getStaticEnvMap, StaticEnvironment } from '../editor/EditorReducer';
-import { layoutStreamExpressionNode, TreeViewContext, layoutFunctionDefinitionNode, layoutStreamBindingNode } from './TreeView';
+import { layoutStreamExpressionNode, TreeViewContext, layoutStreamBindingNode } from './TreeView';
 import genuid from '../util/uid';
 import './Chooser.css';
 import { parseTemplateString, templateToPlainText } from './FITemplate';
@@ -18,9 +18,6 @@ const ChoiceView: React.FC<{choice: Choice, treeViewCtx: TreeViewContext}> = ({ 
     return <>{reactNode}</>;
   } else if (choice.node.kind === NodeKind.StreamBinding) {
     const {reactNode} = layoutStreamBindingNode(choice.node, treeViewCtx);
-    return <>{reactNode}</>;
-  } else if (choice.node.kind === NodeKind.FunctionDefinition) {
-    const {reactNode} = layoutFunctionDefinitionNode(choice.node, treeViewCtx);
     return <>{reactNode}</>;
   } else {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -167,34 +164,35 @@ const MultiChooser: React.FC<{context: 'tdef-body' | 'subexp', existingNode: Nod
 
     const searchItems: Array<SearchItem> = [];
 
-    const streamEnv = localEnv.streamEnv;
-    streamEnv.forEach((sdef, sid) => {
-      // TODO: we used to check for a self-reference here. do we still need to?
-      searchItems.push({
-        name: sdef.name.text || ' ',
-        data: {
-          kind: 'node',
-          node: {
-            kind: NodeKind.StreamReference,
-            nid: genuid(),
-            ref: sid,
-          },
-        },
-      });
-    });
-
-    const functionEnv = localEnv.functionEnv;
-    functionEnv.forEach((ifaceNode, fid) => {
-      const defAsText = functionInterfaceAsPlainText(ifaceNode);
-      if ((context === 'tdef-body') || ifaceNode.output) {
+    localEnv.forEach((envValue, sid) => {
+      if (envValue.type === null) {
+        if (!envValue.name) {
+          throw new Error(); // TODO: We might not want to require this, but it works for now
+        }
         searchItems.push({
-          name: defAsText,
+          name: envValue.name.text || ' ',
           data: {
-            kind: 'func',
-            iface: ifaceNode,
-            fid,
+            kind: 'node',
+            node: {
+              kind: NodeKind.StreamReference,
+              nid: genuid(),
+              ref: sid,
+            },
           },
         });
+      } else {
+        const ifaceNode = envValue.type;
+        const defAsText = functionInterfaceAsPlainText(ifaceNode);
+        if ((context === 'tdef-body') || ifaceNode.output) {
+          searchItems.push({
+            name: defAsText,
+            data: {
+              kind: 'func',
+              iface: ifaceNode,
+              fid: sid,
+            },
+          });
+        }
       }
     });
 
@@ -232,27 +230,16 @@ const MultiChooser: React.FC<{context: 'tdef-body' | 'subexp', existingNode: Nod
         case 'func': {
           const {iface, fid} = result.item.data;
 
-          const args: Map<string, ApplicationArgNode> = new Map();
+          const args: Map<string, StreamExpressionNode> = new Map();
 
           iface.params.forEach(param => {
-            switch (param.kind) {
-              case NodeKind.StreamParam:
-                // TODO: wtf was infixMode doing here before?
-                args.set(param.nid, {
-                  kind: NodeKind.UndefinedLiteral,
-                  nid: genuid(),
-                });
-                break;
-
-              case NodeKind.FunctionParam:
-                args.set(param.nid, defaultTreeDefFromFunctionInterface(param.iface));
-                break;
-
-              default: {
-                // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                const exhaustive: never = param; // this will cause a type error if we haven't handled all cases
-                throw new Error();
-              }
+            if (param.type === null) {
+              args.set(param.nid, {
+                kind: NodeKind.UndefinedLiteral,
+                nid: genuid(),
+              });
+            } else {
+              args.set(param.nid, defaultTreeDefFromFunctionInterface(param.type));
             }
           });
 
@@ -296,13 +283,10 @@ const MultiChooser: React.FC<{context: 'tdef-body' | 'subexp', existingNode: Nod
             name: {kind: NodeKind.Text, nid: genuid(), text: text.trim()},
             params: [
               {
-                kind: NodeKind.StreamParam,
+                kind: NodeKind.Param,
                 nid: singleParamId,
-                bind: {
-                  kind: NodeKind.NameBinding,
-                  nid: genuid(),
-                  name: {kind: NodeKind.Text, nid: genuid(), text: 'param'},
-                },
+                name: {kind: NodeKind.Text, nid: genuid(), text: 'param'},
+                type: null,
               },
             ],
             output: true,
