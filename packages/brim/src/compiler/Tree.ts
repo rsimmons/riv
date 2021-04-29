@@ -26,6 +26,8 @@ export enum NodeKind {
   // function interfaces
   FunctionName = 'fname',
   Param = 'param',
+  AnyType = 'anytype',
+  Void = 'void',
   FunctionInterface = 'fint',
 
   // functions implementations, definitions
@@ -132,12 +134,27 @@ export interface ParamNode {
   readonly type: null | FunctionInterfaceNode;
 }
 
+export interface AnyTypeNode {
+  readonly kind: NodeKind.AnyType;
+  readonly nid: UID;
+}
+
+export interface VoidNode {
+  readonly kind: NodeKind.Void;
+  readonly nid: UID;
+}
+
+export type OutputTypeNode = AnyTypeNode | VoidNode;
+export function isOutputTypeNode(node: Node): node is OutputTypeNode {
+  return (node.kind === NodeKind.AnyType) || (node.kind === NodeKind.Void);
+}
+
 export interface FunctionInterfaceNode {
   readonly kind: NodeKind.FunctionInterface;
   readonly nid: UID; // this is the function id associated with this interface
   readonly name: TextNode;
   readonly params: ReadonlyArray<ParamNode>;
-  readonly output: boolean; // this will eventually become a type?
+  readonly output: OutputTypeNode;
   readonly template?: string; // this will eventually become a TextNode?
   // readonly createCustomUI?: (underNode: HTMLElement, settings: ApplicationSettings, onChange: (change: ApplicationSettings) => void) => (() => void); // returns "shutdown" closure
 }
@@ -170,8 +187,8 @@ export interface TreeImplNode {
   readonly nid: UID;
   // pids maps nid of function interface param to the internal id
   readonly pids: ReadonlyMap<UID, UID>;
+  // If impl output is not void, there must be a last body node that is an expression (not binding).
   readonly body: ReadonlyArray<TreeImplBodyNode>;
-  readonly out: StreamExpressionNode | null;
 }
 
 export type FunctionImplNode = NativeImplNode | TreeImplNode;
@@ -208,4 +225,4 @@ export type ValueTypeNode = ValueTypeAppNode | ValueTypeVarNode;
  * NODE UNION TYPE
  */
 
-export type Node = TextNode | StreamExpressionNode | BindingExpressionNode | ParamNode | FunctionInterfaceNode | StreamBindingNode | FunctionImplNode;
+export type Node = TextNode | StreamExpressionNode | BindingExpressionNode | ParamNode | FunctionInterfaceNode | StreamBindingNode | FunctionImplNode | OutputTypeNode;

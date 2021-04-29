@@ -191,7 +191,7 @@ function compileTreeFuncDef(def: FunctionDefinitionNode, outerEnv: CompilationEn
           aid: node.nid,
           fid: node.fid,
           args: compiledArgs,
-          oid: funcIface.output ? node.nid : null,
+          oid: (funcIface.output.kind !== NodeKind.Void) ? node.nid : null,
         });
         break;
       }
@@ -242,8 +242,19 @@ function compileTreeFuncDef(def: FunctionDefinitionNode, outerEnv: CompilationEn
       throw new Error();
     }
   }
-  if (impl.out) {
-    traverseToStreamExpr(impl.out);
+
+  let oid: UID | null;
+  if (def.iface.output.kind === NodeKind.Void) {
+    oid = null;
+  } else {
+    if (impl.body.length === 0) {
+      throw new Error();
+    }
+    const lastBodyNode = impl.body[impl.body.length-1];
+    if (!isStreamExpressionNode(lastBodyNode)) {
+      throw new Error();
+    }
+    oid = lastBodyNode.nid;
   }
 
   const compiledDefinition: CompiledDefinition = {
@@ -252,7 +263,7 @@ function compileTreeFuncDef(def: FunctionDefinitionNode, outerEnv: CompilationEn
     consts,
     apps,
     defs: compiledSubdefs,
-    oid: impl.out ? impl.out.nid : null,
+    oid,
   };
 
   return [compiledDefinition, outerReferencedIds];

@@ -419,15 +419,34 @@ function layoutParamNode(node: ParamNode, ctx: TreeViewContext): LayoutUnit {
 }
 
 function layoutFunctionInterfaceNode(node: FunctionInterfaceNode, ctx: TreeViewContext): LayoutUnit {
-  const loName = layoutTextNode(node.name, ctx);
+  const items: Array<LayoutUnit> = [];
 
-  const loParams = node.params.map(n => layoutParamNode(n, ctx));
-  const loParamsArray = layoutArray(loParams, true, false);
+  items.push(layoutTextNode(node.name, ctx));
 
-  // TODO: handle node.output when we can. maybe use →
+  // We avoid creating an empty params seltree for now
+  if (node.params.length > 0) {
+    const loParams = node.params.map(n => layoutParamNode(n, ctx));
+    const loParamsArray = layoutArray(loParams, true, false);
+    items.push(loParamsArray);
+  }
 
-  // We avoid creating an empty params seltree for now, until we do the thing where we have a dummy node
-  const loIfaceInner = layoutArray([loName].concat(loParamsArray.seltree.children.length ? [loParamsArray] : []), false, false);
+  if (node.output.kind !== NodeKind.Void) {
+    const loOutput = layoutSimpleNode(node.output, 'any', 'name', ctx);
+    if (loOutput.size === undefined) {
+      throw new Error();
+    }
+    items.push({
+      reactNode: <div>→ {loOutput.reactNode}</div>,
+      size: loOutput.size + 1,
+      seltree: {
+        dir: 'inline',
+        children: [loOutput.seltree],
+        flags: {},
+      },
+    });
+  }
+
+  const loIfaceInner = layoutArray(items, false, false);
 
   return {
     ...loIfaceInner,
@@ -494,24 +513,39 @@ function layoutTreeImplBodyNode(node: TreeImplBodyNode, ctx: TreeViewContext): L
   }
 };
 
-function layoutTreeImplNode(node: TreeImplNode, forceBlock: boolean, ctx: TreeViewContext): LayoutUnit {
+function layoutTreeImplNode(node: TreeImplNode, iface: FunctionInterfaceNode, forceBlock: boolean, ctx: TreeViewContext): LayoutUnit {
   const items: Array<LayoutUnit> = [];
 
-  for (const n of node.body) {
-    items.push(layoutTreeImplBodyNode(n, ctx));
+  let outputBodyNode: StreamExpressionNode | null;
+  if (iface.output.kind === NodeKind.Void) {
+    outputBodyNode = null;
+  } else {
+    if (node.body.length === 0) {
+      throw new Error();
+    }
+    const lastBodyNode = node.body[node.body.length-1];
+    if (!isStreamExpressionNode(lastBodyNode)) {
+      throw new Error();
+    }
+    outputBodyNode = lastBodyNode;
   }
-  if (node.out) {
-    const annoSexp = layoutStreamExpressionNode(node.out, ctx);
 
-    items.push(layoutLabeledStructure([
-      {kind: 'text', text: '←'},
-      {
-        kind: 'node',
-        preLabel: '',
-        postLabel: '',
-        node: annoSexp,
-      },
-    ]));
+  for (const n of node.body) {
+    if (n === outputBodyNode) {
+      const annoSexp = layoutStreamExpressionNode(n, ctx);
+
+      items.push(layoutLabeledStructure([
+        {kind: 'text', text: '←'},
+        {
+          kind: 'node',
+          preLabel: '',
+          postLabel: '',
+          node: annoSexp,
+        },
+      ]));
+    } else {
+      items.push(layoutTreeImplBodyNode(n, ctx));
+    }
   }
   const loImplInner = layoutArray(items, true, forceBlock);
 
@@ -521,13 +555,13 @@ function layoutTreeImplNode(node: TreeImplNode, forceBlock: boolean, ctx: TreeVi
   }
 }
 
-function layoutFunctionImplNode(node: FunctionImplNode, forceBlock: boolean, ctx: TreeViewContext): LayoutUnit {
+function layoutFunctionImplNode(node: FunctionImplNode, iface: FunctionInterfaceNode, forceBlock: boolean, ctx: TreeViewContext): LayoutUnit {
   switch (node.kind) {
     case NodeKind.NativeImpl:
       throw new Error('unimplemented');
 
     case NodeKind.TreeImpl:
-      return layoutTreeImplNode(node, forceBlock, ctx);
+      return layoutTreeImplNode(node, iface, forceBlock, ctx);
 
     default: {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -539,7 +573,7 @@ function layoutFunctionImplNode(node: FunctionImplNode, forceBlock: boolean, ctx
 
 export function layoutFunctionDefinitionNode(node: FunctionDefinitionNode, ctx: TreeViewContext): LayoutUnit {
   const loIface = layoutFunctionInterfaceNode(node.iface, ctx);
-  const loImpl = layoutFunctionImplNode(node.impl, true, ctx);
+  const loImpl = layoutFunctionImplNode(node.impl, node.iface, true, ctx);
 
   return {
     reactNode: (

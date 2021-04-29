@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Node, UndefinedLiteralNode } from '../compiler/Tree';
+import { Node } from '../compiler/Tree';
 import { FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, StreamExpressionNode, FunctionInterfaceNode, UID, TextNode, StreamBindingNode } from '../compiler/Tree';
 import Fuse from 'fuse.js';
 import { getStaticEnvMap, StaticEnvironment } from '../editor/EditorReducer';
 import { layoutStreamExpressionNode, TreeViewContext, layoutStreamBindingNode } from './TreeView';
 import genuid from '../util/uid';
-import './Chooser.css';
 import { parseTemplateString, templateToPlainText } from './FITemplate';
+import './Chooser.css';
 
 interface Choice {
   node: StreamExpressionNode | StreamBindingNode | FunctionDefinitionNode;
@@ -58,11 +58,6 @@ export function functionInterfaceAsPlainText(ifaceNode: FunctionInterfaceNode): 
 export function defaultTreeDefFromFunctionInterface(iface: FunctionInterfaceNode): FunctionDefinitionNode {
   const pids: ReadonlyMap<UID, UID> = new Map(iface.params.map(param => [param.nid, genuid()]));
 
-  const out: UndefinedLiteralNode | null = iface.output ? {
-    kind: NodeKind.UndefinedLiteral,
-    nid: genuid(),
-  } : null;
-
   return {
     kind: NodeKind.FunctionDefinition,
     nid: genuid(),
@@ -77,7 +72,6 @@ export function defaultTreeDefFromFunctionInterface(iface: FunctionInterfaceNode
           nid: genuid(),
         },
       ],
-      out,
     }
   };
 }
@@ -183,7 +177,7 @@ const MultiChooser: React.FC<{context: 'tdef-body' | 'subexp', existingNode: Nod
       } else {
         const ifaceNode = envValue.type;
         const defAsText = functionInterfaceAsPlainText(ifaceNode);
-        if ((context === 'tdef-body') || ifaceNode.output) {
+        if ((context === 'tdef-body') || (ifaceNode.output.kind !== NodeKind.Void)) {
           searchItems.push({
             name: defAsText,
             data: {
@@ -289,18 +283,19 @@ const MultiChooser: React.FC<{context: 'tdef-body' | 'subexp', existingNode: Nod
                 type: null,
               },
             ],
-            output: true,
+            output: {kind: NodeKind.AnyType, nid: genuid()},
           },
           impl: {
             kind: NodeKind.TreeImpl,
             nid: genuid(),
             pids: new Map([[singleParamId, singleInternalId]]),
-            body: [],
-            out: {
-              kind: NodeKind.StreamReference,
-              nid: genuid(),
-              ref: singleInternalId,
-            },
+            body: [
+              {
+                kind: NodeKind.StreamReference,
+                nid: genuid(),
+                ref: singleInternalId,
+              },
+            ],
           }
         },
       });

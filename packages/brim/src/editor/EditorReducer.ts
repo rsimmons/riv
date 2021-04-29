@@ -444,7 +444,7 @@ const INITIAL_MAIN: FunctionDefinitionNode = {
       text: 'main',
     },
     params: [],
-    output: false,
+    output: {kind: NodeKind.Void, nid: genuid()},
   },
   impl: {
     kind: NodeKind.TreeImpl,
@@ -462,7 +462,6 @@ const INITIAL_MAIN: FunctionDefinitionNode = {
         val: 456,
       },
     ],
-    out: null,
   },
 };
 

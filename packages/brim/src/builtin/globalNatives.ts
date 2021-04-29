@@ -267,7 +267,7 @@ function expandInterface(abbrevIface: AbbrevFunctionInterface, idPrefix: string)
       };
       return paramNode;
     }),
-    output: (ret !== 'void'),
+    output: (ret === 'void') ? {kind: NodeKind.Void, nid: genuid()} : {kind: NodeKind.AnyType, nid: genuid()},
     template: tmpl ? tmpl : undefined,
   };
 }

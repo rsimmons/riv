@@ -1,4 +1,4 @@
-import { NodeKind, Node, StreamExpressionNode, isStreamExpressionNode, FunctionInterfaceNode, ApplicationArgs, BindingExpressionNode, isBindingExpressionNode, isTreeImplBodyNode, TreeImplBodyNode, FunctionImplNode, isFunctionImplNode, ParamNode, TextNode } from './Tree';
+import { NodeKind, Node, StreamExpressionNode, isStreamExpressionNode, FunctionInterfaceNode, ApplicationArgs, BindingExpressionNode, isBindingExpressionNode, isTreeImplBodyNode, TreeImplBodyNode, FunctionImplNode, isFunctionImplNode, ParamNode, TextNode, OutputTypeNode, isOutputTypeNode } from './Tree';
 
 export function firstChild(node: Node): Node | undefined {
   const res = iterChildren(node).next();
@@ -36,9 +36,14 @@ export function* iterChildren(node: Node): Generator<Node, void, undefined> {
       }
       break;
 
+    case NodeKind.AnyType:
+    case NodeKind.Void:
+      break;
+
     case NodeKind.FunctionInterface:
       yield node.name;
       yield* node.params;
+      yield node.output;
       break;
 
     case NodeKind.NativeImpl:
@@ -52,9 +57,6 @@ export function* iterChildren(node: Node): Generator<Node, void, undefined> {
 
     case NodeKind.TreeImpl:
       yield* node.body;
-      if (node.out) {
-        yield node.out;
-      }
       break;
 
     case NodeKind.FunctionDefinition:
@@ -99,10 +101,15 @@ export function visitChildren<N, C>(node: Node, visit: (node: Node, ctx: C) => N
       return visit(node.name, ctx);
 
     case NodeKind.Param:
-      return visit(node.name, ctx) || (node.type ? visit(node.type, ctx) : undefined)
+      return visit(node.name, ctx) || (node.type ? visit(node.type, ctx) : undefined);
+
+    case NodeKind.AnyType:
+    case NodeKind.Void:
+      // no children
+      return;
 
     case NodeKind.FunctionInterface:
-      return visit(node.name, ctx) || visitArray(node.params, visit, ctx);
+      return visit(node.name, ctx) || visitArray(node.params, visit, ctx) || visit(node.output, ctx);
 
     case NodeKind.NativeImpl:
       // no children
@@ -112,7 +119,7 @@ export function visitChildren<N, C>(node: Node, visit: (node: Node, ctx: C) => N
       return visit(node.bexpr, ctx) || visit(node.sexpr, ctx);
 
     case NodeKind.TreeImpl:
-      return visitArray(node.body, visit, ctx) || (node.out ? visit(node.out, ctx) : undefined);
+      return visitArray(node.body, visit, ctx);
 
     case NodeKind.FunctionDefinition:
       return visit(node.iface, ctx) || visit(node.impl, ctx);
@@ -206,6 +213,14 @@ export function transformChildren<C>(node: Node, transform: (node: Node, ctx: C)
     return changed ? newArr : arr;
   };
 
+  const xOutput = (n: OutputTypeNode): OutputTypeNode => {
+    const tn = transform(n, ctx);
+    if (!isOutputTypeNode(tn)) {
+      throw new Error();
+    }
+    return tn;
+  }
+
   const xImpl = (n: FunctionImplNode): FunctionImplNode => {
     const tn = transform(n, ctx);
     if (!isFunctionImplNode(tn)) {
@@ -261,16 +276,23 @@ export function transformChildren<C>(node: Node, transform: (node: Node, ctx: C)
       }
     }
 
+    case NodeKind.AnyType:
+    case NodeKind.Void:
+      // no children
+      return node;
+
     case NodeKind.FunctionInterface: {
       const newName = xText(node.name);
       const newParams = xParams(node.params);
-      if ((newName === node.name) && (newParams === node.params)) {
+      const newOutput = xOutput(node.output);
+      if ((newName === node.name) && (newParams === node.params) && (newOutput === node.output)) {
         return node;
       } else {
         return {
           ...node,
           name: newName,
           params: newParams,
+          output: newOutput,
         };
       }
     }
@@ -295,14 +317,12 @@ export function transformChildren<C>(node: Node, transform: (node: Node, ctx: C)
 
     case NodeKind.TreeImpl: {
       const newBody = xTreeImplBodyArr(node.body);
-      const newOut = node.out ? xStreamExpr(node.out) : null;
-      if ((newBody === node.body) && (newOut === node.out)) {
+      if (newBody === node.body) {
         return node;
       } else {
         return {
           ...node,
           body: newBody,
-          out: newOut,
         };
       }
     }
@@ -374,6 +394,17 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
     }
   };
 
+  const replaceOutput = (n: OutputTypeNode): OutputTypeNode => {
+    if (n === oldChild) {
+      if (!isOutputTypeNode(newChild)) {
+        throw new Error();
+      }
+      return newChild;
+    } else {
+      return n;
+    }
+  };
+
   const replaceTreeImplBodyArr = (arr: ReadonlyArray<TreeImplBodyNode>): ReadonlyArray<TreeImplBodyNode> => {
     return arr.map((n: TreeImplBodyNode) => {
       if (n === oldChild) {
@@ -426,6 +457,7 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
     });
   };
 
+
   switch (node.kind) {
     case NodeKind.Text:
     case NodeKind.UndefinedLiteral:
@@ -454,11 +486,16 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
         type: node.type ? replaceIface(node.type) : null,
       };
 
+    case NodeKind.AnyType:
+    case NodeKind.Void:
+      throw new Error('no children to replace');
+
     case NodeKind.FunctionInterface:
       return {
         ...node,
         name: replaceText(node.name),
         params: replaceParams(node.params),
+        output: replaceOutput(node.output),
       };
 
     case NodeKind.NativeImpl:
@@ -475,7 +512,6 @@ export function replaceChild(node: Node, oldChild: Node, newChild: Node): Node {
       return {
         ...node,
         body: replaceTreeImplBodyArr(node.body),
-        out: node.out ? replaceStreamExpr(node.out) : null,
       };
 
     case NodeKind.FunctionDefinition:
