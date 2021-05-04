@@ -532,17 +532,31 @@ function layoutTreeImplNode(node: TreeImplNode, iface: FunctionInterfaceNode, fo
 
   for (const n of node.body) {
     if (n === outputBodyNode) {
-      const annoSexp = layoutStreamExpressionNode(n, ctx);
-
-      items.push(layoutLabeledStructure([
+      const loExpr = layoutStreamExpressionNode(n, ctx);
+      const loOutput = layoutLabeledStructure([
         {kind: 'text', text: '←'},
         {
           kind: 'node',
           preLabel: '',
           postLabel: '',
-          node: annoSexp,
+          node: loExpr,
         },
-      ]));
+      ]);
+
+      // This is sort of weird. We "extract" the single child of the seltree, so that it isn't "wrapped".
+      // Because this is an element of a dynamic array, it must have a selId, which it won't unless we do this.
+      // Also, we update the flags to have noInsertAfter.
+      items.push({
+        reactNode: loOutput.reactNode,
+        size: loOutput.size,
+        seltree: {
+          ...loExpr.seltree,
+          flags: {
+            ...loExpr.seltree.flags,
+            noInsertAfter: true,
+          },
+        },
+      });
     } else {
       items.push(layoutTreeImplBodyNode(n, ctx));
     }

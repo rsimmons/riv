@@ -76,7 +76,14 @@ export function defaultTreeDefFromFunctionInterface(iface: FunctionInterfaceNode
   };
 }
 
-const MultiChooser: React.FC<{context: 'tdef-body' | 'subexp', existingNode: Node | null, localEnv: StaticEnvironment, onCommitChoice: (node: Node) => void}> = ({ context, existingNode, localEnv, onCommitChoice }) => {
+export enum MultiChooserContext {
+  Expr,
+  ExprOrBind,
+  Param,
+  // Module?
+}
+
+export const MultiChooser: React.FC<{context: MultiChooserContext, existingNode: Node | null, localEnv: StaticEnvironment, onCommitChoice: (node: Node) => void}> = ({ context, existingNode, localEnv, onCommitChoice }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     inputRef.current && inputRef.current.select();
@@ -177,7 +184,7 @@ const MultiChooser: React.FC<{context: 'tdef-body' | 'subexp', existingNode: Nod
       } else {
         const ifaceNode = envValue.type;
         const defAsText = functionInterfaceAsPlainText(ifaceNode);
-        if ((context === 'tdef-body') || (ifaceNode.output.kind !== NodeKind.Void)) {
+        if ((context === MultiChooserContext.ExprOrBind) || (ifaceNode.output.kind !== NodeKind.Void)) {
           searchItems.push({
             name: defAsText,
             data: {
@@ -259,7 +266,7 @@ const MultiChooser: React.FC<{context: 'tdef-body' | 'subexp', existingNode: Nod
       }
     }
 
-    if ((context === 'tdef-body') && text.trim() !== '') {
+    if ((context === MultiChooserContext.ExprOrBind) && text.trim() !== '') {
       choices.push({
         node: createStreamBinding(text.trim()),
       });
@@ -291,9 +298,8 @@ const MultiChooser: React.FC<{context: 'tdef-body' | 'subexp', existingNode: Nod
             pids: new Map([[singleParamId, singleInternalId]]),
             body: [
               {
-                kind: NodeKind.StreamReference,
+                kind: NodeKind.UndefinedLiteral,
                 nid: genuid(),
-                ref: singleInternalId,
               },
             ],
           }
@@ -382,7 +388,7 @@ const MultiChooser: React.FC<{context: 'tdef-body' | 'subexp', existingNode: Nod
           throw new Error();
         }
 
-        if (context === 'tdef-body') {
+        if (context === MultiChooserContext.ExprOrBind) {
           // TODO: bring this behavior back?
           // const inputText = inputRef.current.value;
           // const newNode = createStreamBinding(inputText);
@@ -429,7 +435,7 @@ const MultiChooser: React.FC<{context: 'tdef-body' | 'subexp', existingNode: Nod
   );
 }
 
-const TextChooser: React.FC<{existingNode: TextNode, onCommitChoice: (node: Node) => void}> = ({ existingNode, onCommitChoice }) => {
+export const TextChooser: React.FC<{existingNode: TextNode, onCommitChoice: (node: Node) => void}> = ({ existingNode, onCommitChoice }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     inputRef.current && inputRef.current.select();
@@ -460,16 +466,3 @@ const TextChooser: React.FC<{existingNode: TextNode, onCommitChoice: (node: Node
     </div>
   );
 }
-
-const Chooser: React.FC<{context: 'tdef-body' | 'subexp' | 'text', existingNode: Node | null, localEnv: StaticEnvironment, onCommitChoice: (node: Node) => void}> = ({ context, existingNode, localEnv, onCommitChoice }) => {
-  if (context === 'text') {
-    if (!existingNode || (existingNode.kind !== NodeKind.Text)) {
-      throw new Error();
-    }
-    return <TextChooser existingNode={existingNode} onCommitChoice={onCommitChoice} />
-  } else {
-    return <MultiChooser context={context} existingNode={existingNode} localEnv={localEnv} onCommitChoice={onCommitChoice} />
-  }
-}
-
-export default Chooser;
