@@ -5,7 +5,7 @@ import { StaticEnvironment } from '../editor/EditorReducer';
 // import { TemplateLayout, TextSegment, GroupEditable } from '../compiler/TemplateLayout';
 import quotesIcon from './icons/quotes.svg';
 import booleanIcon from './icons/boolean.svg';
-import { SeltreeNode } from './Seltree';
+import { makeVirtualSelId, SeltreeNode } from './Seltree';
 import { parseTemplateString } from './FITemplate';
 
 export interface TreeViewContext {
@@ -164,15 +164,37 @@ function layoutTextNode(node: TextNode, ctx: TreeViewContext): LayoutUnit {
 
 const MAX_ROW_WIDTH = 50;
 
-function layoutArray(items: ReadonlyArray<LayoutUnit>, dyn: boolean, forceBlock: boolean): LayoutUnit {
-  const size = combineSizes(items.map(item => item.size));
+function layoutInsertVirtualNode(selId: string, ctx: TreeViewContext): LayoutUnit {
+  return {
+    reactNode: (
+      <SelectableWrapper key={selId} selId={selId} styling="common" ctx={ctx}><div className="TreeView-common-leaf">+</div></SelectableWrapper>
+    ),
+    size: 1, // sort of arbitrary
+    seltree: {
+      selId,
+      dir: 'inline',
+      children: [],
+      flags: {},
+    },
+  };
+}
+
+function layoutArray(items: ReadonlyArray<LayoutUnit>, dynSelId: string | undefined, forceBlock: boolean, ctx: TreeViewContext): LayoutUnit {
+  let adjustedItems: ReadonlyArray<LayoutUnit>;
+  if ((dynSelId !== undefined) && (items.length === 0)) {
+    adjustedItems = [layoutInsertVirtualNode(dynSelId, ctx)];
+  } else {
+    adjustedItems = items;
+  }
+
+  const size = combineSizes(adjustedItems.map(item => item.size));
 
   const layoutDir = forceBlock ? 'block' : ((size === undefined) ? 'block' : 'inline');
 
   return {
     reactNode: (
       <div className={'TreeView-array-' + layoutDir}>
-        {items.map(item => (
+        {adjustedItems.map(item => (
           <div className={'TreeView-array-' + layoutDir + '-item'}>{item.reactNode}</div>
         ))}
       </div>
@@ -180,10 +202,8 @@ function layoutArray(items: ReadonlyArray<LayoutUnit>, dyn: boolean, forceBlock:
     size,
     seltree: {
       dir: layoutDir,
-      children: items.map(item => item.seltree),
-      flags: {
-        dyn,
-      },
+      children: adjustedItems.map(item => item.seltree),
+      flags: (dynSelId === undefined) ? {} : ((items.length === 0) ? {dynArrEmpty: true} : {dynArrNonempty: true}),
     },
   }
 }
@@ -423,10 +443,9 @@ function layoutFunctionInterfaceNode(node: FunctionInterfaceNode, ctx: TreeViewC
 
   items.push(layoutTextNode(node.name, ctx));
 
-  // We avoid creating an empty params seltree for now
-  if (node.params.length > 0) {
+  if (true) { // we could skip displaying params with this
     const loParams = node.params.map(n => layoutParamNode(n, ctx));
-    const loParamsArray = layoutArray(loParams, true, false);
+    const loParamsArray = layoutArray(loParams, makeVirtualSelId(node.nid, 'params'), false, ctx);
     items.push(loParamsArray);
   }
 
@@ -446,7 +465,7 @@ function layoutFunctionInterfaceNode(node: FunctionInterfaceNode, ctx: TreeViewC
     });
   }
 
-  const loIfaceInner = layoutArray(items, false, false);
+  const loIfaceInner = layoutArray(items, undefined, false, ctx);
 
   return {
     ...loIfaceInner,
@@ -561,7 +580,7 @@ function layoutTreeImplNode(node: TreeImplNode, iface: FunctionInterfaceNode, fo
       items.push(layoutTreeImplBodyNode(n, ctx));
     }
   }
-  const loImplInner = layoutArray(items, true, forceBlock);
+  const loImplInner = layoutArray(items, makeVirtualSelId(node.nid, 'body'), forceBlock, ctx);
 
   return {
     ...loImplInner,

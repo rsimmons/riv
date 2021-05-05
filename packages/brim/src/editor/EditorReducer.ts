@@ -450,18 +450,7 @@ const INITIAL_MAIN: FunctionDefinitionNode = {
     kind: NodeKind.TreeImpl,
     nid: genuid(),
     pids: new Map(),
-    body: [
-      {
-        kind: NodeKind.NumberLiteral,
-        nid: genuid(),
-        val: 123,
-      },
-      {
-        kind: NodeKind.NumberLiteral,
-        nid: genuid(),
-        val: 456,
-      },
-    ],
+    body: [],
   },
 };
 

@@ -25,7 +25,10 @@ interface SeltreeFlags {
   // Is this node a "dynamic array", whose children can
   // be deleted or have siblings inserted before/after?
   // If this is true, children must all have selId's defined.
-  dyn?: boolean;
+  dynArrNonempty?: boolean;
+
+  // Like above, but it's empty (aside from a virtual node)
+  dynArrEmpty?: boolean;
 
   // Is this node undefined, i.e. a "hole" to be filled?
   undef?: boolean;
