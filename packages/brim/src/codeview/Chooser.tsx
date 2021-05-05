@@ -385,15 +385,29 @@ export const MultiChooser: React.FC<{context: MultiChooserContext, existingNode:
     onCommitChoice(dropdownState.choices[dropdownState.index].node);
   };
 
-  const INFIX_OPERATOR_CHARS = '.,+-*/^<>:['; // NOTE: This is very tentative
+  const INFIX_OPERATOR_CHARS = '.,+-*/^<>=:['; // NOTE: This is very tentative
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Check if we should commit a binding
+    if (!infixNode && (e.key === '=')) {
+      if (context === MultiChooserContext.ExprOrBind) {
+        onCommitChoice(createStreamBinding(text));
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+    }
+
+    // Check if we should begin an infix choice
     if (!infixNode && INFIX_OPERATOR_CHARS.includes(e.key)) {
       setInfixNode(dropdownState.choices[dropdownState.index].node);
       setText('');
       setDropdownState(recomputeDropdownChoices(''));
       return;
-    } else if (infixNode && charIsPrintable(e.key) && !INFIX_OPERATOR_CHARS.includes(e.key)) {
+    }
+
+    // Check if we should commit and infix choice
+    if (infixNode && charIsPrintable(e.key) && !INFIX_OPERATOR_CHARS.includes(e.key)) {
       commitCurrentChoice();
       return;
     }
@@ -415,24 +429,6 @@ export const MultiChooser: React.FC<{context: MultiChooserContext, existingNode:
         e.stopPropagation();
         adjustDropdownIndex(1);
         break;
-
-      case '=': {
-        e.preventDefault();
-        e.stopPropagation();
-
-        if (!inputRef.current) {
-          throw new Error();
-        }
-
-        if (context === MultiChooserContext.ExprOrBind) {
-          // TODO: bring this behavior back?
-          // const inputText = inputRef.current.value;
-          // const newNode = createStreamBinding(inputText);
-          // dispatch({type: 'UPDATE_EDITING_NODE', newNode});
-          // dispatch({type: 'TOGGLE_EDIT'});
-        }
-        break;
-      }
     }
   };
 
