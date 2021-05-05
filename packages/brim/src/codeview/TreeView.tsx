@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Node, FunctionDefinitionNode, StreamExpressionNode, NodeKind, isStreamExpressionNode, StreamReferenceNode, ApplicationNode, FunctionInterfaceNode, NameBindingNode, ParamNode, TreeImplBodyNode, FunctionImplNode, TreeImplNode, BindingExpressionNode, StreamBindingNode, UID, TextNode } from '../compiler/Tree';
 import './TreeView.css';
-import { StaticEnvironment } from '../editor/EditorReducer';
+import { StaticEnvironment } from '../compiler/TreeUtil';
 // import { TemplateLayout, TextSegment, GroupEditable } from '../compiler/TemplateLayout';
 import quotesIcon from './icons/quotes.svg';
 import booleanIcon from './icons/boolean.svg';

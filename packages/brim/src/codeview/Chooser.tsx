@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Node } from '../compiler/Tree';
 import { FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, StreamExpressionNode, FunctionInterfaceNode, UID, TextNode, StreamBindingNode } from '../compiler/Tree';
 import Fuse from 'fuse.js';
-import { getStaticEnvMap, StaticEnvironment } from '../editor/EditorReducer';
+import { getStaticEnvMap, StaticEnvironment } from '../compiler/TreeUtil';
 import { layoutStreamExpressionNode, TreeViewContext, layoutStreamBindingNode } from './TreeView';
 import genuid from '../util/uid';
 import { parseTemplateString, templateToPlainText } from './FITemplate';

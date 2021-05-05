@@ -1,5 +1,5 @@
 import { layoutAnyNode, layoutFunctionDefinitionNode, TreeViewContext } from '../codeview/TreeView';
-import { getStaticEnvMap, initStaticEnv, StaticEnvironment } from '../editor/EditorReducer';
+import { getStaticEnvMap, initStaticEnv, StaticEnvironment } from '../compiler/TreeUtil';
 import { TextChooser, MultiChooser, MultiChooserContext } from '../codeview/Chooser';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { FunctionDefinitionNode, isTreeImplBodyNode, Node, NodeKind, UID } from '../compiler/Tree';
