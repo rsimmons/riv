@@ -582,7 +582,7 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
                 }));
               }
 
-              return <MultiChooser key={state.choosing.key} context={/*TODO: fix*/MultiChooserContext.ExprOrBind} existingNode={null} localEnv={localEnv} onCommitChoice={handleCommitChoice} />
+              return <MultiChooser key={state.choosing.key} context={/*TODO: fix*/MultiChooserContext.ExprOrBind} existingNode={null} localEnv={localEnv} onCommitChoice={handleCommitChoice} onAbort={abortChooser} />
             } else {
               if ([ChooserMode.Modify, ChooserMode.Fill, ChooserMode.FillInsertAfter].includes(state.choosing.mode)) {
                 const selectedNode = nodeIdToNode.get(state.selectionId);
@@ -630,7 +630,7 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
                     }));
                   }
 
-                  return <MultiChooser key={state.choosing.key} context={chooserContext} existingNode={selectedNode} localEnv={localEnv} onCommitChoice={handleCommitChoice} />
+                  return <MultiChooser key={state.choosing.key} context={chooserContext} existingNode={selectedNode} localEnv={localEnv} onCommitChoice={handleCommitChoice} onAbort={abortChooser} />
                 } else {
                   const state_choosing = state.choosing;
 
@@ -665,7 +665,7 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
                     }));
                   }
 
-                  return <MultiChooser key={state.choosing.key} context={chooserContext} existingNode={null} localEnv={localEnv} onCommitChoice={handleCommitChoice} />
+                  return <MultiChooser key={state.choosing.key} context={chooserContext} existingNode={null} localEnv={localEnv} onCommitChoice={handleCommitChoice} onAbort={abortChooser} />
                 }
               } else if ([ChooserMode.InsertBefore, ChooserMode.InsertAfter].includes(state.choosing.mode)) {
                 if (state.choosing.relSelId === null) {
@@ -733,7 +733,7 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
 
                 const chooserContext = determineNodeChooserContext(relNode, root);
 
-                return <MultiChooser key={state.choosing.key} context={chooserContext} existingNode={null} localEnv={localEnv} onCommitChoice={handleCommitChoice} />
+                return <MultiChooser key={state.choosing.key} context={chooserContext} existingNode={null} localEnv={localEnv} onCommitChoice={handleCommitChoice} onAbort={abortChooser} />
               } else {
                 throw new Error();
               }

@@ -84,7 +84,7 @@ export enum MultiChooserContext {
   // Module?
 }
 
-export const MultiChooser: React.FC<{context: MultiChooserContext, existingNode: Node | null, localEnv: StaticEnvironment, onCommitChoice: (node: Node) => void}> = ({ context, existingNode, localEnv, onCommitChoice }) => {
+export const MultiChooser: React.FC<{context: MultiChooserContext, existingNode: Node | null, localEnv: StaticEnvironment, onCommitChoice: (node: Node) => void, onAbort: () => void}> = ({ context, existingNode, localEnv, onCommitChoice, onAbort }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     inputRef.current && inputRef.current.select();
@@ -382,7 +382,11 @@ export const MultiChooser: React.FC<{context: MultiChooserContext, existingNode:
   };
 
   const commitCurrentChoice = (): void => {
-    onCommitChoice(dropdownState.choices[dropdownState.index].node);
+    if (dropdownState.choices.length > 0) {
+      onCommitChoice(dropdownState.choices[dropdownState.index].node);
+    } else {
+      onAbort();
+    }
   };
 
   const INFIX_OPERATOR_CHARS = '.,+-*/^<>=:['; // NOTE: This is very tentative
