@@ -7,6 +7,7 @@ import { layoutStreamExpressionNode, TreeViewContext, layoutStreamBindingNode } 
 import genuid from '../util/uid';
 import { parseTemplateString, templateToPlainText } from './FITemplate';
 import './Chooser.css';
+import { charIsPrintable } from '../util/misc';
 
 interface Choice {
   node: StreamExpressionNode | StreamBindingNode | FunctionDefinitionNode;
@@ -117,28 +118,32 @@ export const MultiChooser: React.FC<{context: MultiChooserContext, existingNode:
     }
   });
 
+  const [infixNode, setInfixNode] = useState<Node | null>(null);
+
   const generateChoices = (text: string): ReadonlyArray<Choice> => {
     const choices: Array<Choice> = [];
 
-    // If there is no text, put this first as a sort of default
-    if (text === '') {
-      choices.push({
-        node: {
-          kind: NodeKind.UndefinedLiteral,
-          nid: genuid(),
-        },
-      });
-    }
+    if (!infixNode) {
+      // If there is no text, put this first as a sort of default
+      if (text === '') {
+        choices.push({
+          node: {
+            kind: NodeKind.UndefinedLiteral,
+            nid: genuid(),
+          },
+        });
+      }
 
-    const textAsNumber = Number(text);
-    if (!Number.isNaN(textAsNumber)) {
-      choices.push({
-        node:  {
-          kind: NodeKind.NumberLiteral,
-          nid: genuid(),
-          val: textAsNumber,
-        },
-      });
+      const textAsNumber = Number(text);
+      if (!Number.isNaN(textAsNumber)) {
+        choices.push({
+          node:  {
+            kind: NodeKind.NumberLiteral,
+            nid: genuid(),
+            val: textAsNumber,
+          },
+        });
+      }
     }
 
     // SEARCH
@@ -167,48 +172,54 @@ export const MultiChooser: React.FC<{context: MultiChooserContext, existingNode:
 
     localEnv.forEach((envValue, sid) => {
       if (envValue.type === null) {
-        if (!envValue.name) {
-          throw new Error(); // TODO: We might not want to require this, but it works for now
-        }
-        searchItems.push({
-          name: envValue.name.text || ' ',
-          data: {
-            kind: 'node',
-            node: {
-              kind: NodeKind.StreamReference,
-              nid: genuid(),
-              ref: sid,
-            },
-          },
-        });
-      } else {
-        const ifaceNode = envValue.type;
-        const defAsText = functionInterfaceAsPlainText(ifaceNode);
-        if ((context === MultiChooserContext.ExprOrBind) || (ifaceNode.output.kind !== NodeKind.Void)) {
+        if (!infixNode) {
+          if (!envValue.name) {
+            throw new Error(); // TODO: We might not want to require this, but it works for now
+          }
           searchItems.push({
-            name: defAsText,
+            name: envValue.name.text || ' ',
             data: {
-              kind: 'func',
-              iface: ifaceNode,
-              fid: sid,
+              kind: 'node',
+              node: {
+                kind: NodeKind.StreamReference,
+                nid: genuid(),
+                ref: sid,
+              },
             },
           });
+        }
+      } else {
+        const ifaceNode = envValue.type;
+        if (!infixNode || (ifaceNode.params.length > 0)) {
+          const defAsText = functionInterfaceAsPlainText(ifaceNode);
+          if ((context === MultiChooserContext.ExprOrBind) || (ifaceNode.output.kind !== NodeKind.Void)) {
+            searchItems.push({
+              name: defAsText,
+              data: {
+                kind: 'func',
+                iface: ifaceNode,
+                fid: sid,
+              },
+            });
+          }
         }
       }
     });
 
-    for (const bv of [true, false]) {
-      searchItems.push({
-        name: bv.toString(),
-        data: {
-          kind: 'node',
-          node: {
-            kind: NodeKind.BooleanLiteral,
-            nid: genuid(),
-            val: bv,
+    if (!infixNode) {
+      for (const bv of [true, false]) {
+        searchItems.push({
+          name: bv.toString(),
+          data: {
+            kind: 'node',
+            node: {
+              kind: NodeKind.BooleanLiteral,
+              nid: genuid(),
+              val: bv,
+            },
           },
-        },
-      })
+        })
+      }
     }
 
     const searchOptions: Fuse.FuseOptions<SearchItem> = {
@@ -233,12 +244,19 @@ export const MultiChooser: React.FC<{context: MultiChooserContext, existingNode:
 
           const args: Map<string, StreamExpressionNode> = new Map();
 
-          iface.params.forEach(param => {
+          iface.params.forEach((param, idx) => {
             if (param.type === null) {
-              args.set(param.nid, {
-                kind: NodeKind.UndefinedLiteral,
-                nid: genuid(),
-              });
+              if (infixNode && (idx === 0)) {
+                if (!isStreamExpressionNode(infixNode)) {
+                  throw new Error();
+                }
+                args.set(param.nid, infixNode);
+              } else {
+                args.set(param.nid, {
+                  kind: NodeKind.UndefinedLiteral,
+                  nid: genuid(),
+                });
+              }
             } else {
               args.set(param.nid, defaultTreeDefFromFunctionInterface(param.type));
             }
@@ -266,62 +284,64 @@ export const MultiChooser: React.FC<{context: MultiChooserContext, existingNode:
       }
     }
 
-    if ((context === MultiChooserContext.ExprOrBind) && text.trim() !== '') {
-      choices.push({
-        node: createStreamBinding(text.trim()),
-      });
+    if (!infixNode) {
+      if ((context === MultiChooserContext.ExprOrBind) && (text.trim() !== '')) {
+        choices.push({
+          node: createStreamBinding(text.trim()),
+        });
 
-      // Create a choice for a new local function definition
-      const singleParamId = genuid();
-      const singleInternalId = genuid();
-      choices.push({
-        node: {
-          kind: NodeKind.FunctionDefinition,
-          nid: genuid(),
-          iface: {
-            kind: NodeKind.FunctionInterface,
+        // Create a choice for a new local function definition
+        const singleParamId = genuid();
+        const singleInternalId = genuid();
+        choices.push({
+          node: {
+            kind: NodeKind.FunctionDefinition,
             nid: genuid(),
-            name: {kind: NodeKind.Text, nid: genuid(), text: text.trim()},
-            params: [
-              {
-                kind: NodeKind.Param,
-                nid: singleParamId,
-                name: {kind: NodeKind.Text, nid: genuid(), text: 'param'},
-                type: null,
-              },
-            ],
-            output: {kind: NodeKind.AnyType, nid: genuid()},
+            iface: {
+              kind: NodeKind.FunctionInterface,
+              nid: genuid(),
+              name: {kind: NodeKind.Text, nid: genuid(), text: text.trim()},
+              params: [
+                {
+                  kind: NodeKind.Param,
+                  nid: singleParamId,
+                  name: {kind: NodeKind.Text, nid: genuid(), text: 'param'},
+                  type: null,
+                },
+              ],
+              output: {kind: NodeKind.AnyType, nid: genuid()},
+            },
+            impl: {
+              kind: NodeKind.TreeImpl,
+              nid: genuid(),
+              pids: new Map([[singleParamId, singleInternalId]]),
+              body: [
+                {
+                  kind: NodeKind.UndefinedLiteral,
+                  nid: genuid(),
+                },
+              ],
+            }
           },
-          impl: {
-            kind: NodeKind.TreeImpl,
-            nid: genuid(),
-            pids: new Map([[singleParamId, singleInternalId]]),
-            body: [
-              {
-                kind: NodeKind.UndefinedLiteral,
-                nid: genuid(),
-              },
-            ],
-          }
-        },
-      });
-    }
+        });
+      }
 
-    choices.push({
-      node: {
-        kind: NodeKind.TextLiteral,
-        nid: genuid(),
-        val: text,
-      },
-    });
-
-    if (choices.length === 0) {
       choices.push({
         node: {
-          kind: NodeKind.UndefinedLiteral,
+          kind: NodeKind.TextLiteral,
           nid: genuid(),
+          val: text,
         },
       });
+
+      if (choices.length === 0) {
+        choices.push({
+          node: {
+            kind: NodeKind.UndefinedLiteral,
+            nid: genuid(),
+          },
+        });
+      }
     }
 
     return choices;
@@ -361,10 +381,26 @@ export const MultiChooser: React.FC<{context: MultiChooserContext, existingNode:
     setDropdownState(recomputeDropdownChoices(newText));
   };
 
+  const commitCurrentChoice = (): void => {
+    onCommitChoice(dropdownState.choices[dropdownState.index].node);
+  };
+
+  const INFIX_OPERATOR_CHARS = '.,+-*/^<>:['; // NOTE: This is very tentative
+
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!infixNode && INFIX_OPERATOR_CHARS.includes(e.key)) {
+      setInfixNode(dropdownState.choices[dropdownState.index].node);
+      setText('');
+      setDropdownState(recomputeDropdownChoices(''));
+      return;
+    } else if (infixNode && charIsPrintable(e.key) && !INFIX_OPERATOR_CHARS.includes(e.key)) {
+      commitCurrentChoice();
+      return;
+    }
+
     switch (e.key) {
       case 'Enter':
-        onCommitChoice(dropdownState.choices[dropdownState.index].node);
+        commitCurrentChoice();
         e.stopPropagation();
         break;
 

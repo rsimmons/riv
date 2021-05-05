@@ -4,10 +4,11 @@ import { TextChooser, MultiChooser, MultiChooserContext } from '../codeview/Choo
 import { useLayoutEffect, useRef, useState } from 'react';
 import { FunctionDefinitionNode, isTreeImplBodyNode, Node, NodeKind, UID } from '../compiler/Tree';
 import globalNativeFunctions from '../builtin/globalNatives';
-import './CodeView.css';
 import { deleteNode, getNodeIdMap, getNodeParent, insertBeforeOrAfter, replaceNode } from '../compiler/TreeUtil';
 import genuid from '../util/uid';
 import { computeSeltreeLookups, findFirstUndef, findNodeById, isVirtualSelId, SeltreeNode, splitVirtualSelId } from './Seltree';
+import { charIsPrintable } from '../util/misc';
+import './CodeView.css';
 
 const keyActions: ReadonlyArray<[string, ReadonlyArray<string>, boolean, string]> = [
   ['Enter', [], true, 'MODIFY'],
@@ -400,8 +401,7 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
     // was this key entered into an input box?
     const intoInput = (e.target as Element).tagName.toLowerCase() === 'input';
 
-    // hacky, but works. see https://stackoverflow.com/questions/12467240/determine-if-javascript-e-keycode-is-a-printable-non-control-character#comment114613852_58658881
-    const printable = [...e.key].length === 1;
+    const printable = charIsPrintable(e.key);
 
     for (const [key, modsArr, handleInInput, action] of keyActions) {
       if ((e.code === key) && setsEq(eventMods, new Set(modsArr)) && (!intoInput || handleInInput)) {
