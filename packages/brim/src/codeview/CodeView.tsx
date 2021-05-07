@@ -2,7 +2,7 @@ import { layoutAnyNode, layoutFunctionDefinitionNode, TreeViewContext } from '..
 import { getStaticEnvMap, initStaticEnv, StaticEnvironment } from '../compiler/TreeUtil';
 import { TextChooser, MultiChooser, MultiChooserContext } from '../codeview/Chooser';
 import { useLayoutEffect, useRef, useState } from 'react';
-import { FunctionDefinitionNode, isStreamExpressionNode, isTreeImplBodyNode, Node, NodeKind, TextNode, TreeImplNode, UID, UndefinedLiteralNode } from '../compiler/Tree';
+import { FunctionDefinitionNode, isOutputTypeNode, isStreamExpressionNode, isTreeImplBodyNode, Node, NodeKind, TextNode, TreeImplNode, UID, UndefinedLiteralNode } from '../compiler/Tree';
 import globalNativeFunctions from '../builtin/globalNatives';
 import { getNodeIdMap, getNodeParent, insertBeforeOrAfter, replaceNode } from '../compiler/TreeUtil';
 import genuid from '../util/uid';
@@ -392,14 +392,35 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
   };
 
   const modifySelectedNode = (): void => {
-    setState(s => ({
-      ...s,
-      choosing: {
-        key: genuid(),
-        mode: isVirtualSelId(state.selectionId) ? ChooserMode.InsertEmpty : ChooserMode.Modify,
-        relSelId: null,
-      },
-    }));
+    if (isVirtualSelId(state.selectionId)) {
+      setState(s => ({
+        ...s,
+        choosing: {
+          key: genuid(),
+          mode: ChooserMode.InsertEmpty,
+          relSelId: null,
+        },
+      }));
+    } else {
+      const selectedNode = nodeIdToNode.get(state.selectionId);
+      if (!selectedNode) {
+        throw new Error();
+      }
+
+      if (isOutputTypeNode(selectedNode) || (selectedNode.kind === NodeKind.FunctionDefinition)) {
+        // don't allow modifying these for now
+        return;
+      }
+
+      setState(s => ({
+        ...s,
+        choosing: {
+          key: genuid(),
+          mode: ChooserMode.Modify,
+          relSelId: null,
+        },
+      }));
+    }
   };
 
   const abortChooser = (): void => {
