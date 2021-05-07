@@ -21,29 +21,26 @@ export function splitVirtualSelId(selId: UID): [UID, string] {
   return result as [UID, string]; // not sure how to avoid this cast
 }
 
-interface SeltreeFlags {
+export interface SeltreeNode {
+  readonly selId?: UID; // must be present if a leaf
+  readonly dir: 'block' | 'inline';
+  readonly children: ReadonlyArray<SeltreeNode>;
+
   // Is this node a "dynamic array", whose children can
   // be deleted or have siblings inserted before/after?
   // If this is true, children must all have selId's defined.
-  dynArrNonempty?: boolean;
+  dynArr?: boolean;
 
-  // Like above, but it's empty (aside from a virtual node)
-  dynArrEmpty?: boolean;
+  // IFF dynArr, this is the selection id of the virtual node
+  // that will be put inside if it it's empty
+  dynArrEmptyVnodeSelId?: UID;
 
   // Is this node undefined, i.e. a "hole" to be filled?
   undef?: boolean;
 
   // Is this node guaranteed to be the last in a "dynamic array",
-  // so we disallow inserting after it?
-  noInsertAfter?: boolean;
-}
-
-export interface SeltreeNode {
-  readonly selId?: UID; // must be present if a leaf
-  readonly dir: 'block' | 'inline';
-  readonly children: ReadonlyArray<SeltreeNode>;
-  readonly flags: SeltreeFlags;
-  readonly special?: string;
+  // so we disallow deleting it or inserting after it?
+  fixedFinal?: boolean;
 }
 
 interface SeltreeLookups {
@@ -78,7 +75,7 @@ export function computeSeltreeLookups(root: SeltreeNode): SeltreeLookups {
 }
 
 export function findFirstUndef(root: SeltreeNode): UID | undefined {
-  if (root.flags.undef && root.selId) {
+  if (root.undef && root.selId) {
     return root.selId;
   }
 

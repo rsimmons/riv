@@ -121,7 +121,6 @@ function layoutLabeledStructure(struct: LabeledStructure): LayoutUnit {
     seltree: {
       dir,
       children: seltreeChildren,
-      flags: {},
     },
   };
 }
@@ -174,15 +173,14 @@ function layoutInsertVirtualNode(selId: string, ctx: TreeViewContext): LayoutUni
       selId,
       dir: 'inline',
       children: [],
-      flags: {},
     },
   };
 }
 
-function layoutArray(items: ReadonlyArray<LayoutUnit>, dynSelId: string | undefined, forceBlock: boolean, ctx: TreeViewContext): LayoutUnit {
+function layoutArray(items: ReadonlyArray<LayoutUnit>, dynEmptySelId: string | undefined, forceBlock: boolean, ctx: TreeViewContext): LayoutUnit {
   let adjustedItems: ReadonlyArray<LayoutUnit>;
-  if ((dynSelId !== undefined) && (items.length === 0)) {
-    adjustedItems = [layoutInsertVirtualNode(dynSelId, ctx)];
+  if ((dynEmptySelId !== undefined) && (items.length === 0)) {
+    adjustedItems = [layoutInsertVirtualNode(dynEmptySelId, ctx)];
   } else {
     adjustedItems = items;
   }
@@ -203,7 +201,8 @@ function layoutArray(items: ReadonlyArray<LayoutUnit>, dynSelId: string | undefi
     seltree: {
       dir: layoutDir,
       children: adjustedItems.map(item => item.seltree),
-      flags: (dynSelId === undefined) ? {} : ((items.length === 0) ? {dynArrEmpty: true} : {dynArrNonempty: true}),
+      dynArr: (dynEmptySelId !== undefined),
+      dynArrEmptyVnodeSelId: dynEmptySelId,
     },
   }
 }
@@ -223,7 +222,7 @@ function layoutSimpleNode(treeNode: Node, content: string, styling: string, ctx:
       selId: treeNode.nid,
       dir: 'inline',
       children: [],
-      flags: undef ? {undef: true} : {},
+      undef,
     },
   };
 };
@@ -353,7 +352,6 @@ function layoutApplicationNode(node: ApplicationNode, ctx: TreeViewContext): Lay
       selId: node.nid,
       dir,
       children: loStructure.seltree.children.length ? [loStructure.seltree] : [], // avoid creating empty child
-      flags: {},
     },
   };
 
@@ -433,7 +431,6 @@ function layoutParamNode(node: ParamNode, ctx: TreeViewContext): LayoutUnit {
       selId: node.nid,
       dir: loParamChild.size === undefined ? 'block' : 'inline',
       children: [loParamChild.seltree],
-      flags: {},
     },
   };
 }
@@ -460,7 +457,6 @@ function layoutFunctionInterfaceNode(node: FunctionInterfaceNode, ctx: TreeViewC
       seltree: {
         dir: 'inline',
         children: [loOutput.seltree],
-        flags: {},
       },
     });
   }
@@ -496,7 +492,6 @@ export function layoutStreamBindingNode(node: StreamBindingNode, ctx: TreeViewCo
       selId: node.nid,
       dir: 'block',
       children: [loBindingExpr.seltree, loStreamExpr.seltree],
-      flags: {},
     };
   } else {
     // inline
@@ -509,7 +504,6 @@ export function layoutStreamBindingNode(node: StreamBindingNode, ctx: TreeViewCo
       selId: node.nid,
       dir: 'inline',
       children: [loBindingExpr.seltree, loStreamExpr.seltree],
-      flags: {},
     };
   }
 
@@ -570,10 +564,7 @@ function layoutTreeImplNode(node: TreeImplNode, iface: FunctionInterfaceNode, fo
         size: loOutput.size,
         seltree: {
           ...loExpr.seltree,
-          flags: {
-            ...loExpr.seltree.flags,
-            noInsertAfter: true,
-          },
+          fixedFinal: true,
         },
       });
     } else {
@@ -622,7 +613,6 @@ export function layoutFunctionDefinitionNode(node: FunctionDefinitionNode, ctx: 
       selId: node.nid,
       dir: 'block',
       children: [loIface.seltree, loImpl.seltree],
-      flags: {},
     },
   };
 };

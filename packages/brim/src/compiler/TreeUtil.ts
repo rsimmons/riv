@@ -1,7 +1,6 @@
 import Environment from '../util/Environment';
-import genuid from '../util/uid';
 import { iterChildren, replaceChild, visitChildren } from './Traversal';
-import { FunctionDefinitionNode, FunctionInterfaceNode, isStreamExpressionNode, isTreeImplBodyNode, NameBindingNode, Node, NodeKind, ParamNode, TextNode, TreeImplBodyNode, TreeImplNode, UID, UndefinedLiteralNode } from './Tree';
+import { FunctionDefinitionNode, FunctionInterfaceNode, isTreeImplBodyNode, NameBindingNode, Node, NodeKind, ParamNode, TextNode, TreeImplBodyNode, TreeImplNode, UID } from './Tree';
 
 // memoize this
 export function getNodeIdMap(root: Node): Map<UID, Node> {
@@ -88,62 +87,6 @@ export function insertBeforeOrAfter(root: Node, relativeToNode: Node, newNode: N
       return replaceNode(root, parent, newTreeImpl);
     } else {
       n = parent;
-    }
-  }
-}
-
-export function deleteNode(root: Node, node: Node): [Node, Node] | void {
-  const deleteFromArr = <T extends Node>(nodeToRemove: T, arr: ReadonlyArray<T>): [ReadonlyArray<T>, T | undefined] => {
-    const idx = arr.indexOf(nodeToRemove);
-    if (idx < 0) {
-      throw new Error();
-    }
-
-    const newArr = arr.slice(0, idx).concat(arr.slice(idx + 1));
-
-    let newSibSel: T | undefined;
-    if (newArr.length === 0) {
-      newSibSel = undefined;
-    } else if (idx === (arr.length - 1)) {
-      newSibSel = newArr[idx-1];
-    } else {
-      newSibSel = newArr[idx];
-    }
-
-    return [newArr, newSibSel];
-  };
-
-  const parentLookup = computeParentLookup(root);
-  const parent = parentLookup.get(node);
-
-  if (!parent) {
-    return;
-  }
-
-  if (isStreamExpressionNode(node)) {
-    if ((parent.kind === NodeKind.Application) || (parent.kind === NodeKind.StreamBinding)) {
-      const newNode: UndefinedLiteralNode = {
-        kind: NodeKind.UndefinedLiteral,
-        nid: genuid(),
-      };
-      const newRoot = replaceNode(root, node, newNode);
-      if (newRoot.kind !== NodeKind.FunctionDefinition) {
-        throw new Error();
-      }
-      return [newRoot, newNode];
-    } else if (parent.kind === NodeKind.TreeImpl) {
-      const [newNodes, newSibSel] = deleteFromArr(node, parent.body);
-      const newParent: TreeImplNode = {
-        ...parent,
-        body: newNodes,
-      };
-      const newRoot = replaceNode(root, parent, newParent);
-      if (newRoot.kind !== NodeKind.FunctionDefinition) {
-        throw new Error();
-      }
-      return [newRoot, newSibSel || newParent];
-    } else {
-      throw new Error();
     }
   }
 }

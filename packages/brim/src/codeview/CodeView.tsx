@@ -2,12 +2,12 @@ import { layoutAnyNode, layoutFunctionDefinitionNode, TreeViewContext } from '..
 import { getStaticEnvMap, initStaticEnv, StaticEnvironment } from '../compiler/TreeUtil';
 import { TextChooser, MultiChooser, MultiChooserContext } from '../codeview/Chooser';
 import { useLayoutEffect, useRef, useState } from 'react';
-import { FunctionDefinitionNode, isTreeImplBodyNode, Node, NodeKind, UID } from '../compiler/Tree';
+import { FunctionDefinitionNode, isStreamExpressionNode, isTreeImplBodyNode, Node, NodeKind, TextNode, TreeImplNode, UID, UndefinedLiteralNode } from '../compiler/Tree';
 import globalNativeFunctions from '../builtin/globalNatives';
-import { deleteNode, getNodeIdMap, getNodeParent, insertBeforeOrAfter, replaceNode } from '../compiler/TreeUtil';
+import { getNodeIdMap, getNodeParent, insertBeforeOrAfter, replaceNode } from '../compiler/TreeUtil';
 import genuid from '../util/uid';
 import { computeSeltreeLookups, findFirstUndef, findNodeById, isVirtualSelId, SeltreeNode, splitVirtualSelId } from './Seltree';
-import { charIsPrintable } from '../util/misc';
+import { charIsPrintable, deleteFirstValFromArr } from '../util/misc';
 import './CodeView.css';
 
 const keyActions: ReadonlyArray<[string, ReadonlyArray<string>, boolean, string]> = [
@@ -78,7 +78,7 @@ function findFirstHoleSelId(under: Node, root: Node, globalStaticEnv: StaticEnvi
   if (!subtree) {
     throw new Error();
   }
-  return subtree.flags.undef ? undefined : findFirstUndef(subtree); // doesn't count if the node itself is undef
+  return subtree.undef ? undefined : findFirstUndef(subtree); // doesn't count if the node itself is undef
 }
 
 enum ChooserMode {
@@ -299,17 +299,96 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
   }
 
   const deleteSeletedNode = (): void => {
-    // TODO: check if selectionId is for a "placeholder"
-    const nodeToDelete = nodeIdToNode.get(state.selectionId);
-    if (!nodeToDelete) {
+    // Can't delete a virtual node
+    if (isVirtualSelId(state.selectionId)) {
+      return;
+    }
+
+    const selectedNode = nodeIdToNode.get(state.selectionId);
+    if (!selectedNode) {
       throw new Error();
     }
-    const result = deleteNode(root, nodeToDelete);
+
+    const seltreeNode = rootSeltreeLookups.selIdToNode.get(state.selectionId);
+    if (!seltreeNode) {
+      throw new Error();
+    }
+
+    const pidx = rootSeltreeLookups.parentAndIdx.get(seltreeNode);
+    if (!pidx) {
+      if (selectedNode === root) {
+        return;
+      } else {
+        throw new Error();
+      }
+    }
+    const [parent, idx] = pidx;
+
+    if (parent.dynArr && !seltreeNode.fixedFinal) {
+      // Remove from the dynamic array
+
+      // Figure out what the new selection id will be
+      if (parent.children.length === 1) {
+        if (parent.dynArrEmptyVnodeSelId === undefined) {
+          throw new Error();
+        }
+        setSelectionId(parent.dynArrEmptyVnodeSelId);
+      } else {
+        const newIdx = (idx === (parent.children.length-1)) ? (parent.children.length-2) : (idx + 1);
+        const newIdxSelId = parent.children[newIdx].selId;
+        if (newIdxSelId === undefined) {
+          throw new Error();
+        }
+        setSelectionId(newIdxSelId);
+      }
+
+      const parentNode = getNodeParent(selectedNode, root);
+      if (!parentNode) {
+        throw new Error();
+      }
+      if (parentNode.kind === NodeKind.TreeImpl) {
+        if (!isTreeImplBodyNode(selectedNode)) {
+          throw new Error();
+        }
+        const newParentNode: TreeImplNode = {
+          ...parentNode,
+          body: deleteFirstValFromArr(selectedNode, parentNode.body),
+        }
+        const newRoot = replaceNode(root, parentNode, newParentNode);
+        onUpdateRoot(newRoot);
+      } else {
+        throw new Error();
+      }
+    } else {
+      // "Clear" out node, if it's of the right type
+      // We don't allow "clearing" function definitions, since these should currently only be function-arguments.
+      // We could conceivably allow this, but it isn't really a useful thing to do.
+      if (isStreamExpressionNode(selectedNode) && (selectedNode.kind !== NodeKind.FunctionDefinition)) {
+        const newNode: UndefinedLiteralNode = {
+          kind: NodeKind.UndefinedLiteral,
+          nid: genuid(), // should we maintain the same nid?
+        };
+        const newRoot = replaceNode(root, selectedNode, newNode);
+        onUpdateRoot(newRoot);
+        setSelectionId(newNode.nid);
+      } else if (selectedNode.kind === NodeKind.Text) {
+        const newNode: TextNode = {
+          ...selectedNode,
+          text: '',
+        };
+        const newRoot = replaceNode(root, selectedNode, newNode);
+        onUpdateRoot(newRoot);
+      }
+    }
+
+    /*
+    const result = deleteNode(root, selectedNode);
     if (result) {
       const [newRoot, newSelectedNode] = result;
       setSelectionId(newSelectedNode.nid);
       onUpdateRoot(newRoot);
     }
+    */
   };
 
   const modifySelectedNode = (): void => {
@@ -357,7 +436,7 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
         }
         const [parent, ] = pidx;
 
-        if (parent.flags.dynArrNonempty) {
+        if (parent.dynArr) {
           if (!n.selId) {
             throw new Error(); // I think this is right
           }
@@ -365,7 +444,7 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
             if (dir === 'up') {
               return chooseInMode(ChooserMode.InsertBefore, n.selId);
             } else if (dir === 'down') {
-              if (n.flags.noInsertAfter) {
+              if (n.fixedFinal) {
                 return s;
               }
               return chooseInMode(ChooserMode.InsertAfter, n.selId);
@@ -374,7 +453,7 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
             if (dir === 'back') {
               return chooseInMode(ChooserMode.InsertBefore, n.selId);
             } else if (dir === 'fwd') {
-              if (n.flags.noInsertAfter) {
+              if (n.fixedFinal) {
                 return s;
               }
               return chooseInMode(ChooserMode.InsertAfter, n.selId);
