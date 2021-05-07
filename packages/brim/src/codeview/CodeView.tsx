@@ -653,11 +653,11 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
                 setState(s => ({
                   ...s,
                   selectionId: firstHoleSelId || committedNode.nid,
-                  choosing: firstHoleSelId ? {
+                  choosing: {
                     key: genuid(),
-                    mode: ChooserMode.Fill,
+                    mode: firstHoleSelId ? ChooserMode.FillInsertAfter : ChooserMode.InsertAfter,
                     relSelId: committedNode.nid,
-                  } : null,
+                  },
                 }));
               }
 
