@@ -380,15 +380,6 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
         onUpdateRoot(newRoot);
       }
     }
-
-    /*
-    const result = deleteNode(root, selectedNode);
-    if (result) {
-      const [newRoot, newSelectedNode] = result;
-      setSelectionId(newSelectedNode.nid);
-      onUpdateRoot(newRoot);
-    }
-    */
   };
 
   const modifySelectedNode = (): void => {
