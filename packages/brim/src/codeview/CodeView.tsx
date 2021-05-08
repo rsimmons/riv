@@ -582,33 +582,61 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
   const selHighlightElem = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
-    const selectedElem = document.querySelector('div[data-nid="' + state.selectionId + '"]');
-    if (!selectedElem) {
-      throw new Error();
+    const getElemBySelId = (selId: UID): Element => {
+      const elem = document.querySelector('div[data-nid="' + selId + '"]');
+      if (!elem) {
+        throw new Error();
+      }
+      return elem;
+    };
+
+    interface Rect {
+      top: number;
+      bottom: number;
+      left: number;
+      right: number;
+      width: number;
+      height: number;
     }
-    const selectedElemRect = selectedElem.getBoundingClientRect();
-    const selElemTop = selectedElemRect.top + window.scrollY;
-    const selElemLeft = selectedElemRect.left + window.scrollX;
-    const selElemWidth = selectedElemRect.width;
-    const selElemHeight = selectedElemRect.height;
+    const getRectForSelectionId = (selId: UID): Rect => {
+      const selectedElem = getElemBySelId(selId);
+      const selectedElemRect = selectedElem.getBoundingClientRect();
+      const top = selectedElemRect.top + window.scrollY;
+      const left = selectedElemRect.left + window.scrollX;
+      const width = selectedElemRect.width;
+      const height = selectedElemRect.height;
+
+      return {
+        top,
+        left,
+        width,
+        height,
+        bottom: top+height,
+        right: left+width,
+      };
+    };
 
     // Draw node highlights (selection, etc)
     if (!selHighlightElem.current) {
       throw new Error();
     }
 
+    // Set highlight classes, which may depend on kind of node that is highlighted
+    // (e.g. rect function or rounded application)
     const sheClasses = ['CodeView-selection'];
-    // TODO: improve this
-    if (selectedElem.classList.contains('TreeView-selectable-common')) {
-      sheClasses.push('CodeView-selection-common');
-    }
-    selHighlightElem.current.className = sheClasses.join(' ');
 
     const insertWidth = 50;
     const insertHeight = 25;
 
-    const getParentSelNode = (): SeltreeNode => {
-      const seltreeNode = rootSeltreeLookups.selIdToNode.get(state.selectionId);
+    // returns [relParentDir, relRect]
+    const getInsertInfo = (): [string, Rect] => {
+      if (!state.choosing) {
+        throw new Error();
+      }
+      if (!state.choosing.relSelId) {
+        throw new Error();
+      }
+      const seltreeNode = rootSeltreeLookups.selIdToNode.get(state.choosing.relSelId);
       if (!seltreeNode) {
         throw new Error();
       }
@@ -620,42 +648,51 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
 
       const [parent, ] = pidx;
 
-      return parent;
+      return [parent.dir, getRectForSelectionId(state.choosing.relSelId)];
     };
 
     const sheStyle = selHighlightElem.current.style;
     if (state.choosing && (state.choosing.mode === ChooserMode.InsertAfter)) {
-      const parentSelNode = getParentSelNode();
-      if (parentSelNode.dir === 'block') {
-        sheStyle.top = (selElemTop + selElemHeight + 3) + 'px';
-        sheStyle.left = selElemLeft + 'px';
+      const [dir, rect] = getInsertInfo();
+      if (dir === 'block') {
+        sheStyle.top = (rect.bottom + 3) + 'px';
+        sheStyle.left = rect.left + 'px';
         sheStyle.width = insertWidth + 'px';
         sheStyle.height = '2px';
       } else {
-        sheStyle.top = selElemTop + 'px';
-        sheStyle.left = (selElemLeft + selElemWidth + 3) + 'px';
+        sheStyle.top = rect.top + 'px';
+        sheStyle.left = (rect.right + 3) + 'px';
         sheStyle.width = '2px';
         sheStyle.height = insertHeight + 'px';
       }
     } else if (state.choosing && (state.choosing.mode === ChooserMode.InsertBefore)) {
-      const parentSelNode = getParentSelNode();
-      if (parentSelNode.dir === 'block') {
-        sheStyle.top = (selElemTop - 5) + 'px';
-        sheStyle.left = selElemLeft + 'px';
+      const [dir, rect] = getInsertInfo();
+      if (dir === 'block') {
+        sheStyle.top = (rect.top - 5) + 'px';
+        sheStyle.left = rect.left + 'px';
         sheStyle.width = insertWidth + 'px';
         sheStyle.height = '2px';
       } else {
-        sheStyle.top = selElemTop + 'px';
-        sheStyle.left = (selElemLeft - 5) + 'px';
+        sheStyle.top = rect.top + 'px';
+        sheStyle.left = (rect.left - 5) + 'px';
         sheStyle.width = '2px';
         sheStyle.height = insertHeight + 'px';
       }
     } else {
-      sheStyle.top = selElemTop + 'px';
-      sheStyle.left = selElemLeft + 'px';
-      sheStyle.width = selElemWidth + 'px';
-      sheStyle.height = selElemHeight + 'px';
+      const rect = getRectForSelectionId(state.selectionId);
+      sheStyle.top = rect.top + 'px';
+      sheStyle.left = rect.left + 'px';
+      sheStyle.width = rect.width + 'px';
+      sheStyle.height = rect.height + 'px';
+
+      // TODO: a bit hacky to reference class from other component?
+      const selectedElem = getElemBySelId(state.selectionId);
+      if (selectedElem.classList.contains('TreeView-selectable-common')) {
+        sheClasses.push('CodeView-selection-common');
+      }
     }
+
+    selHighlightElem.current.className = sheClasses.join(' ');
 
     // Position the chooser
     const chooserKey = state.choosing ? state.choosing.key : undefined;
@@ -665,26 +702,27 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
       const cpElem = document.querySelector('.CodeView-chooser-positioner') as HTMLElement;
       if (cpElem) {
         if (state.choosing && (state.choosing.mode === ChooserMode.InsertAfter)) {
-          const parentSelNode = getParentSelNode();
-          if (parentSelNode.dir === 'block') {
-            cpElem.style.left = selElemLeft + 50 + 'px';
-            cpElem.style.top = (selElemTop + selElemHeight + 4) + 'px';
+          const [dir, rect] = getInsertInfo();
+          if (dir === 'block') {
+            cpElem.style.left = rect.left + 50 + 'px';
+            cpElem.style.top = (rect.bottom + 4) + 'px';
           } else {
-            cpElem.style.left = (selElemLeft + selElemWidth + 3) + 'px';
-            cpElem.style.top = (selElemTop + insertHeight + 2) + 'px';
+            cpElem.style.left = (rect.right + 3) + 'px';
+            cpElem.style.top = (rect.top + insertHeight + 2) + 'px';
           }
         } else if (state.choosing && (state.choosing.mode === ChooserMode.InsertBefore)) {
-          const parentSelNode = getParentSelNode();
-          if (parentSelNode.dir === 'block') {
-            cpElem.style.left = (selElemLeft + insertWidth) + 'px';
-            cpElem.style.top = (selElemTop - 4) + 'px';
+          const [dir, rect] = getInsertInfo();
+          if (dir === 'block') {
+            cpElem.style.left = (rect.left + insertWidth) + 'px';
+            cpElem.style.top = (rect.top - 4) + 'px';
           } else {
-            cpElem.style.left = (selElemLeft - 5) + 'px';
-            cpElem.style.top = (selElemTop + insertHeight + 2) + 'px';
+            cpElem.style.left = (rect.left - 5) + 'px';
+            cpElem.style.top = (rect.top + insertHeight + 2) + 'px';
           }
         } else {
-          cpElem.style.left = selElemLeft + 'px';
-          cpElem.style.top = (selElemTop + selElemHeight + 2) + 'px';
+          const rect = getRectForSelectionId(state.selectionId);
+          cpElem.style.left = rect.left + 'px';
+          cpElem.style.top = (rect.bottom + 2) + 'px';
         }
       }
 
