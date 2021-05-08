@@ -441,7 +441,6 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
       }
 
       const chooseInMode = (mode: ChooserMode, relSelId: string): CodeViewState => {
-        console.log('chooseInMode', {mode, relSelId});
         return {
           ...s,
           choosing: {
