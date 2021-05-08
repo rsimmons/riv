@@ -593,11 +593,25 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
     }
     selHighlightElem.current.className = sheClasses.join(' ');
 
+    const insertWidth = 50;
+
     const sheStyle = selHighlightElem.current.style;
-    sheStyle.top = selElemTop + 'px';
-    sheStyle.left = selElemLeft + 'px';
-    sheStyle.width = selElemWidth + 'px';
-    sheStyle.height = selElemHeight + 'px';
+    if (state.choosing && (state.choosing.mode === ChooserMode.InsertAfter)) {
+      sheStyle.top = selElemTop + selElemHeight + 3 + 'px';
+      sheStyle.left = selElemLeft + 'px';
+      sheStyle.width = insertWidth + 'px';
+      sheStyle.height = '2px';
+    } else if (state.choosing && (state.choosing.mode === ChooserMode.InsertBefore)) {
+      sheStyle.top = (selElemTop - 5) + 'px';
+      sheStyle.left = selElemLeft + 'px';
+      sheStyle.width = insertWidth + 'px';
+      sheStyle.height = '2px';
+    } else {
+      sheStyle.top = selElemTop + 'px';
+      sheStyle.left = selElemLeft + 'px';
+      sheStyle.width = selElemWidth + 'px';
+      sheStyle.height = selElemHeight + 'px';
+    }
 
     // Position the chooser
     const chooserKey = state.choosing ? state.choosing.key : undefined;
@@ -606,9 +620,16 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
       // NOTE: Directly referring to these class names is hacky
       const cpElem = document.querySelector('.CodeView-chooser-positioner') as HTMLElement;
       if (cpElem) {
-        // const cpRect = cpElem.getBoundingClientRect();
-        cpElem.style.left = selElemLeft + 'px';
-        cpElem.style.top = (selElemTop + selElemHeight + 2) + 'px';
+        if (state.choosing && (state.choosing.mode === ChooserMode.InsertAfter)) {
+          cpElem.style.left = selElemLeft + 50 + 'px';
+          cpElem.style.top = (selElemTop + selElemHeight + 4) + 'px';
+        } else if (state.choosing && (state.choosing.mode === ChooserMode.InsertBefore)) {
+          cpElem.style.left = (selElemLeft + insertWidth) + 'px';
+          cpElem.style.top = (selElemTop - 4) + 'px';
+        } else {
+          cpElem.style.left = selElemLeft + 'px';
+          cpElem.style.top = (selElemTop + selElemHeight + 2) + 'px';
+        }
       }
 
       positionedForChooserKey.current = chooserKey;
