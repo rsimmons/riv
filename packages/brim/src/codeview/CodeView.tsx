@@ -605,18 +605,51 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
     selHighlightElem.current.className = sheClasses.join(' ');
 
     const insertWidth = 50;
+    const insertHeight = 25;
+
+    const getParentSelNode = (): SeltreeNode => {
+      const seltreeNode = rootSeltreeLookups.selIdToNode.get(state.selectionId);
+      if (!seltreeNode) {
+        throw new Error();
+      }
+      const pidx = rootSeltreeLookups.parentAndIdx.get(seltreeNode);
+
+      if (!pidx) {
+        throw new Error();
+      }
+
+      const [parent, ] = pidx;
+
+      return parent;
+    };
 
     const sheStyle = selHighlightElem.current.style;
     if (state.choosing && (state.choosing.mode === ChooserMode.InsertAfter)) {
-      sheStyle.top = selElemTop + selElemHeight + 3 + 'px';
-      sheStyle.left = selElemLeft + 'px';
-      sheStyle.width = insertWidth + 'px';
-      sheStyle.height = '2px';
+      const parentSelNode = getParentSelNode();
+      if (parentSelNode.dir === 'block') {
+        sheStyle.top = (selElemTop + selElemHeight + 3) + 'px';
+        sheStyle.left = selElemLeft + 'px';
+        sheStyle.width = insertWidth + 'px';
+        sheStyle.height = '2px';
+      } else {
+        sheStyle.top = selElemTop + 'px';
+        sheStyle.left = (selElemLeft + selElemWidth + 3) + 'px';
+        sheStyle.width = '2px';
+        sheStyle.height = insertHeight + 'px';
+      }
     } else if (state.choosing && (state.choosing.mode === ChooserMode.InsertBefore)) {
-      sheStyle.top = (selElemTop - 5) + 'px';
-      sheStyle.left = selElemLeft + 'px';
-      sheStyle.width = insertWidth + 'px';
-      sheStyle.height = '2px';
+      const parentSelNode = getParentSelNode();
+      if (parentSelNode.dir === 'block') {
+        sheStyle.top = (selElemTop - 5) + 'px';
+        sheStyle.left = selElemLeft + 'px';
+        sheStyle.width = insertWidth + 'px';
+        sheStyle.height = '2px';
+      } else {
+        sheStyle.top = selElemTop + 'px';
+        sheStyle.left = (selElemLeft - 5) + 'px';
+        sheStyle.width = '2px';
+        sheStyle.height = insertHeight + 'px';
+      }
     } else {
       sheStyle.top = selElemTop + 'px';
       sheStyle.left = selElemLeft + 'px';
@@ -632,11 +665,23 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
       const cpElem = document.querySelector('.CodeView-chooser-positioner') as HTMLElement;
       if (cpElem) {
         if (state.choosing && (state.choosing.mode === ChooserMode.InsertAfter)) {
-          cpElem.style.left = selElemLeft + 50 + 'px';
-          cpElem.style.top = (selElemTop + selElemHeight + 4) + 'px';
+          const parentSelNode = getParentSelNode();
+          if (parentSelNode.dir === 'block') {
+            cpElem.style.left = selElemLeft + 50 + 'px';
+            cpElem.style.top = (selElemTop + selElemHeight + 4) + 'px';
+          } else {
+            cpElem.style.left = (selElemLeft + selElemWidth + 3) + 'px';
+            cpElem.style.top = (selElemTop + insertHeight + 2) + 'px';
+          }
         } else if (state.choosing && (state.choosing.mode === ChooserMode.InsertBefore)) {
-          cpElem.style.left = (selElemLeft + insertWidth) + 'px';
-          cpElem.style.top = (selElemTop - 4) + 'px';
+          const parentSelNode = getParentSelNode();
+          if (parentSelNode.dir === 'block') {
+            cpElem.style.left = (selElemLeft + insertWidth) + 'px';
+            cpElem.style.top = (selElemTop - 4) + 'px';
+          } else {
+            cpElem.style.left = (selElemLeft - 5) + 'px';
+            cpElem.style.top = (selElemTop + insertHeight + 2) + 'px';
+          }
         } else {
           cpElem.style.left = selElemLeft + 'px';
           cpElem.style.top = (selElemTop + selElemHeight + 2) + 'px';
