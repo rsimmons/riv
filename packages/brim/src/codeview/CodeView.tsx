@@ -422,6 +422,18 @@ const CodeView: React.FC<{autoFocus: boolean, root: FunctionDefinitionNode, onUp
   };
 
   const insertInDir = (dir: 'up' | 'down' | 'back' | 'fwd'): void => {
+    if (isVirtualSelId(state.selectionId)) {
+      setState(s => ({
+        ...s,
+        choosing: {
+          key: genuid(),
+          mode: ChooserMode.InsertEmpty,
+          relSelId: null,
+        },
+      }));
+      return;
+    }
+
     setState(s => {
       const seltreeNode = rootSeltreeLookups.selIdToNode.get(s.selectionId);
       if (!seltreeNode) {
