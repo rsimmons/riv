@@ -403,7 +403,8 @@ export const MultiChooser: React.FC<{context: MultiChooserContext, existingNode:
     }
 
     // Check if we should begin an infix choice
-    if (!infixNode && INFIX_OPERATOR_CHARS.includes(e.key)) {
+    const numberDot = (e.key === '.') && !Number.isNaN(Number(text+e.key)); // don't treat dot as operator if it makes a valid number
+    if (!infixNode && INFIX_OPERATOR_CHARS.includes(e.key) && !numberDot) {
       setInfixNode(dropdownState.choices[dropdownState.index].node);
       setText('');
       setDropdownState(recomputeDropdownChoices(''));
