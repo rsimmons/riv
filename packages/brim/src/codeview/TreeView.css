@@ -153,6 +153,9 @@
   padding: 0.3em 0.5em 0.3em 0;
 }
 
+.Layout-old .TreeView-underscore {
+  visibility: hidden;
+}
 
 
 
@@ -223,6 +226,10 @@
 
 .Layout-new .TreeView-funcdef-closer > span::before {
   content: '}';
+}
+
+.Layout-new .TreeView-underscore {
+  color: #aaa;
 }
 
 

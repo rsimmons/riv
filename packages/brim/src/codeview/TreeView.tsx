@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { ReactNode, useState } from 'react';
 import { Node, FunctionDefinitionNode, StreamExpressionNode, NodeKind, isStreamExpressionNode, StreamReferenceNode, ApplicationNode, FunctionInterfaceNode, NameBindingNode, ParamNode, TreeImplBodyNode, FunctionImplNode, TreeImplNode, BindingExpressionNode, StreamBindingNode, UID, TextNode } from '../compiler/Tree';
 import './TreeView.css';
 import { StaticEnvironment } from '../compiler/TreeUtil';
@@ -49,6 +49,27 @@ function combineSizes(sizes: ReadonlyArray<Size>, ctx: TreeViewContext): Size {
   return combinedSize;
 }
 
+const UNDERSCORE_SPAN = <span className="TreeView-underscore">_</span>;
+
+// Replace spaces with spans with underscores
+function underscore(text: string): ReactNode {
+  // NOTE: This could be smarter
+  const chunks = text.split(' ');
+  const children: Array<ReactNode> = [];
+  for (let i = 0; i < chunks.length; i++) {
+    if (i > 0) {
+      children.push(UNDERSCORE_SPAN);
+    }
+    children.push(chunks[i]);
+  }
+
+  return (
+    <span>
+      {children}
+    </span>
+  );
+}
+
 /**
  * LABELED LAYOUT
  */
@@ -84,7 +105,7 @@ function layoutLabeledStructure(struct: LabeledStructure, ctx: TreeViewContext):
   for (const item of struct) {
     if (item.kind === 'text') {
       reactNodes.push(
-        <div className="TreeView-ls-text">{item.text}</div>
+        <div className="TreeView-ls-text">{underscore(item.text)}</div>
       );
     } else {
       // NOTE: It is intentional that we only go block if the item node is block, and not if the total length with labels is too long.
@@ -216,7 +237,7 @@ function layoutSimpleNode(treeNode: Node, content: string, styling: string, ctx:
       <SelectableWrapper key={treeNode.nid} selId={treeNode.nid} styling="common" ctx={ctx}>
         <div className={'TreeView-common-leaf TreeView-leaf-styling-' + styling}>
           {icon && <img className="TreeView-literal-icon" src={icon[0]} alt={icon[1]} />}
-          {content}
+          {underscore(content)}
         </div>
       </SelectableWrapper>
     ),
