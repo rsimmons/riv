@@ -1,66 +1,5 @@
-.TreeView-literal-icon {
-  height: 1em;
-  vertical-align: text-bottom;
-}
-
-.TreeView-common-leaf {
-  padding: 0.3em 0.5em;
-}
-
-.TreeView-leaf-styling-undefined {
-  background-color: #f77;
-  border-radius: 0.5em;
-}
-
-.TreeView-leaf-styling-number {
-  color: rgb(0, 92, 197);
-}
-
-.TreeView-leaf-styling-text {
-  color: rgb(3, 47, 98);
-}
-
-.TreeView-leaf-styling-boolean {
-  color: rgb(0, 92, 197);
-}
-
-.TreeView-leaf-styling-streamref {
-  color: #1d8a3b;
-}
-
-.TreeView-leaf-styling-name {
-  color: rgb(111, 66, 193);
-}
-
 .TreeView-selectable {
   display: inline-block;
-}
-
-.TreeView-selectable-common {
-  border-radius: 0.5em;
-  border: 1px solid #ccc;
-  margin: -1px;
-}
-
-.TreeView-selectable-funcdef {
-  border: 2px solid #ccc;
-  margin: -2px;
-}
-
-/* This is hacky to refer to class from another component */
-/*
-.Editor-workspace:focus .TreeView-selected {
-  border: 1px solid black;
-  box-shadow: 0 0 5px 0 rgba(0, 0, 0, 0.5);
-}
-
-.TreeView-referent {
-  box-shadow: 0 0 0 1px rgb(135, 135, 255);
-}
-*/
-
-.TreeView-hovered {
-  border-color: #777;
 }
 
 .TreeView-array-block {
@@ -68,21 +7,9 @@
   flex-direction: column;
 }
 
-.TreeView-array-block-item:not(:last-child) {
-  margin-bottom: 0.75em;
-}
-
 .TreeView-array-inline {
   display: inline-flex;
   align-items: center;
-}
-
-.TreeView-array-inline-item:not(:last-child) {
-  margin-right: 0.75em;
-}
-
-.TreeView-ls-text {
-  padding: 0.3em 0;
 }
 
 .TreeView-ls-block {
@@ -90,16 +17,8 @@
   flex-direction: column;
 }
 
-.TreeView-ls-block-item:not(:last-child) {
-  margin-bottom: 0.75em;
-}
-
 .TreeView-ls-inline {
   display: inline-flex;
-}
-
-.TreeView-ls-inline-item:not(:last-child) {
-  margin-right: 1em;
 }
 
 .TreeView-ls-node-block {
@@ -112,34 +31,248 @@
   align-items: center;
 }
 
-.TreeView-ls-node-prelabel {
+
+.TreeView-literal-icon {
+  height: 1em;
+  vertical-align: text-bottom;
+}
+
+.TreeView-literal-icon {
+  height: 1em;
+  vertical-align: text-bottom;
+}
+
+.TreeView-iface-before-params {
+  display: inline-flex;
+  align-items: center;
+}
+
+.TreeView-iface-after-params {
+  display: inline-flex;
+  align-items: center;
+}
+
+.TreeView-iface-block {
+  display: inline-flex;
+  flex-direction: column;
+}
+
+.TreeView-iface-inline {
+  display: inline-flex;
+  align-items: center;
+}
+
+
+
+
+
+.Layout-old .TreeView-common-leaf {
+  padding: 0.3em 0.5em;
+}
+
+.Layout-old .TreeView-selectable-common {
+  border-radius: 0.5em;
+  border: 1px solid #ccc;
+  margin: -1px;
+}
+
+.Layout-old .TreeView-selectable-funcdef {
+  border: 2px solid #ccc;
+  margin: -2px;
+}
+
+.Layout-old .TreeView-hovered {
+  border-color: #777;
+}
+
+.Layout-old .TreeView-array-block-item:not(:last-child) {
+  margin-bottom: 0.75em;
+}
+
+.Layout-old .TreeView-array-inline-item:not(:last-child) {
+  margin-right: 0.75em;
+}
+
+.Layout-old .TreeView-ls-text {
+  padding: 0.3em 0;
+}
+
+.Layout-old .TreeView-ls-block-item:not(:last-child) {
+  margin-bottom: 0.75em;
+}
+
+.Layout-old .TreeView-leaf-styling-undefined {
+  border-radius: 0.5em;
+}
+
+.Layout-old .TreeView-ls-inline-item:not(:last-child) {
+  margin-right: 1em;
+}
+
+.Layout-old .TreeView-ls-node-prelabel {
   padding: 0.3em 0.5em 0.3em 0;
 }
 
-.TreeView-ls-node-postlabel {
+.Layout-old .TreeView-ls-node-postlabel {
   padding: 0.3em 0 0.3em 0.5em;
 }
 
-.TreeView-indent {
+.Layout-old .TreeView-indent {
   padding-left: 1.5em;
 }
 
-.TreeView-func-padding {
+.Layout-old .TreeView-func-padding {
   padding: 0.75em;
 }
 
-.TreeView-funcdef-iface {
+.Layout-old .TreeView-funcdef-iface {
   border-bottom: 1px dashed #ccc;
 }
 
-.TreeView-app-inline {
+.Layout-old .TreeView-app-inline {
   padding: 0 0.5em;
 }
 
-.TreeView-app-block {
+.Layout-old .TreeView-app-block {
   padding-left: 0.5em;
 }
 
-.TreeView-stream-binding-binding {
+.Layout-old .TreeView-stream-binding-binding {
   margin-bottom: 0.5em;
 }
+
+.Layout-old .TreeView-iface-block > *:not(:last-child) {
+  margin-bottom: 0.75em;
+}
+
+.Layout-old .TreeView-iface-inline > *:not(:last-child) {
+  margin-right: 1em;
+}
+
+.Layout-old .TreeView-iface-prefix {
+  padding: 0.3em 0.5em 0.3em 0;
+}
+
+
+
+
+.Layout-new .TreeView-leaf-styling-undefined {
+  border-radius: 0.5em;
+}
+
+.Layout-new .TreeView-hovered {
+  outline: 1px solid #888;
+  outline-offset: -1px;
+}
+
+.Layout-new .TreeView-array-inline-item:not(:last-child) {
+  margin-right: 1ch;
+}
+
+.Layout-new .TreeView-ls-inline-item:not(:last-child) {
+  margin-right: 1ch;
+}
+
+.Layout-new .TreeView-ls-node-prelabel {
+  padding-right: 1ch;
+}
+
+.Layout-new .TreeView-ls-node-postlabel {
+  padding-left: 1ch;
+}
+
+.Layout-new .TreeView-indent {
+  padding-left: 2ch;
+}
+
+.Layout-new .TreeView-iface-fn-sym > span::before {
+  content: 'ƒ';
+  margin-right: 1ch;
+}
+
+.Layout-new .TreeView-iface-before-params::after {
+  content: '(';
+}
+
+.Layout-new .TreeView-iface-after-params::before {
+  content: ')';
+}
+
+/* this is brittle */
+.Layout-new .TreeView-iface-inline .TreeView-iface-params > div > div:not(:last-child)::after {
+  content: ',';
+}
+
+.Layout-new .TreeView-iface-out-sym > span::before {
+  content: '→';
+  margin-left: 1ch;
+}
+
+.Layout-new .TreeView-iface-block .TreeView-iface-params {
+  margin-left: 2ch;
+}
+
+.Layout-new .TreeView-iface-after-params::after {
+  content: '{';
+  margin-left: 1ch;
+}
+
+.Layout-new .TreeView-funcdef-impl {
+  padding-left: 2ch;
+}
+
+.Layout-new .TreeView-funcdef-closer > span::before {
+  content: '}';
+}
+
+
+.Palette-light .TreeView-leaf-styling-undefined {
+  background-color: #f77;
+}
+
+.Palette-light .TreeView-leaf-styling-number {
+  color: rgb(0, 92, 197);
+}
+
+.Palette-light .TreeView-leaf-styling-text {
+  color: rgb(3, 47, 98);
+}
+
+.Palette-light .TreeView-leaf-styling-boolean {
+  color: rgb(0, 92, 197);
+}
+
+.Palette-light .TreeView-leaf-styling-streamref {
+  color: #1d8a3b;
+}
+
+.Palette-light .TreeView-leaf-styling-name {
+  color: rgb(111, 66, 193);
+}
+
+
+
+.Palette-dark .TreeView-leaf-styling-undefined {
+  background-color: #f77;
+}
+
+.Palette-dark .TreeView-leaf-styling-number {
+  color: #71b4ff;
+}
+
+.Palette-dark .TreeView-leaf-styling-text {
+  color: #1fd200;
+}
+
+.Palette-dark .TreeView-leaf-styling-boolean {
+  color: #71b4ff;
+}
+
+.Palette-dark .TreeView-leaf-styling-streamref {
+  color: #1d8a3b;
+}
+
+.Palette-dark .TreeView-leaf-styling-name {
+  color: #c6a6ff;
+}
+

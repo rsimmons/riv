@@ -8,9 +8,14 @@ import booleanIcon from './icons/boolean.svg';
 import { makeVirtualSelId, SeltreeNode } from './Seltree';
 import { parseTemplateString } from './FITemplate';
 
+export interface TreeViewStyling {
+  grid: boolean;
+}
+
 export interface TreeViewContext {
   staticEnvMap: ReadonlyMap<Node, StaticEnvironment>;
   onSelectNodeId: (nid: UID) => void;
+  styling: TreeViewStyling;
 };
 
 function indentReactNode(node: React.ReactNode): React.ReactNode {
@@ -436,37 +441,56 @@ function layoutParamNode(node: ParamNode, ctx: TreeViewContext): LayoutUnit {
 }
 
 function layoutFunctionInterfaceNode(node: FunctionInterfaceNode, ctx: TreeViewContext): LayoutUnit {
-  const items: Array<LayoutUnit> = [];
+  const loName = layoutTextNode(node.name, ctx)
+  const loParams = node.params.map(n => layoutParamNode(n, ctx));
 
-  items.push(layoutTextNode(node.name, ctx));
-
-  if (true) { // we could skip displaying params with this
-    const loParams = node.params.map(n => layoutParamNode(n, ctx));
-    const loParamsArray = layoutArray(loParams, makeVirtualSelId(node.nid, 'params'), false, ctx);
-    items.push(loParamsArray);
-  }
-
-  if (node.output.kind !== NodeKind.Void) {
-    const loOutput = layoutSimpleNode(node.output, 'any', 'name', ctx);
-    if (loOutput.size === undefined) {
+  let loOutput: LayoutUnit | undefined;
+  if (node.output.kind === NodeKind.Void) {
+    loOutput = undefined;
+  } else {
+    const loOutputType = layoutSimpleNode(node.output, 'any', 'name', ctx);
+    if (loOutputType.size === undefined) {
       throw new Error();
     }
-    items.push({
-      reactNode: <div>→ {loOutput.reactNode}</div>,
-      size: loOutput.size + 1,
+    loOutput = {
+      reactNode: <div><span className="TreeView-iface-out-sym"><span /></span> {loOutputType.reactNode}</div>,
+      size: loOutputType.size,
       seltree: {
         dir: 'inline',
-        children: [loOutput.seltree],
+        children: [loOutputType.seltree],
       },
-    });
+    };
   }
 
-  const loIfaceInner = layoutArray(items, undefined, false, ctx);
+  const sizingItems: ReadonlyArray<LayoutUnit> = [loName, ...loParams, ...(loOutput ? [loOutput] : [])];
+  const combinedSize = combineSizes(sizingItems.map(item => item.size));
+
+  // Force params array to be block if overall function interface is block, so it doesn't look weird
+  const loParamsArray = layoutArray(loParams, makeVirtualSelId(node.nid, 'params'), (combinedSize === undefined), ctx);
+
+  const dir = (combinedSize === undefined) ? 'block' : 'inline';
 
   return {
-    ...loIfaceInner,
-    reactNode: <div className="TreeView-func-padding">{loIfaceInner.reactNode}</div>,
-  }
+    reactNode: (
+      <div className="TreeView-func-padding">
+        <div className={'TreeView-iface TreeView-iface-' + dir}>
+          <div className="TreeView-iface-before-params">
+            <div className="TreeView-iface-fn-sym"><span /></div>
+            <div className="TreeView-iface-name">{loName.reactNode}</div>
+          </div>
+          <div className="TreeView-iface-params">{loParamsArray.reactNode}</div>
+          <div className="TreeView-iface-after-params">
+            {loOutput && <div className="TreeView-iface-output">{loOutput.reactNode}</div>}
+          </div>
+        </div>
+      </div>
+    ),
+    size: combinedSize,
+    seltree: {
+      dir,
+      children: [loName.seltree, loParamsArray.seltree, ...(loOutput ? [loOutput.seltree] : [])],
+    },
+  };
 }
 
 export function layoutStreamBindingNode(node: StreamBindingNode, ctx: TreeViewContext): LayoutUnit {
@@ -605,6 +629,7 @@ export function layoutFunctionDefinitionNode(node: FunctionDefinitionNode, ctx: 
         <div className="TreeView-funcdef">
           <div className="TreeView-funcdef-iface">{loIface.reactNode}</div>
           <div className="TreeView-funcdef-impl">{loImpl.reactNode}</div>
+          <div className="TreeView-funcdef-closer"><span /></div>
         </div>
       </SelectableWrapper>
     ),

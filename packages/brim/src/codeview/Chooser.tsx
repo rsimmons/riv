@@ -3,7 +3,7 @@ import { Node } from '../compiler/Tree';
 import { FunctionDefinitionNode, NodeKind, isStreamExpressionNode, ApplicationNode, StreamExpressionNode, FunctionInterfaceNode, UID, TextNode, StreamBindingNode } from '../compiler/Tree';
 import Fuse from 'fuse.js';
 import { getStaticEnvMap, StaticEnvironment } from '../compiler/TreeUtil';
-import { layoutStreamExpressionNode, TreeViewContext, layoutStreamBindingNode } from './TreeView';
+import { layoutStreamExpressionNode, TreeViewContext, layoutStreamBindingNode, TreeViewStyling } from './TreeView';
 import genuid from '../util/uid';
 import { parseTemplateString, templateToPlainText } from './FITemplate';
 import './Chooser.css';
@@ -84,7 +84,7 @@ export enum MultiChooserContext {
   // Module?
 }
 
-export const MultiChooser: React.FC<{context: MultiChooserContext, existingNode: Node | null, localEnv: StaticEnvironment, onCommitChoice: (node: Node) => void, onAbort: () => void}> = ({ context, existingNode, localEnv, onCommitChoice, onAbort }) => {
+export const MultiChooser: React.FC<{context: MultiChooserContext, existingNode: Node | null, localEnv: StaticEnvironment, treeViewStyling: TreeViewStyling, onCommitChoice: (node: Node) => void, onAbort: () => void}> = ({ context, existingNode, localEnv, treeViewStyling, onCommitChoice, onAbort }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     inputRef.current && inputRef.current.select();
@@ -456,6 +456,7 @@ export const MultiChooser: React.FC<{context: MultiChooserContext, existingNode:
           const choiceViewCtx: TreeViewContext = {
             staticEnvMap: choiceEnvMap,
             onSelectNodeId: () => {},
+            styling: treeViewStyling,
           };
 
           return (

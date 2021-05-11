@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useState } from 'react';
+import React, { useRef, useCallback, useState, FormEventHandler } from 'react';
 import { StoragePanel } from './StoragePanel';
 import { Node, FunctionDefinitionNode } from '../compiler/Tree';
 import CodeView from '../codeview/CodeView';
@@ -22,6 +22,25 @@ function useEffectfulReducer<S, A>(reducer: (s: S, a: A) => S, initialArg: S): [
   return [copiedState, memoizedDispatch];
 }
 
+const Selector: React.FC<{options: ReadonlyArray<string>, initVal: string, onSelect: (val: string) => void}> = ({options, initVal, onSelect}) => {
+  const [val, setVal] = useState<string>(initVal);
+
+  const handleInput: FormEventHandler<HTMLSelectElement> = (e) => {
+    const v = e.currentTarget.value;
+    setVal(v);
+    onSelect(v);
+  };
+
+  return (
+    <select value={val} onInput={handleInput}>
+      {options.map(opt => <option>{opt}</option>)}
+    </select>
+  );
+}
+
+const LAYOUTS = ['old', 'new'];
+const PALETTES = ['light', 'dark'];
+
 const Editor: React.FC = () => {
   // NOTE: We don't use useReducer here because it expects the reducer function
   // to be pure, and ours is not. So we have to do a workaround.
@@ -39,12 +58,19 @@ const Editor: React.FC = () => {
     dispatch({type: 'UPDATE_TREE', newNode: newRoot});
   };
 
+  const [layout, setLayout] = useState(LAYOUTS[0]);
+  const [palette, setPalette] = useState(PALETTES[0]);
+
   return (
     <div className="Editor">
       <div className="Editor-storage-panel-container Editor-panel">
         <StoragePanel programInfo={state.programInfo} mainDefinition={state.dispMainDef} onChangeName={handleChangeProgramName} onLoadProgram={handleLoadProgram} />
       </div>
-      <CodeView root={state.dispMainDef} autoFocus={true} onUpdateRoot={handleUpdateRoot} />
+      <div style={{marginBottom: '1em'}}>
+        <Selector options={LAYOUTS} initVal={layout} onSelect={v => setLayout(v)} />
+        <Selector options={PALETTES} initVal={palette} onSelect={v => setPalette(v)} />
+      </div>
+      <CodeView root={state.dispMainDef} layout={layout} palette={palette} autoFocus={true} onUpdateRoot={handleUpdateRoot} />
     </div>
   );
 }
