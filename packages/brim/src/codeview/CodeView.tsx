@@ -1,4 +1,4 @@
-import { layoutAnyNode, layoutFunctionDefinitionNode, TreeViewContext, TreeViewStyling } from '../codeview/TreeView';
+import { layoutAnyNode, layoutFunctionDefinitionNode, TreeViewContext, TreeViewDisplayOptions } from '../codeview/TreeView';
 import { getStaticEnvMap, initStaticEnv, StaticEnvironment } from '../compiler/TreeUtil';
 import { TextChooser, MultiChooser, MultiChooserContext } from '../codeview/Chooser';
 import { useLayoutEffect, useRef, useState } from 'react';
@@ -72,8 +72,8 @@ function findFirstHoleSelId(under: Node, root: Node, globalStaticEnv: StaticEnvi
   const treeViewCtx: TreeViewContext = {
     staticEnvMap: staticEnvMap,
     onSelectNodeId: () => {},
-    styling: {
-      grid: true, // this doesn't matter?
+    displayOpts: {
+      wrapWidth: 60, // doesn't matter?
     },
   };
   const {seltree} = layoutAnyNode(root, treeViewCtx);
@@ -115,7 +115,7 @@ interface CodeViewState {
   readonly choosing: ChooserState | null;
 }
 
-const CodeView: React.FC<{root: FunctionDefinitionNode, layout: string, palette: string, autoFocus: boolean, onUpdateRoot: (newRoot: Node) => void}> = ({ root, layout, palette, autoFocus, onUpdateRoot }) => {
+const CodeView: React.FC<{root: FunctionDefinitionNode, layout: string, palette: string, wrapWidth: number, autoFocus: boolean, onUpdateRoot: (newRoot: Node) => void}> = ({ root, layout, palette, wrapWidth, autoFocus, onUpdateRoot }) => {
   const [state, setState] = useState<CodeViewState>({
     selectionId: root.nid,
     choosing: null,
@@ -129,8 +129,8 @@ const CodeView: React.FC<{root: FunctionDefinitionNode, layout: string, palette:
 
   const nodeIdToNode = getNodeIdMap(root);
 
-  const treeViewStyling: TreeViewStyling = {
-    grid: true,
+  const treeViewDisplayOpts: TreeViewDisplayOptions = {
+    wrapWidth,
   }
 
   const treeViewCtx: TreeViewContext = {
@@ -140,7 +140,7 @@ const CodeView: React.FC<{root: FunctionDefinitionNode, layout: string, palette:
     onSelectNodeId: (nid: UID) => {
       setSelectionId(nid);
     },
-    styling: treeViewStyling,
+    displayOpts: treeViewDisplayOpts,
   };
 
   const setSelectionId = (nid: UID): void => {
@@ -797,7 +797,7 @@ const CodeView: React.FC<{root: FunctionDefinitionNode, layout: string, palette:
                 }));
               }
 
-              return <MultiChooser key={state.choosing.key} context={/*TODO: fix*/MultiChooserContext.ExprOrBind} existingNode={null} localEnv={localEnv} treeViewStyling={treeViewStyling} onCommitChoice={handleCommitChoice} onAbort={abortChooser} />
+              return <MultiChooser key={state.choosing.key} context={/*TODO: fix*/MultiChooserContext.ExprOrBind} existingNode={null} localEnv={localEnv} treeViewDisplayOpts={treeViewDisplayOpts} onCommitChoice={handleCommitChoice} onAbort={abortChooser} />
             } else {
               if ([ChooserMode.Modify, ChooserMode.Fill, ChooserMode.FillInsertAfter].includes(state.choosing.mode)) {
                 const selectedNode = nodeIdToNode.get(state.selectionId);
@@ -845,7 +845,7 @@ const CodeView: React.FC<{root: FunctionDefinitionNode, layout: string, palette:
                     }));
                   }
 
-                  return <MultiChooser key={state.choosing.key} context={chooserContext} existingNode={selectedNode} localEnv={localEnv} treeViewStyling={treeViewStyling} onCommitChoice={handleCommitChoice} onAbort={abortChooser} />
+                  return <MultiChooser key={state.choosing.key} context={chooserContext} existingNode={selectedNode} localEnv={localEnv} treeViewDisplayOpts={treeViewDisplayOpts} onCommitChoice={handleCommitChoice} onAbort={abortChooser} />
                 } else {
                   const state_choosing = state.choosing;
 
@@ -880,7 +880,7 @@ const CodeView: React.FC<{root: FunctionDefinitionNode, layout: string, palette:
                     }));
                   }
 
-                  return <MultiChooser key={state.choosing.key} context={chooserContext} existingNode={null} localEnv={localEnv} treeViewStyling={treeViewStyling} onCommitChoice={handleCommitChoice} onAbort={abortChooser} />
+                  return <MultiChooser key={state.choosing.key} context={chooserContext} existingNode={null} localEnv={localEnv} treeViewDisplayOpts={treeViewDisplayOpts} onCommitChoice={handleCommitChoice} onAbort={abortChooser} />
                 }
               } else if ([ChooserMode.InsertBefore, ChooserMode.InsertAfter].includes(state.choosing.mode)) {
                 if (state.choosing.relSelId === null) {
@@ -948,7 +948,7 @@ const CodeView: React.FC<{root: FunctionDefinitionNode, layout: string, palette:
 
                 const chooserContext = determineNodeChooserContext(relNode, root);
 
-                return <MultiChooser key={state.choosing.key} context={chooserContext} existingNode={null} localEnv={localEnv} treeViewStyling={treeViewStyling} onCommitChoice={handleCommitChoice} onAbort={abortChooser} />
+                return <MultiChooser key={state.choosing.key} context={chooserContext} existingNode={null} localEnv={localEnv} treeViewDisplayOpts={treeViewDisplayOpts} onCommitChoice={handleCommitChoice} onAbort={abortChooser} />
               } else {
                 throw new Error();
               }

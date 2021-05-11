@@ -61,16 +61,22 @@ const Editor: React.FC = () => {
   const [layout, setLayout] = useState(LAYOUTS[0]);
   const [palette, setPalette] = useState(PALETTES[0]);
 
+  const [wrapWidth, setWrapWidth] = useState(60);
+  const handleWrapWidthInput: React.FormEventHandler<HTMLInputElement> = (e) => {
+    setWrapWidth(+e.currentTarget.value);
+  };
+
   return (
     <div className="Editor">
       <div className="Editor-storage-panel-container Editor-panel">
         <StoragePanel programInfo={state.programInfo} mainDefinition={state.dispMainDef} onChangeName={handleChangeProgramName} onLoadProgram={handleLoadProgram} />
       </div>
-      <div style={{marginBottom: '1em'}}>
+      <div style={{display: 'flex', marginBottom: '1em'}}>
         <Selector options={LAYOUTS} initVal={layout} onSelect={v => setLayout(v)} />
         <Selector options={PALETTES} initVal={palette} onSelect={v => setPalette(v)} />
+        <input type="range" min="20" max="100" value={wrapWidth} style={{'width': '6em'}} onInput={handleWrapWidthInput} />
       </div>
-      <CodeView root={state.dispMainDef} layout={layout} palette={palette} autoFocus={true} onUpdateRoot={handleUpdateRoot} />
+      <CodeView root={state.dispMainDef} layout={layout} palette={palette} wrapWidth={wrapWidth} autoFocus={true} onUpdateRoot={handleUpdateRoot} />
     </div>
   );
 }

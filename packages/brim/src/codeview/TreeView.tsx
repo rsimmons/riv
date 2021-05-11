@@ -8,14 +8,14 @@ import booleanIcon from './icons/boolean.svg';
 import { makeVirtualSelId, SeltreeNode } from './Seltree';
 import { parseTemplateString } from './FITemplate';
 
-export interface TreeViewStyling {
-  grid: boolean;
+export interface TreeViewDisplayOptions {
+  wrapWidth: number;
 }
 
 export interface TreeViewContext {
   staticEnvMap: ReadonlyMap<Node, StaticEnvironment>;
   onSelectNodeId: (nid: UID) => void;
-  styling: TreeViewStyling;
+  displayOpts: TreeViewDisplayOptions;
 };
 
 function indentReactNode(node: React.ReactNode): React.ReactNode {
@@ -30,7 +30,7 @@ interface LayoutUnit {
   seltree: SeltreeNode;
 }
 
-function combineSizes(sizes: ReadonlyArray<Size>): Size {
+function combineSizes(sizes: ReadonlyArray<Size>, ctx: TreeViewContext): Size {
   let combinedSize: Size = 0;
 
   for (const size of sizes) {
@@ -42,7 +42,7 @@ function combineSizes(sizes: ReadonlyArray<Size>): Size {
     }
   }
 
-  if ((combinedSize !== undefined) && (combinedSize > MAX_ROW_WIDTH)) {
+  if ((combinedSize !== undefined) && (combinedSize > ctx.displayOpts.wrapWidth)) {
     combinedSize = undefined;
   }
 
@@ -65,7 +65,7 @@ interface LSNodeItem {
 type LabeledStructureItem = LSTextItem | LSNodeItem;
 type LabeledStructure = ReadonlyArray<LabeledStructureItem>;
 
-function layoutLabeledStructure(struct: LabeledStructure): LayoutUnit {
+function layoutLabeledStructure(struct: LabeledStructure, ctx: TreeViewContext): LayoutUnit {
   const reactNodes: Array<React.ReactNode> = [];
   const seltreeChildren: Array<SeltreeNode> = [];
 
@@ -79,7 +79,7 @@ function layoutLabeledStructure(struct: LabeledStructure): LayoutUnit {
         return item.preLabel.length + item.postLabel.length + item.node.size;
       }
     }
-  }));
+  }), ctx);
 
   for (const item of struct) {
     if (item.kind === 'text') {
@@ -166,8 +166,6 @@ function layoutTextNode(node: TextNode, ctx: TreeViewContext): LayoutUnit {
   return layoutSimpleNode(node, node.text || '\xa0\xa0\xa0\xa0', 'name', ctx);
 }
 
-const MAX_ROW_WIDTH = 50;
-
 function layoutInsertVirtualNode(selId: string, ctx: TreeViewContext): LayoutUnit {
   return {
     reactNode: (
@@ -190,7 +188,7 @@ function layoutArray(items: ReadonlyArray<LayoutUnit>, dynEmptySelId: string | u
     adjustedItems = items;
   }
 
-  const size = combineSizes(adjustedItems.map(item => item.size));
+  const size = combineSizes(adjustedItems.map(item => item.size), ctx);
 
   const layoutDir = forceBlock ? 'block' : ((size === undefined) ? 'block' : 'inline');
 
@@ -340,7 +338,7 @@ function layoutApplicationNode(node: ApplicationNode, ctx: TreeViewContext): Lay
     }
   }
 
-  const loStructure = layoutLabeledStructure(lsItems);
+  const loStructure = layoutLabeledStructure(lsItems, ctx);
 
   const dir = loStructure.size === undefined ? 'block' : 'inline';
 
@@ -463,7 +461,7 @@ function layoutFunctionInterfaceNode(node: FunctionInterfaceNode, ctx: TreeViewC
   }
 
   const sizingItems: ReadonlyArray<LayoutUnit> = [loName, ...loParams, ...(loOutput ? [loOutput] : [])];
-  const combinedSize = combineSizes(sizingItems.map(item => item.size));
+  const combinedSize = combineSizes(sizingItems.map(item => item.size), ctx);
 
   // Force params array to be block if overall function interface is block, so it doesn't look weird
   const loParamsArray = layoutArray(loParams, makeVirtualSelId(node.nid, 'params'), (combinedSize === undefined), ctx);
@@ -497,7 +495,7 @@ export function layoutStreamBindingNode(node: StreamBindingNode, ctx: TreeViewCo
   const loBindingExpr = layoutBindingExpressionNode(node.bexpr, ctx);
   const loStreamExpr = layoutStreamExpressionNode(node.sexpr, ctx);
 
-  const size = combineSizes([loBindingExpr.size, 1, loStreamExpr.size]);
+  const size = combineSizes([loBindingExpr.size, 1, loStreamExpr.size], ctx);
 
   let reactNode: React.ReactNode;
   let seltree: SeltreeNode;
@@ -578,7 +576,7 @@ function layoutTreeImplNode(node: TreeImplNode, iface: FunctionInterfaceNode, fo
           postLabel: '',
           node: loExpr,
         },
-      ]);
+      ], ctx);
 
       // This is sort of weird. We "extract" the single child of the seltree, so that it isn't "wrapped".
       // Because this is an element of a dynamic array, it must have a selId, which it won't unless we do this.
