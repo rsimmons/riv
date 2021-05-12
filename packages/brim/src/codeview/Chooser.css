@@ -9,8 +9,6 @@
   font-size: inherit;
   font-family: inherit;
   font-weight: inherit;
-  background: white;
-  color: #333;
   padding: 0.3em;
   width: 100%;
   box-sizing: border-box;
@@ -23,8 +21,6 @@
   padding: 0;
   max-height: 20em;
   overflow-y: scroll;
-  background:white;
-  color: #333;
   border: 1px solid #777;
   border-top: none;
 }
@@ -33,10 +29,7 @@
   padding: 0.3em 0.2em;
 }
 
-.Chooser-dropdown li.Chooser-dropdown-selected {
-  background: #ddd;
-}
-
+/*
 .Chooser-dropdown li.Chooser-dropdown-selected-error {
   background: #ddd;
   color: #555;
@@ -44,4 +37,34 @@
 
 .Chooser-dropdown-compile-error {
   color: red;
+}
+*/
+
+.Palette-light .Chooser-input {
+  background: white;
+  color: black;
+}
+
+.Palette-light .Chooser-dropdown {
+  background: white;
+  color: black;
+}
+
+.Palette-light .Chooser-dropdown li.Chooser-dropdown-selected {
+  background: #ddd;
+}
+
+
+.Palette-dark .Chooser-input {
+  background: black;
+  color:white;
+}
+
+.Palette-dark .Chooser-dropdown {
+  background:black;
+  color: white;
+}
+
+.Palette-dark .Chooser-dropdown li.Chooser-dropdown-selected {
+  background: rgb(25, 20, 94);
 }
