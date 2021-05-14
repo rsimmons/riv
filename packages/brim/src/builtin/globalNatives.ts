@@ -147,7 +147,7 @@ const strtextNativeFunctions: ReadonlyArray<[string, AbbrevFunctionInterface, Fu
   ['div', '{0::number} / {1::number} => {::number}', (a: number, b: number) => a / b],
   ['sqr', '{0::number} squared => {::number}', (v: number) => v*v],
 */
-  ['cos', ['cosine of', [['radians', 'number']], 'number', ''], Math.cos],
+  ['cos', ['cosine', [['radians', 'number']], 'number', 'cosine of $0 radians'], Math.cos],
 
   // dom/browser
   ['showString', ['show', [['value', 'A']], 'void', ''], showString],
