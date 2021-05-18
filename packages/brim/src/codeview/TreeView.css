@@ -326,6 +326,10 @@
   color: rgb(111, 66, 193);
 }
 
+.Palette-light .TreeView-styling-label {
+  color: rgb(103 72 0);
+}
+
 
 
 .Palette-dark .TreeView-literal-icon {
@@ -354,5 +358,9 @@
 
 .Palette-dark .TreeView-leaf-styling-name {
   color: #c6a6ff;
+}
+
+.Palette-dark .TreeView-styling-label {
+  color: rgb(224 195 128);
 }
 

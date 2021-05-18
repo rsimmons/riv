@@ -183,9 +183,9 @@ function layoutLabeledItem(preLabel: string | undefined, item: LayoutUnit, postL
   return {
     reactNode: (
       <div className={'TreeView-li TreeView-' + ((size === undefined) ? 'block' : 'inline')}>
-        {preLabel && <div className="TreeView-li-prelabel">{preLabel}</div>}
+        {preLabel && <div className="TreeView-li-prelabel TreeView-styling-label">{preLabel}</div>}
         <div className="TreeView-li-item">{item.reactNode}</div>
-        {postLabel && <div className="TreeView-li-postlabel">{postLabel}</div>}
+        {postLabel && <div className="TreeView-li-postlabel TreeView-styling-label">{postLabel}</div>}
       </div>
     ),
     size,
@@ -278,7 +278,7 @@ function layoutApplicationNode(node: ApplicationNode, ctx: TreeViewContext): Lay
         return {
           key: seg.text,
           lo: {
-            reactNode: <div>{seg.text}</div>,
+            reactNode: <div className="TreeView-styling-label">{seg.text}</div>,
             size: seg.text.length,
             seltree: undefined,
           },
@@ -319,7 +319,7 @@ function layoutApplicationNode(node: ApplicationNode, ctx: TreeViewContext): Lay
 
     // TODO: Force args array to be block if overall application is block?
     loApp = layoutArray([
-      {key: 'before-args', lo: {reactNode: <div className="TreeView-app-before-args" >{underscore(funcIface.name.text)}</div>, size: funcIface.name.text.length, seltree: undefined}},
+      {key: 'before-args', lo: {reactNode: <div className="TreeView-app-before-args" ><span className="TreeView-styling-label">{underscore(funcIface.name.text)}</span></div>, size: funcIface.name.text.length, seltree: undefined}},
       {key: 'args', lo: loArgs},
       {key: 'after-args', lo: {reactNode: <div className="TreeView-app-after-args" />, size: 0, seltree: undefined}},
     ], 'TreeView-app TreeView-notmpl', false, ctx);
