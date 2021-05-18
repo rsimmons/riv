@@ -540,7 +540,21 @@ function layoutTreeImplNode(node: TreeImplNode, iface: FunctionInterfaceNode, fo
   for (const n of node.body) {
     if (n === outputBodyNode) {
       const loExpr = layoutStreamExpressionNode(n, ctx);
-      items.push({key: n.nid, lo: layoutLabeledItem('←', loExpr, undefined, false, ctx)});
+      const loOutput = layoutLabeledItem('←', loExpr, undefined, false, ctx);
+      if (!loOutput.seltree) {
+        throw new Error();
+      }
+      // Note: We modify loOutput to have the fixedFinal flag
+      items.push({
+        key: n.nid,
+        lo: {
+          ...loOutput,
+          seltree: {
+            ...loOutput.seltree,
+            fixedFinal: true,
+          },
+        },
+      });
     } else {
       items.push({key: n.nid, lo: layoutTreeImplBodyNode(n, ctx)});
     }
