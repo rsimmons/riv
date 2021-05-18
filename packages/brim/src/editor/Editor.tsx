@@ -38,7 +38,7 @@ const Selector: React.FC<{options: ReadonlyArray<string>, initVal: string, onSel
   );
 }
 
-const LAYOUTS = ['old', 'new'];
+const LAYOUTS = ['new', 'old'];
 const PALETTES = ['light', 'dark'];
 
 const Editor: React.FC = () => {
