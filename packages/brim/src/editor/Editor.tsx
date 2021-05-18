@@ -33,7 +33,7 @@ const Selector: React.FC<{options: ReadonlyArray<string>, initVal: string, onSel
 
   return (
     <select value={val} onInput={handleInput}>
-      {options.map(opt => <option>{opt}</option>)}
+      {options.map(opt => <option key={opt}>{opt}</option>)}
     </select>
   );
 }

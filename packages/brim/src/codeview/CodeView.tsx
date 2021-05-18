@@ -77,6 +77,9 @@ function findFirstHoleSelId(under: Node, root: Node, globalStaticEnv: StaticEnvi
     },
   };
   const {seltree} = layoutAnyNode(root, treeViewCtx);
+  if (!seltree) {
+    throw new Error();
+  }
   const subtree = findNodeById(seltree, under.nid);
   if (!subtree) {
     throw new Error();
@@ -739,6 +742,9 @@ const CodeView: React.FC<{root: FunctionDefinitionNode, layout: string, palette:
   });
 
   const {reactNode: rootReactNode, seltree: rootSeltree} = layoutFunctionDefinitionNode(root, treeViewCtx);
+  if (!rootSeltree) {
+    throw new Error();
+  }
   const rootSeltreeLookups = computeSeltreeLookups(rootSeltree);
 
   return (
