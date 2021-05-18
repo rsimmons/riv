@@ -355,7 +355,7 @@ function layoutApplicationNode(node: ApplicationNode, ctx: TreeViewContext): Lay
 export function layoutStreamExpressionNode(node: StreamExpressionNode, ctx: TreeViewContext): LayoutUnit {
   switch (node.kind) {
     case NodeKind.UndefinedLiteral:
-      return layoutSimpleNode(node, '\xa0\xa0\xa0\xa0', 'undefined', ctx, undefined, true);
+      return layoutSimpleNode(node, '', 'undefined', ctx, undefined, true);
 
     case NodeKind.NumberLiteral:
       return layoutSimpleNode(node, node.val.toString(), 'number', ctx);

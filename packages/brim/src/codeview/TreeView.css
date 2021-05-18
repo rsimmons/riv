@@ -50,6 +50,11 @@
 
 .Layout-old .TreeView-leaf-styling-undefined {
   border-radius: 0.5em;
+  width: 1em;
+}
+
+.Layout-old .TreeView-leaf-styling-undefined::before {
+  content: '\00a0';
 }
 
 .Layout-old .TreeView-selectable-common {
@@ -155,7 +160,11 @@
 }
 
 .Layout-new .TreeView-leaf-styling-undefined {
-  border-radius: 0.5em;
+  width: 2ch;
+}
+
+.Layout-new .TreeView-leaf-styling-undefined::before {
+  content: '\00a0';
 }
 
 .Layout-new .TreeView-hovered {
