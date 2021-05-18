@@ -636,9 +636,6 @@ const CodeView: React.FC<{root: FunctionDefinitionNode, layout: string, palette:
     // (e.g. rect function or rounded application)
     const sheClasses = ['CodeView-selection'];
 
-    const insertWidth = 50;
-    const insertHeight = 25;
-
     // returns [relParentDir, relRect]
     const getInsertInfo = (): [string, Rect] => {
       if (!state.choosing) {
@@ -662,39 +659,42 @@ const CodeView: React.FC<{root: FunctionDefinitionNode, layout: string, palette:
       return [parent.dir, getRectForSelectionId(state.choosing.relSelId)];
     };
 
-    const sheStyle = selHighlightElem.current.style;
+    let sheTop: number;
+    let sheLeft: number;
+    let sheWidth: number;
+    let sheHeight: number;
     if (state.choosing && (state.choosing.mode === ChooserMode.InsertAfter)) {
       const [dir, rect] = getInsertInfo();
       if (dir === 'block') {
-        sheStyle.top = (rect.bottom + 3) + 'px';
-        sheStyle.left = rect.left + 'px';
-        sheStyle.width = insertWidth + 'px';
-        sheStyle.height = '2px';
+        sheTop = rect.bottom + 0;
+        sheLeft = rect.left;
+        sheWidth = rect.width;
+        sheHeight = 2;
       } else {
-        sheStyle.top = rect.top + 'px';
-        sheStyle.left = (rect.right + 3) + 'px';
-        sheStyle.width = '2px';
-        sheStyle.height = insertHeight + 'px';
+        sheTop = rect.top;
+        sheLeft = rect.right + 1;
+        sheWidth = 2;
+        sheHeight = rect.height;
       }
     } else if (state.choosing && (state.choosing.mode === ChooserMode.InsertBefore)) {
       const [dir, rect] = getInsertInfo();
       if (dir === 'block') {
-        sheStyle.top = (rect.top - 5) + 'px';
-        sheStyle.left = rect.left + 'px';
-        sheStyle.width = insertWidth + 'px';
-        sheStyle.height = '2px';
+        sheTop = rect.top - 2;
+        sheLeft = rect.left;
+        sheWidth = rect.width;
+        sheHeight = 2;
       } else {
-        sheStyle.top = rect.top + 'px';
-        sheStyle.left = (rect.left - 5) + 'px';
-        sheStyle.width = '2px';
-        sheStyle.height = insertHeight + 'px';
+        sheTop = rect.top;
+        sheLeft = rect.left - 3;
+        sheWidth = 2;
+        sheHeight = rect.height;
       }
     } else {
       const rect = getRectForSelectionId(state.selectionId);
-      sheStyle.top = rect.top + 'px';
-      sheStyle.left = rect.left + 'px';
-      sheStyle.width = rect.width + 'px';
-      sheStyle.height = rect.height + 'px';
+      sheTop = rect.top;
+      sheLeft = rect.left;
+      sheWidth = rect.width;
+      sheHeight = rect.height;
 
       // TODO: a bit hacky to reference class from other component?
       const selectedElem = getElemBySelId(state.selectionId);
@@ -703,6 +703,11 @@ const CodeView: React.FC<{root: FunctionDefinitionNode, layout: string, palette:
       }
     }
 
+    const sheStyle = selHighlightElem.current.style;
+    sheStyle.top = sheTop + 'px';
+    sheStyle.left = sheLeft + 'px';
+    sheStyle.width = sheWidth + 'px';
+    sheStyle.height= sheHeight + 'px';
     selHighlightElem.current.className = sheClasses.join(' ');
 
     // Position the chooser
@@ -712,29 +717,8 @@ const CodeView: React.FC<{root: FunctionDefinitionNode, layout: string, palette:
       // NOTE: Directly referring to these class names is hacky
       const cpElem = document.querySelector('.CodeView-chooser-positioner') as HTMLElement;
       if (cpElem) {
-        if (state.choosing && (state.choosing.mode === ChooserMode.InsertAfter)) {
-          const [dir, rect] = getInsertInfo();
-          if (dir === 'block') {
-            cpElem.style.left = rect.left + 50 + 'px';
-            cpElem.style.top = (rect.bottom + 4) + 'px';
-          } else {
-            cpElem.style.left = (rect.right + 3) + 'px';
-            cpElem.style.top = (rect.top + insertHeight + 2) + 'px';
-          }
-        } else if (state.choosing && (state.choosing.mode === ChooserMode.InsertBefore)) {
-          const [dir, rect] = getInsertInfo();
-          if (dir === 'block') {
-            cpElem.style.left = (rect.left + insertWidth) + 'px';
-            cpElem.style.top = (rect.top - 4) + 'px';
-          } else {
-            cpElem.style.left = (rect.left - 5) + 'px';
-            cpElem.style.top = (rect.top + insertHeight + 2) + 'px';
-          }
-        } else {
-          const rect = getRectForSelectionId(state.selectionId);
-          cpElem.style.left = rect.left + 'px';
-          cpElem.style.top = (rect.bottom + 2) + 'px';
-        }
+        cpElem.style.top = (sheTop + sheHeight + 6) + 'px';
+        cpElem.style.left = sheLeft + 'px';
       }
 
       positionedForChooserKey.current = chooserKey;
