@@ -173,6 +173,7 @@
 
 .Layout-new .TreeView-leaf-styling-undefined {
   width: 2ch;
+  border-radius: 0.5ch;
 }
 
 .Layout-new .TreeView-leaf-styling-undefined::before {
@@ -183,7 +184,6 @@
   color: #888;
   content: '·';
 }
-
 
 .Layout-new .TreeView-hovered {
   outline: 1px solid #888;
@@ -285,6 +285,9 @@
   margin-left: 2ch;
 }
 
+.Layout-new .TreeView-impl-body-nodes.TreeView-block > *:not(:last-child) {
+  margin-bottom: 1ch;
+}
 
 
 
