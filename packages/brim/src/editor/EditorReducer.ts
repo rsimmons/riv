@@ -107,7 +107,7 @@ function compileMainDef(mainDef: FunctionDefinitionNode, globalFunctions: Readon
   }
 
   const compiledResult = compileGlobalTreeDefinition(mainDef, globalFunctionEnvironment);
-  console.log('compiled:', compiledResult);
+  // console.log('compiled:', compiledResult);
   return compiledResult;
 }
 
@@ -172,8 +172,6 @@ function updateTree(state: State, newRoot: FunctionDefinitionNode): State {
 }
 
 export function reducer(state: State, action: Action): State {
-  console.log('action', action);
-
   if (action.type === 'LOAD_PROGRAM') {
     if (!action.newProgram) {
       throw new Error();
@@ -211,12 +209,11 @@ export function reducer(state: State, action: Action): State {
         undoStack: state.undoStack.slice(0, state.undoStack.length-1),
       }, newSelTree);
     } else {
-      console.log('nothing to undo');
+      // nothing to undo
       return state;
     }
   }
 
-  console.log('action not handled');
   return state;
 }
 
