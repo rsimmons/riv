@@ -8,11 +8,6 @@
   vertical-align: text-bottom;
 }
 
-.TreeView-literal-icon {
-  height: 1em;
-  vertical-align: text-bottom;
-}
-
 .TreeView-array {
   display: flex;
   width: fit-content;
@@ -167,6 +162,12 @@
   margin-left: 1em;
 }
 
+.Layout-old .TreeView-leaf-styling-name-empty {
+  width: 1em;
+}
+.Layout-old .TreeView-leaf-styling-name-empty::before {
+  content: '\00a0';
+}
 
 
 
@@ -286,8 +287,18 @@
 }
 
 .Layout-new .TreeView-impl-body-nodes.TreeView-block > *:not(:last-child) {
-  margin-bottom: 1ch;
+  margin-bottom: 0.5em;
 }
+
+.Layout-new .TreeView-literal-icon {
+  width: 2ch;
+}
+
+.Layout-new .TreeView-leaf-styling-name-empty::before {
+  color: #888;
+  content: '·';
+}
+
 
 
 

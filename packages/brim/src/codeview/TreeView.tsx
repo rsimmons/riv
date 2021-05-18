@@ -105,7 +105,7 @@ const SelectableWrapper: React.FC<{selId: UID, styling: 'common' | 'funcdef', ct
 };
 
 function layoutTextNode(node: TextNode, ctx: TreeViewContext): LayoutUnit {
-  return layoutSimpleNode(node, node.text || '\xa0\xa0\xa0\xa0', 'name', ctx);
+  return layoutSimpleNode(node, node.text, (node.text.length > 0) ? 'name' : 'name-empty', ctx);
 }
 
 interface ArrayItem {
