@@ -299,7 +299,13 @@
   content: '·';
 }
 
+.Layout-new .TreeView-tmpl.TreeView-inline::before {
+  content: '(';
+}
 
+.Layout-new .TreeView-tmpl.TreeView-inline::after {
+  content: ')';
+}
 
 
 .Palette-light .TreeView-leaf-styling-undefined {
