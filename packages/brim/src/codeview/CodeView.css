@@ -41,11 +41,13 @@
 }
 
 .Layout-new .CodeView-selection {
-  background: rgba(0, 255, 0, 0.25);
+  box-sizing: border-box;
+  border: 1px solid rgba(0, 173, 0, 0.5);
 }
 
 .Layout-new.CodeView:focus .CodeView-selection {
-  background: rgba(0, 255, 0, 0.5);
+  box-sizing: border-box;
+  border: 1px solid rgba(0, 173, 0);
 }
 
 
