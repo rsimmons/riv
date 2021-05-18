@@ -74,7 +74,7 @@ const Editor: React.FC = () => {
       <div style={{display: 'flex', marginBottom: '1em'}}>
         <Selector options={LAYOUTS} initVal={layout} onSelect={v => setLayout(v)} />
         <Selector options={PALETTES} initVal={palette} onSelect={v => setPalette(v)} />
-        <input type="range" min="20" max="100" value={wrapWidth} style={{'width': '6em'}} onInput={handleWrapWidthInput} />
+        <input type="range" min="10" max="100" value={wrapWidth} style={{'width': '6em'}} onInput={handleWrapWidthInput} />
       </div>
       <CodeView root={state.dispMainDef} layout={layout} palette={palette} wrapWidth={wrapWidth} autoFocus={true} onUpdateRoot={handleUpdateRoot} />
     </div>
