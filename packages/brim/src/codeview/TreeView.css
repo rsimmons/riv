@@ -328,6 +328,10 @@
 
 
 
+.Palette-dark .TreeView-literal-icon {
+  filter: invert(1);
+}
+
 .Palette-dark .TreeView-leaf-styling-undefined {
   background-color: #f77;
 }
