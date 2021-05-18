@@ -157,7 +157,7 @@ function layoutArray(items: ReadonlyArray<ArrayItem>, addClass: string, forceBlo
 function layoutInsertVirtualNode(selId: string, ctx: TreeViewContext): LayoutUnit {
   return {
     reactNode: (
-      <SelectableWrapper key={selId} selId={selId} styling="common" ctx={ctx}><div className="TreeView-common-leaf">+</div></SelectableWrapper>
+      <SelectableWrapper key={selId} selId={selId} styling="common" ctx={ctx}><div className="TreeView-insert-virtual" /></SelectableWrapper>
     ),
     size: 1, // sort of arbitrary
     seltree: {

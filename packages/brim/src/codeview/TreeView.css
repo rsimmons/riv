@@ -57,6 +57,14 @@
   content: '\00a0';
 }
 
+.Layout-old .TreeView-insert-virtual {
+  padding: 0.3em 0.5em;
+}
+
+.Layout-old .TreeView-insert-virtual::before {
+  content: '+';
+}
+
 .Layout-old .TreeView-selectable-common {
   border-radius: 0.5em;
   border: 1px solid #ccc;
@@ -159,6 +167,10 @@
   margin-left: 1em;
 }
 
+
+
+
+
 .Layout-new .TreeView-leaf-styling-undefined {
   width: 2ch;
 }
@@ -166,6 +178,12 @@
 .Layout-new .TreeView-leaf-styling-undefined::before {
   content: '\00a0';
 }
+
+.Layout-new .TreeView-insert-virtual::before {
+  color: #888;
+  content: '·';
+}
+
 
 .Layout-new .TreeView-hovered {
   outline: 1px solid #888;
