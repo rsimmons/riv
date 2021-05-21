@@ -39,334 +39,306 @@
 
 
 
-.Layout-old .TreeView-common-leaf {
+.Format-old .TreeView-common-leaf {
   padding: 0.3em 0.5em;
 }
 
-.Layout-old .TreeView-leaf-styling-undefined {
+.Format-old .TreeView-leaf-styling-undefined {
   border-radius: 0.5em;
   width: 1em;
 }
 
-.Layout-old .TreeView-leaf-styling-undefined::before {
+.Format-old .TreeView-leaf-styling-undefined::before {
   content: '\00a0';
 }
 
-.Layout-old .TreeView-insert-virtual {
+.Format-old .TreeView-insert-virtual {
   padding: 0.3em 0.5em;
 }
 
-.Layout-old .TreeView-insert-virtual::before {
+.Format-old .TreeView-insert-virtual::before {
   content: '+';
 }
 
-.Layout-old .TreeView-selectable-common {
+.Format-old .TreeView-selectable-common {
   border-radius: 0.5em;
   border: 1px solid #ccc;
   margin: -1px;
 }
 
-.Layout-old .TreeView-selectable-funcdef {
+.Format-old .TreeView-selectable-funcdef {
   border: 2px solid #ccc;
   margin: -2px;
 }
 
-.Layout-old .TreeView-hovered {
+.Format-old .TreeView-hovered {
   border-color: #777;
 }
 
-.Layout-old .TreeView-indent {
+.Format-old .TreeView-indent {
   padding-left: 1.5em;
 }
 
-.Layout-old .TreeView-funcdef-iface, .Layout-old .TreeView-funcdef-impl {
+.Format-old .TreeView-funcdef-iface, .Format-old .TreeView-funcdef-impl {
   padding: 0.75em;
 }
 
-.Layout-old .TreeView-funcdef-iface {
+.Format-old .TreeView-funcdef-iface {
   border-bottom: 1px dashed #ccc;
 }
 
-.Layout-old .TreeView-app.TreeView-inline {
+.Format-old .TreeView-app.TreeView-inline {
   padding: 0 0.5em;
 }
 
-.Layout-old .TreeView-app.TreeView-block {
+.Format-old .TreeView-app.TreeView-block {
   padding-left: 0.5em;
 }
 
-.Layout-old .TreeView-stream-binding-binding {
+.Format-old .TreeView-stream-binding-binding {
   margin-bottom: 0.5em;
 }
 
-.Layout-old .TreeView-underscore {
+.Format-old .TreeView-underscore {
   visibility: hidden;
 }
 
-.Layout-old .TreeView-iface.TreeView-inline > *:not(:last-child) {
+.Format-old .TreeView-iface.TreeView-inline > *:not(:last-child) {
   margin-right: 1em;
 }
 
-.Layout-old .TreeView-iface-params.TreeView-inline > *:not(:last-child) {
+.Format-old .TreeView-iface-params.TreeView-inline > *:not(:last-child) {
   margin-right: 0.5em;
 }
 
-.Layout-old .TreeView-iface-after-params-before-out::before {
+.Format-old .TreeView-iface-after-params-before-out::before {
   content: '→';
   margin-right: 1em;
 }
 
-.Layout-old .TreeView-array.TreeView-block > *:not(:last-child) {
+.Format-old .TreeView-array.TreeView-block > *:not(:last-child) {
   margin-bottom: 0.75em;
 }
 
-.Layout-old .TreeView-app-before-args {
+.Format-old .TreeView-app-before-args {
   padding: 0.3em 0;
 }
 
-.Layout-old .TreeView-li.TreeView-inline > .TreeView-li-prelabel {
+.Format-old .TreeView-li.TreeView-inline > .TreeView-li-prelabel {
   margin-right: 0.5em;
 }
 
-.Layout-old .TreeView-li.TreeView-inline > .TreeView-li-postlabel {
+.Format-old .TreeView-li.TreeView-inline > .TreeView-li-postlabel {
   margin-left: 0.5em;
 }
 
-.Layout-old .TreeView-app-args.TreeView-inline > *:not(:last-child) {
+.Format-old .TreeView-app-args.TreeView-inline > *:not(:last-child) {
   margin-right: 1em;
 }
 
-.Layout-old .TreeView-li.TreeView-block > .TreeView-li-item {
+.Format-old .TreeView-li.TreeView-block > .TreeView-li-item {
   margin-left: 1.5em;
 }
 
-.Layout-old .TreeView-li-prelabel, .Layout-old .TreeView-li-postlabel {
+.Format-old .TreeView-li-prelabel, .Format-old .TreeView-li-postlabel {
   padding-top: 0.3em;
   padding-bottom: 0.3em;
 }
 
-.Layout-old .TreeView-app.TreeView-notmpl.TreeView-block > .TreeView-app-after-args {
+.Format-old .TreeView-app.TreeView-notmpl.TreeView-block > .TreeView-app-after-args {
   margin-top: -0.75em;
 }
 
-.Layout-old .TreeView-tmpl.TreeView-inline > *:not(:last-child) {
+.Format-old .TreeView-tmpl.TreeView-inline > *:not(:last-child) {
   margin-right: 0.5em;
 }
 
-.Layout-old .TreeView-notmpl.TreeView-inline > .TreeView-app-args > *:first-child {
+.Format-old .TreeView-notmpl.TreeView-inline > .TreeView-app-args > *:first-child {
   margin-left: 1em;
 }
 
 /* no pre-label, so wouldn't get indented */
-.Layout-old .TreeView-tmpl.TreeView-block > .TreeView-li.TreeView-inline > .TreeView-li-item:first-child {
+.Format-old .TreeView-tmpl.TreeView-block > .TreeView-li.TreeView-inline > .TreeView-li-item:first-child {
   margin-left: 1em;
 }
 
-.Layout-old .TreeView-leaf-styling-name-empty {
+.Format-old .TreeView-leaf-styling-name-empty {
   width: 1em;
 }
-.Layout-old .TreeView-leaf-styling-name-empty::before {
+.Format-old .TreeView-leaf-styling-name-empty::before {
   content: '\00a0';
 }
 
 
 
 
-.Layout-new .TreeView-leaf-styling-undefined {
+.Format-new .TreeView-leaf-styling-undefined {
   width: 2ch;
   border-radius: 0.5ch;
 }
 
-.Layout-new .TreeView-leaf-styling-undefined::before {
+.Format-new .TreeView-leaf-styling-undefined::before {
   content: '\00a0';
 }
 
-.Layout-new .TreeView-insert-virtual::before {
+.Format-new .TreeView-insert-virtual::before {
   color: #888;
   content: '·';
 }
 
-.Layout-new .TreeView-hovered {
+.Format-new .TreeView-hovered {
   outline: 1px solid #888;
   outline-offset: -1px;
 }
 
-.Layout-new .TreeView-indent {
+.Format-new .TreeView-indent {
   padding-left: 2ch;
 }
 
-.Layout-new .TreeView-iface-before-params-before-fn::after {
+.Format-new .TreeView-iface-before-params-before-fn::after {
   content: 'ƒ';
   margin-right: 1ch;
 }
 
-.Layout-new .TreeView-iface-before-params-after-fn::after {
+.Format-new .TreeView-iface-before-params-after-fn::after {
   content: '(';
 }
 
-.Layout-new .TreeView-iface.TreeView-block > .TreeView-iface-params {
+.Format-new .TreeView-iface.TreeView-block > .TreeView-iface-params {
   margin-left: 2ch;
 }
 
-.Layout-new .TreeView-iface-params.TreeView-inline > *:not(:last-child)::after {
+.Format-new .TreeView-iface-params.TreeView-inline > *:not(:last-child)::after {
   content: ',';
   margin-right: 1ch;
 }
 
-.Layout-new .TreeView-iface-after-params-before-out::after {
+.Format-new .TreeView-iface-after-params-before-out::after {
   content: ') →';
   margin-right: 1ch;
 }
 
-.Layout-new .TreeView-iface-after-params-after-out::after {
+.Format-new .TreeView-iface-after-params-after-out::after {
   content: '{';
   margin-left: 1ch;
 }
 
-.Layout-new .TreeView-iface-after-params-void::before {
+.Format-new .TreeView-iface-after-params-void::before {
   content: ') {'
 }
 
-.Layout-new .TreeView-iface-block .TreeView-iface-params {
+.Format-new .TreeView-iface-block .TreeView-iface-params {
   margin-left: 2ch;
 }
 
-.Layout-new .TreeView-funcdef-impl {
+.Format-new .TreeView-funcdef-impl {
   padding-left: 2ch;
 }
 
-.Layout-new .TreeView-funcdef-closer > span::before {
+.Format-new .TreeView-funcdef-closer > span::before {
   content: '}';
 }
 
-.Layout-new .TreeView-app-before-args::after {
+.Format-new .TreeView-app-before-args::after {
   content: '(';
 }
 
-.Layout-new .TreeView-app-after-args::before {
+.Format-new .TreeView-app-after-args::before {
   content: ')';
 }
 
-.Layout-new .TreeView-app-args > .TreeView-li > .TreeView-li-prelabel::after {
+.Format-new .TreeView-app-args > .TreeView-li > .TreeView-li-prelabel::after {
   content: ':';
   margin-right: 1ch;
 }
 
-.Layout-new .TreeView-app-args.TreeView-inline > *:not(:last-child)::after {
+.Format-new .TreeView-app-args.TreeView-inline > *:not(:last-child)::after {
   content: ',';
   margin-right: 1ch;
 }
 
-.Layout-new .TreeView-app.TreeView-block > .TreeView-app-args {
+.Format-new .TreeView-app.TreeView-block > .TreeView-app-args {
   margin-left: 2ch;
 }
 
-.Layout-new .TreeView-tmpl > .TreeView-li.TreeView-inline > .TreeView-li-prelabel {
+.Format-new .TreeView-tmpl > .TreeView-li.TreeView-inline > .TreeView-li-prelabel {
   margin-right: 1ch;
 }
 
-.Layout-new .TreeView-tmpl > .TreeView-li.TreeView-inline > .TreeView-li-postlabel {
+.Format-new .TreeView-tmpl > .TreeView-li.TreeView-inline > .TreeView-li-postlabel {
   margin-left: 1ch;
 }
 
-.Layout-new .TreeView-tmpl.TreeView-inline > *:not(:last-child) {
+.Format-new .TreeView-tmpl.TreeView-inline > *:not(:last-child) {
   margin-right: 1ch;
 }
 
-.Layout-new .TreeView-underscore {
+.Format-new .TreeView-underscore {
   color: #aaa;
 }
 
-.Layout-new .TreeView-li.TreeView-block > .TreeView-li-item {
+.Format-new .TreeView-li.TreeView-block > .TreeView-li-item {
   margin-left: 2ch;
 }
 
 /* no pre-label, so wouldn't get indented */
-.Layout-new .TreeView-tmpl.TreeView-block > .TreeView-li.TreeView-inline > .TreeView-li-item:first-child {
+.Format-new .TreeView-tmpl.TreeView-block > .TreeView-li.TreeView-inline > .TreeView-li-item:first-child {
   margin-left: 2ch;
 }
 
-.Layout-new .TreeView-impl-body-nodes.TreeView-block > *:not(:last-child) {
+.Format-new .TreeView-impl-body-nodes.TreeView-block > *:not(:last-child) {
   margin-bottom: 0.5em;
 }
 
-.Layout-new .TreeView-literal-icon {
+.Format-new .TreeView-literal-icon {
   width: 2ch;
 }
 
-.Layout-new .TreeView-leaf-styling-name-empty::before {
+.Format-new .TreeView-leaf-styling-name-empty::before {
   color: #888;
   content: '·';
 }
 
-.Layout-new .TreeView-tmpl.TreeView-inline::before {
+.Format-new .TreeView-tmpl.TreeView-inline::before {
   content: '(';
 }
 
-.Layout-new .TreeView-tmpl.TreeView-inline::after {
+.Format-new .TreeView-tmpl.TreeView-inline::after {
   content: ')';
 }
 
 
-.Palette-light .TreeView-leaf-styling-undefined {
-  background-color: #f77;
+
+.TreeView-leaf-styling-undefined {
+  background-color: var(--color-undef);
 }
 
-.Palette-light .TreeView-leaf-styling-number {
-  color: rgb(0, 92, 197);
+.TreeView-leaf-styling-number {
+  color: var(--color-number);
 }
 
-.Palette-light .TreeView-leaf-styling-text {
-  color: rgb(3, 47, 98);
+.TreeView-leaf-styling-text {
+  color: var(--color-text);
 }
 
-.Palette-light .TreeView-leaf-styling-boolean {
-  color: rgb(0, 92, 197);
+.TreeView-leaf-styling-boolean {
+  color: var(--color-bool);
 }
 
-.Palette-light .TreeView-leaf-styling-streamref {
-  color: #1d8a3b;
+.TreeView-leaf-styling-streamref {
+  color: var(--color-ref);
 }
 
-.Palette-light .TreeView-leaf-styling-name {
-  color: rgb(111, 66, 193);
+.TreeView-leaf-styling-name {
+  color: var(--color-name);
 }
 
-.Palette-light .TreeView-styling-label {
-  color: rgb(103 72 0);
+.TreeView-styling-label {
+  color: var(--color-label);
 }
 
 
 
-.Palette-dark .TreeView-literal-icon {
+.Theme-dark .TreeView-literal-icon {
   filter: invert(1);
 }
-
-.Palette-dark .TreeView-leaf-styling-undefined {
-  background-color: #f77;
-}
-
-.Palette-dark .TreeView-leaf-styling-number {
-  color: #71b4ff;
-}
-
-.Palette-dark .TreeView-leaf-styling-text {
-  color: #1fd200;
-}
-
-.Palette-dark .TreeView-leaf-styling-boolean {
-  color: #71b4ff;
-}
-
-.Palette-dark .TreeView-leaf-styling-streamref {
-  color: #1d8a3b;
-}
-
-.Palette-dark .TreeView-leaf-styling-name {
-  color: #c6a6ff;
-}
-
-.Palette-dark .TreeView-styling-label {
-  color: rgb(224 195 128);
-}
-

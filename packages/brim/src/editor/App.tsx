@@ -5,7 +5,8 @@ import Editor from './Editor';
 const App: React.FC = () => {
   return (
     <div className="App">
-      <Editor />
+      <div className="App-editor"><Editor /></div>
+      <div className="App-divider" />
       {/* <div>
         <h2>Notes</h2>
         <ul>
@@ -24,7 +25,7 @@ const App: React.FC = () => {
           <li>Typing [ when editing an expression will create an array literal.</li>
         </ul>
       </div> */}
-      <div id="output"></div>
+      <div id="output" />
     </div>
   );
 }

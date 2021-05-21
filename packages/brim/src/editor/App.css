@@ -1,8 +1,18 @@
 .App {
-  margin: 0 auto;
-  max-width: 800px;
+  display: flex;
+}
+
+.App-editor {
+  height: 100vh;
+  overflow: hidden;
+  flex: 1 1 0;
+}
+
+.App-divider {
+  flex: 0 0 1px;
+  background: #ddd;
 }
 
 .App #output {
-  margin-top: 1em;
+  flex: 1 1 0;
 }

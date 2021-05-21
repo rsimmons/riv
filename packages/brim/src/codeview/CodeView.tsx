@@ -118,7 +118,7 @@ interface CodeViewState {
   readonly choosing: ChooserState | null;
 }
 
-const CodeView: React.FC<{root: FunctionDefinitionNode, layout: string, palette: string, wrapWidth: number, autoFocus: boolean, onUpdateRoot: (newRoot: Node) => void}> = ({ root, layout, palette, wrapWidth, autoFocus, onUpdateRoot }) => {
+const CodeView: React.FC<{root: FunctionDefinitionNode, format: string, theme: string, wrapWidth: number, autoFocus: boolean, onUpdateRoot: (newRoot: Node) => void}> = ({ root, format, theme, wrapWidth, autoFocus, onUpdateRoot }) => {
   const [state, setState] = useState<CodeViewState>({
     selectionId: root.nid,
     choosing: null,
@@ -733,7 +733,7 @@ const CodeView: React.FC<{root: FunctionDefinitionNode, layout: string, palette:
 
   return (
     // eslint-disable-next-line no-useless-concat
-    <div className={'CodeView' + (' Layout-'+layout) + (' Palette-'+palette)} onKeyDown={onKeyDown} ref={rootElem} tabIndex={0}>
+    <div className={'CodeView' + (' Format-'+format)} onKeyDown={onKeyDown} ref={rootElem} tabIndex={0}>
       {rootReactNode}
       {state.choosing &&
         <div className="CodeView-chooser-positioner" style={{position: 'absolute'}}>

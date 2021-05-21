@@ -40,31 +40,16 @@
 }
 */
 
-.Palette-light .Chooser-input {
-  background: white;
-  color: black;
+.Chooser-input {
+  background: var(--color-bg);
+  color: var(--color-fg);
 }
 
-.Palette-light .Chooser-dropdown {
-  background: white;
-  color: black;
+.Chooser-dropdown {
+  background: var(--color-bg);
+  color: var(--color-fg);
 }
 
-.Palette-light .Chooser-dropdown li.Chooser-dropdown-selected {
-  background: #ddd;
-}
-
-
-.Palette-dark .Chooser-input {
-  background: black;
-  color:white;
-}
-
-.Palette-dark .Chooser-dropdown {
-  background:black;
-  color: white;
-}
-
-.Palette-dark .Chooser-dropdown li.Chooser-dropdown-selected {
-  background: rgb(25, 20, 94);
+.Chooser-dropdown li.Chooser-dropdown-selected {
+  background: var(--color-bg-2);
 }

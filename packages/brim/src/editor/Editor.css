@@ -1,3 +1,11 @@
+.Editor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  font-family: 'Nunito', sans-serif;
+}
+
+/*
 .Editor-panel {
   margin-bottom: 1em;
   background-color: #e8e0da;
@@ -8,4 +16,114 @@
 .Editor-panel h2 {
   font-size: inherit;
   margin: 0 0 0.5em 0;
+}
+*/
+
+.Editor {
+  color: var(--color-fg);
+  background: var(--color-bg);
+}
+
+.Editor select {
+  color: var(--color-fg);
+  background: var(--color-bg);
+  padding: 0.25em;
+  border-radius: 0.25em;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.Editor-header *:focus-visible {
+  outline: none;
+  box-shadow: 0 0 2px 0 var(--color-fg);
+}
+
+.Editor-header {
+  display: flex;
+  align-items: center;
+  padding: 1em;
+  background: var(--color-bg);
+}
+
+.Editor-logo {
+  width: 32px;
+  height: 32px;
+  color: var(--color-fg);
+}
+
+.Editor-header-spacer {
+  flex: 1;
+}
+
+.Editor-header-controls {
+  display: flex;
+  align-items: baseline;
+  font-size: 0.9em;
+}
+
+.Editor-header-controls > *:not(:last-child) {
+  margin-right: 1.5em;
+}
+
+.Editor-header-controls > * > :last-child {
+  margin-left: 0.5em;
+}
+
+.Editor-control-select {
+  display: flex;
+  align-items: baseline;
+}
+
+.Editor-control-range {
+  display: flex;
+  align-items: center;
+}
+
+.Editor-codeview {
+  flex: 1;
+  padding: 0.5em;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg-2);
+}
+
+.Editor-codeview-inner {
+  border-radius: 0.25em;
+  flex: 1;
+  padding: 1em;
+  background: var(--color-bg);
+}
+
+.theme-light .Editor-codeview-inner {
+  box-shadow: 0 0 8px -2px var(--color-shadow);
+}
+
+.theme-light {
+  --color-fg: black;
+  --color-bg: white;
+  --color-bg-2: #ddd;
+  --color-shadow: rgb(0 0 0 / 25%);
+
+  --color-undef: #f77;
+  --color-number: rgb(0, 92, 197);
+  --color-text: rgb(3, 47, 98);
+  --color-bool: rgb(0, 92, 197);
+  --color-ref: #1d8a3b;
+  --color-name: rgb(111, 66, 193);
+  --color-label: rgb(103, 72, 0);
+}
+
+.theme-dark {
+  --color-fg: white;
+  --color-bg: #333;
+  --color-bg-2: #444;
+  --color-shadow: rgb(255 255 255 / 25%);
+
+  --color-undef: #f77;
+  --color-number: #71b4ff;
+  --color-text: #1fd200;
+  --color-bool: #71b4ff;
+  --color-ref: #1d8a3b;
+  --color-name: #c6a6ff;
+  --color-label: rgb(224 195 128);
 }
