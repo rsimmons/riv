@@ -3,6 +3,9 @@
   flex-direction: column;
   height: 100%;
   font-family: 'Nunito', sans-serif;
+  overflow: hidden;
+  color: var(--color-fg);
+  background: var(--color-bg);
 }
 
 /*
@@ -18,11 +21,6 @@
   margin: 0 0 0.5em 0;
 }
 */
-
-.Editor {
-  color: var(--color-fg);
-  background: var(--color-bg);
-}
 
 .Editor select {
   color: var(--color-fg);
@@ -84,25 +82,26 @@
   padding: 0.5em;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   background: var(--color-bg-2);
 }
 
 .Editor-codeview-inner {
   border-radius: 0.25em;
   flex: 1;
-  padding: 1em;
+  overflow: hidden;
   background: var(--color-bg);
 }
 
 .theme-light .Editor-codeview-inner {
-  box-shadow: 0 0 8px -2px var(--color-shadow);
+  box-shadow: 0 0 8px -2px var(--color-fg-a25);
 }
 
 .theme-light {
   --color-fg: black;
+  --color-fg-a25: rgb(0 0 0 / 25%);
   --color-bg: white;
   --color-bg-2: #ddd;
-  --color-shadow: rgb(0 0 0 / 25%);
 
   --color-undef: #f77;
   --color-number: rgb(0, 92, 197);
@@ -115,9 +114,9 @@
 
 .theme-dark {
   --color-fg: white;
+  --color-fg-a25: rgb(255 255 255 / 25%);
   --color-bg: #333;
   --color-bg-2: #444;
-  --color-shadow: rgb(255 255 255 / 25%);
 
   --color-undef: #f77;
   --color-number: #71b4ff;

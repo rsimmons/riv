@@ -1,5 +1,36 @@
 .CodeView {
+  position: relative;
+  height: 100%;
+  overflow: scroll;
   color: var(--color-fg);
+}
+
+.CodeView::-webkit-scrollbar {
+  width: 0.5em;
+  height: 0.5em;
+}
+
+.CodeView::-webkit-scrollbar-track {
+  background: var(--color-bg);
+}
+
+.CodeView::-webkit-scrollbar-corner {
+  background: var(--color-bg);
+}
+
+.CodeView::-webkit-scrollbar-thumb {
+  background: var(--color-fg-a25);
+  border: none;
+  border-radius: 0.25em;
+}
+
+.CodeView {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-fg-a25) var(--color-bg);
+}
+
+.CodeView-scroller {
+  padding: 1em;
 }
 
 .CodeView-selection {
@@ -8,6 +39,11 @@
   transition-property: top, left, width, height, border-radius;
   transition-duration: 0.05s;
   transition-timing-function: linear;
+}
+
+.CodeView-selection-scrollfollow {
+  visibility: hidden;
+  position: absolute;
 }
 
 .CodeView:focus, .CodeView:focus-visible {

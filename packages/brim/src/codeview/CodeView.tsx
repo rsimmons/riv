@@ -577,6 +577,7 @@ const CodeView: React.FC<{root: FunctionDefinitionNode, format: string, theme: s
 
   // Move focus back to workspace after chooser has closed. This is hacky, but don't know better way to handle.
   const rootElem = useRef<HTMLDivElement>(null);
+  const scrollerElem = useRef<HTMLDivElement>(null);
   const firstRender = useRef(true);
   const previouslyChoosing = useRef<boolean>(false);
   const focusWasOnTree: boolean = !!rootElem.current && rootElem.current.contains(document.activeElement);
@@ -585,12 +586,15 @@ const CodeView: React.FC<{root: FunctionDefinitionNode, format: string, theme: s
   firstRender.current = false;
   useLayoutEffect(() => {
     if (focusWorkspaceNow && rootElem.current) {
+      const x = rootElem.current.scrollLeft, y = rootElem.current.scrollTop;
       rootElem.current.focus();
+      rootElem.current.scrollTo(x, y);
     }
   });
 
   const positionedForChooserKey: React.MutableRefObject<string | undefined> = useRef();
   const selHighlightElem = useRef<HTMLDivElement>(null);
+  const selScrollFollowElem = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
     const getElemBySelId = (selId: UID): Element => {
@@ -610,10 +614,15 @@ const CodeView: React.FC<{root: FunctionDefinitionNode, format: string, theme: s
       height: number;
     }
     const getRectForSelectionId = (selId: UID): Rect => {
+      if (!scrollerElem.current) {
+        throw new Error();
+      }
+      const scrollerElemRect = scrollerElem.current.getBoundingClientRect();
+
       const selectedElem = getElemBySelId(selId);
       const selectedElemRect = selectedElem.getBoundingClientRect();
-      const top = selectedElemRect.top + window.scrollY;
-      const left = selectedElemRect.left + window.scrollX;
+      const top = selectedElemRect.top - scrollerElemRect.top;;
+      const left = selectedElemRect.left - scrollerElemRect.left;
       const width = selectedElemRect.width;
       const height = selectedElemRect.height;
 
@@ -628,7 +637,7 @@ const CodeView: React.FC<{root: FunctionDefinitionNode, format: string, theme: s
     };
 
     // Draw node highlights (selection, etc)
-    if (!selHighlightElem.current) {
+    if (!selHighlightElem.current || !selScrollFollowElem.current) {
       throw new Error();
     }
 
@@ -723,6 +732,15 @@ const CodeView: React.FC<{root: FunctionDefinitionNode, format: string, theme: s
 
       positionedForChooserKey.current = chooserKey;
     }
+
+    // Scroll selection into view
+    const ssfeStyle = selScrollFollowElem.current.style;
+    const extra = '2em';
+    ssfeStyle.top = 'calc(' + sheTop + 'px - ' + extra + ')';
+    ssfeStyle.left = 'calc(' + sheLeft + 'px - ' + extra + ')';
+    ssfeStyle.width = 'calc(' + sheWidth + 'px + 2*' + extra + ')';
+    ssfeStyle.height = 'calc(' + sheHeight + 'px + 2*' + extra + ')';
+    selScrollFollowElem.current.scrollIntoView({block: 'nearest', inline: 'nearest'});
   });
 
   const {reactNode: rootReactNode, seltree: rootSeltree} = layoutFunctionDefinitionNode(root, treeViewCtx);
@@ -734,219 +752,222 @@ const CodeView: React.FC<{root: FunctionDefinitionNode, format: string, theme: s
   return (
     // eslint-disable-next-line no-useless-concat
     <div className={'CodeView' + (' Format-'+format)} onKeyDown={onKeyDown} ref={rootElem} tabIndex={0}>
-      {rootReactNode}
-      {state.choosing &&
-        <div className="CodeView-chooser-positioner" style={{position: 'absolute'}}>
-          {(() => {
-            if (state.choosing.mode === ChooserMode.InsertEmpty) {
-              if (!isVirtualSelId(state.selectionId)) {
-                throw new Error();
-              }
-
-              const [parentSelId, ] = splitVirtualSelId(state.selectionId);
-              const parentNode = nodeIdToNode.get(parentSelId);
-              if (!parentNode) {
-                throw new Error();
-              }
-
-              const localEnv = staticEnvMap.get(parentNode);
-              if (!localEnv) {
-                throw new Error();
-              }
-
-              const handleCommitChoice = (committedNode: Node): void => {
-                let newRoot: Node;
-                if (parentNode.kind === NodeKind.TreeImpl) {
-                  if (!isTreeImplBodyNode(committedNode)) {
-                    throw new Error();
-                  }
-                  if (parentNode.body.length > 0) {
-                    throw new Error();
-                  }
-
-                  newRoot = replaceNode(root, parentNode, {
-                    ...parentNode,
-                    body: [committedNode],
-                  });
-                } else {
+      <div className="CodeView-scroller" ref={scrollerElem}>
+        {rootReactNode}
+        {state.choosing &&
+          <div className="CodeView-chooser-positioner" style={{position: 'absolute'}}>
+            {(() => {
+              if (state.choosing.mode === ChooserMode.InsertEmpty) {
+                if (!isVirtualSelId(state.selectionId)) {
                   throw new Error();
                 }
 
-                const firstHoleSelId = findFirstHoleSelId(committedNode, newRoot, globalStaticEnv);
-
-                onUpdateRoot(newRoot);
-
-                setState(s => ({
-                  ...s,
-                  selectionId: firstHoleSelId || committedNode.nid,
-                  choosing: {
-                    key: genuid(),
-                    mode: firstHoleSelId ? ChooserMode.FillInsertAfter : ChooserMode.InsertAfter,
-                    relSelId: committedNode.nid,
-                  },
-                }));
-              }
-
-              return <MultiChooser key={state.choosing.key} context={/*TODO: fix*/MultiChooserContext.ExprOrBind} existingNode={null} localEnv={localEnv} treeViewDisplayOpts={treeViewDisplayOpts} onCommitChoice={handleCommitChoice} onAbort={abortChooser} />
-            } else {
-              if ([ChooserMode.Modify, ChooserMode.Fill, ChooserMode.FillInsertAfter].includes(state.choosing.mode)) {
-                const selectedNode = nodeIdToNode.get(state.selectionId);
-                if (!selectedNode) {
+                const [parentSelId, ] = splitVirtualSelId(state.selectionId);
+                const parentNode = nodeIdToNode.get(parentSelId);
+                if (!parentNode) {
                   throw new Error();
                 }
 
-                if ((state.choosing.mode === ChooserMode.Modify) && (selectedNode.kind === NodeKind.Text)) {
-                  const handleCommitChoice = (committedNode: Node): void => {
-                    const newRoot = replaceNode(root, selectedNode, committedNode);
-                    onUpdateRoot(newRoot);
-                    setState(s => ({
-                      ...s,
-                      selectionId: committedNode.nid,
-                      choosing: null,
-                    }));
-                  };
-
-                  return <TextChooser key={state.choosing.key} existingNode={selectedNode} onCommitChoice={handleCommitChoice} />
-                }
-
-                const localEnv = staticEnvMap.get(selectedNode);
+                const localEnv = staticEnvMap.get(parentNode);
                 if (!localEnv) {
                   throw new Error();
                 }
-
-                const chooserContext = determineNodeChooserContext(selectedNode, root);
-
-                if (state.choosing.mode === ChooserMode.Modify) {
-                  const handleCommitChoice = (committedNode: Node): void => {
-                    const newRoot = replaceNode(root, selectedNode, committedNode);
-
-                    const firstHoleSelId = findFirstHoleSelId(committedNode, newRoot, globalStaticEnv);
-
-                    onUpdateRoot(newRoot);
-
-                    setState(s => ({
-                      ...s,
-                      selectionId: firstHoleSelId || committedNode.nid,
-                      choosing: firstHoleSelId ? {
-                        key: genuid(),
-                        mode: ChooserMode.Fill,
-                        relSelId: committedNode.nid,
-                      } : null,
-                    }));
-                  }
-
-                  return <MultiChooser key={state.choosing.key} context={chooserContext} existingNode={selectedNode} localEnv={localEnv} treeViewDisplayOpts={treeViewDisplayOpts} onCommitChoice={handleCommitChoice} onAbort={abortChooser} />
-                } else {
-                  const state_choosing = state.choosing;
-
-                  const handleCommitChoice = (committedNode: Node): void => {
-                    const newRoot = replaceNode(root, selectedNode, committedNode);
-
-                    if (!state_choosing.relSelId) {
-                      throw new Error();
-                    }
-                    const state_choosing_relSelId = state_choosing.relSelId;
-                    const newNodeIdToNode = getNodeIdMap(newRoot);
-                    const relNode = newNodeIdToNode.get(state_choosing.relSelId);
-                    if (!relNode) {
-                      throw new Error();
-                    }
-                    const firstHoleSelId = findFirstHoleSelId(relNode, newRoot, globalStaticEnv);
-
-                    onUpdateRoot(newRoot);
-
-                    setState(s => ({
-                      ...s,
-                      selectionId: firstHoleSelId || state_choosing_relSelId,
-                      choosing: firstHoleSelId ? {
-                        key: genuid(),
-                        mode: state_choosing.mode,
-                        relSelId: state_choosing.relSelId,
-                      } : ((state_choosing.mode === ChooserMode.FillInsertAfter) ? {
-                        key: genuid(),
-                        mode: ChooserMode.InsertAfter,
-                        relSelId: state_choosing_relSelId,
-                      }: null),
-                    }));
-                  }
-
-                  return <MultiChooser key={state.choosing.key} context={chooserContext} existingNode={null} localEnv={localEnv} treeViewDisplayOpts={treeViewDisplayOpts} onCommitChoice={handleCommitChoice} onAbort={abortChooser} />
-                }
-              } else if ([ChooserMode.InsertBefore, ChooserMode.InsertAfter].includes(state.choosing.mode)) {
-                if (state.choosing.relSelId === null) {
-                  throw new Error();
-                }
-                const relNode = nodeIdToNode.get(state.choosing.relSelId);
-                if (!relNode) {
-                  throw new Error();
-                }
-
-                const localEnv = staticEnvMap.get(relNode);
-                if (!localEnv) {
-                  throw new Error();
-                }
-
-                const state_choosing = state.choosing;
 
                 const handleCommitChoice = (committedNode: Node): void => {
-                  const newRoot = insertBeforeOrAfter(root, relNode, committedNode, (state_choosing.mode === ChooserMode.InsertBefore));
+                  let newRoot: Node;
+                  if (parentNode.kind === NodeKind.TreeImpl) {
+                    if (!isTreeImplBodyNode(committedNode)) {
+                      throw new Error();
+                    }
+                    if (parentNode.body.length > 0) {
+                      throw new Error();
+                    }
+
+                    newRoot = replaceNode(root, parentNode, {
+                      ...parentNode,
+                      body: [committedNode],
+                    });
+                  } else {
+                    throw new Error();
+                  }
+
                   const firstHoleSelId = findFirstHoleSelId(committedNode, newRoot, globalStaticEnv);
+
                   onUpdateRoot(newRoot);
 
-                  if (state_choosing.mode === ChooserMode.InsertAfter) {
-                    if (firstHoleSelId) {
-                      setState(s => ({
-                        ...s,
-                        selectionId: firstHoleSelId,
-                        choosing: {
-                          key: genuid(),
-                          mode: ChooserMode.FillInsertAfter,
-                          relSelId: committedNode.nid,
-                        },
-                      }));
-                    } else {
-                      setState(s => ({
-                        ...s,
-                        selectionId: committedNode.nid,
-                        choosing: {
-                          key: genuid(),
-                          mode: ChooserMode.InsertAfter,
-                          relSelId: committedNode.nid,
-                        },
-                      }));
-                    }
-                  } else {
-                    if (firstHoleSelId) {
-                      setState(s => ({
-                        ...s,
-                        selectionId: firstHoleSelId,
-                        choosing: {
-                          key: genuid(),
-                          mode: ChooserMode.Fill,
-                          relSelId: committedNode.nid,
-                        },
-                      }));
-                    } else {
+                  setState(s => ({
+                    ...s,
+                    selectionId: firstHoleSelId || committedNode.nid,
+                    choosing: {
+                      key: genuid(),
+                      mode: firstHoleSelId ? ChooserMode.FillInsertAfter : ChooserMode.InsertAfter,
+                      relSelId: committedNode.nid,
+                    },
+                  }));
+                }
+
+                return <MultiChooser key={state.choosing.key} context={/*TODO: fix*/MultiChooserContext.ExprOrBind} existingNode={null} localEnv={localEnv} treeViewDisplayOpts={treeViewDisplayOpts} onCommitChoice={handleCommitChoice} onAbort={abortChooser} />
+              } else {
+                if ([ChooserMode.Modify, ChooserMode.Fill, ChooserMode.FillInsertAfter].includes(state.choosing.mode)) {
+                  const selectedNode = nodeIdToNode.get(state.selectionId);
+                  if (!selectedNode) {
+                    throw new Error();
+                  }
+
+                  if ((state.choosing.mode === ChooserMode.Modify) && (selectedNode.kind === NodeKind.Text)) {
+                    const handleCommitChoice = (committedNode: Node): void => {
+                      const newRoot = replaceNode(root, selectedNode, committedNode);
+                      onUpdateRoot(newRoot);
                       setState(s => ({
                         ...s,
                         selectionId: committedNode.nid,
                         choosing: null,
                       }));
-                    }
+                    };
+
+                    return <TextChooser key={state.choosing.key} existingNode={selectedNode} onCommitChoice={handleCommitChoice} />
                   }
-                };
 
-                const chooserContext = determineNodeChooserContext(relNode, root);
+                  const localEnv = staticEnvMap.get(selectedNode);
+                  if (!localEnv) {
+                    throw new Error();
+                  }
 
-                return <MultiChooser key={state.choosing.key} context={chooserContext} existingNode={null} localEnv={localEnv} treeViewDisplayOpts={treeViewDisplayOpts} onCommitChoice={handleCommitChoice} onAbort={abortChooser} />
-              } else {
-                throw new Error();
+                  const chooserContext = determineNodeChooserContext(selectedNode, root);
+
+                  if (state.choosing.mode === ChooserMode.Modify) {
+                    const handleCommitChoice = (committedNode: Node): void => {
+                      const newRoot = replaceNode(root, selectedNode, committedNode);
+
+                      const firstHoleSelId = findFirstHoleSelId(committedNode, newRoot, globalStaticEnv);
+
+                      onUpdateRoot(newRoot);
+
+                      setState(s => ({
+                        ...s,
+                        selectionId: firstHoleSelId || committedNode.nid,
+                        choosing: firstHoleSelId ? {
+                          key: genuid(),
+                          mode: ChooserMode.Fill,
+                          relSelId: committedNode.nid,
+                        } : null,
+                      }));
+                    }
+
+                    return <MultiChooser key={state.choosing.key} context={chooserContext} existingNode={selectedNode} localEnv={localEnv} treeViewDisplayOpts={treeViewDisplayOpts} onCommitChoice={handleCommitChoice} onAbort={abortChooser} />
+                  } else {
+                    const state_choosing = state.choosing;
+
+                    const handleCommitChoice = (committedNode: Node): void => {
+                      const newRoot = replaceNode(root, selectedNode, committedNode);
+
+                      if (!state_choosing.relSelId) {
+                        throw new Error();
+                      }
+                      const state_choosing_relSelId = state_choosing.relSelId;
+                      const newNodeIdToNode = getNodeIdMap(newRoot);
+                      const relNode = newNodeIdToNode.get(state_choosing.relSelId);
+                      if (!relNode) {
+                        throw new Error();
+                      }
+                      const firstHoleSelId = findFirstHoleSelId(relNode, newRoot, globalStaticEnv);
+
+                      onUpdateRoot(newRoot);
+
+                      setState(s => ({
+                        ...s,
+                        selectionId: firstHoleSelId || state_choosing_relSelId,
+                        choosing: firstHoleSelId ? {
+                          key: genuid(),
+                          mode: state_choosing.mode,
+                          relSelId: state_choosing.relSelId,
+                        } : ((state_choosing.mode === ChooserMode.FillInsertAfter) ? {
+                          key: genuid(),
+                          mode: ChooserMode.InsertAfter,
+                          relSelId: state_choosing_relSelId,
+                        }: null),
+                      }));
+                    }
+
+                    return <MultiChooser key={state.choosing.key} context={chooserContext} existingNode={null} localEnv={localEnv} treeViewDisplayOpts={treeViewDisplayOpts} onCommitChoice={handleCommitChoice} onAbort={abortChooser} />
+                  }
+                } else if ([ChooserMode.InsertBefore, ChooserMode.InsertAfter].includes(state.choosing.mode)) {
+                  if (state.choosing.relSelId === null) {
+                    throw new Error();
+                  }
+                  const relNode = nodeIdToNode.get(state.choosing.relSelId);
+                  if (!relNode) {
+                    throw new Error();
+                  }
+
+                  const localEnv = staticEnvMap.get(relNode);
+                  if (!localEnv) {
+                    throw new Error();
+                  }
+
+                  const state_choosing = state.choosing;
+
+                  const handleCommitChoice = (committedNode: Node): void => {
+                    const newRoot = insertBeforeOrAfter(root, relNode, committedNode, (state_choosing.mode === ChooserMode.InsertBefore));
+                    const firstHoleSelId = findFirstHoleSelId(committedNode, newRoot, globalStaticEnv);
+                    onUpdateRoot(newRoot);
+
+                    if (state_choosing.mode === ChooserMode.InsertAfter) {
+                      if (firstHoleSelId) {
+                        setState(s => ({
+                          ...s,
+                          selectionId: firstHoleSelId,
+                          choosing: {
+                            key: genuid(),
+                            mode: ChooserMode.FillInsertAfter,
+                            relSelId: committedNode.nid,
+                          },
+                        }));
+                      } else {
+                        setState(s => ({
+                          ...s,
+                          selectionId: committedNode.nid,
+                          choosing: {
+                            key: genuid(),
+                            mode: ChooserMode.InsertAfter,
+                            relSelId: committedNode.nid,
+                          },
+                        }));
+                      }
+                    } else {
+                      if (firstHoleSelId) {
+                        setState(s => ({
+                          ...s,
+                          selectionId: firstHoleSelId,
+                          choosing: {
+                            key: genuid(),
+                            mode: ChooserMode.Fill,
+                            relSelId: committedNode.nid,
+                          },
+                        }));
+                      } else {
+                        setState(s => ({
+                          ...s,
+                          selectionId: committedNode.nid,
+                          choosing: null,
+                        }));
+                      }
+                    }
+                  };
+
+                  const chooserContext = determineNodeChooserContext(relNode, root);
+
+                  return <MultiChooser key={state.choosing.key} context={chooserContext} existingNode={null} localEnv={localEnv} treeViewDisplayOpts={treeViewDisplayOpts} onCommitChoice={handleCommitChoice} onAbort={abortChooser} />
+                } else {
+                  throw new Error();
+                }
               }
-            }
-          })()}
-        </div>
-      }
-      <div className="CodeView-selection" ref={selHighlightElem} />
+            })()}
+          </div>
+        }
+        <div className="CodeView-selection" ref={selHighlightElem} />
+        <div className="CodeView-selection-scrollfollow" ref={selScrollFollowElem} />
+      </div>
     </div>
   );
 }

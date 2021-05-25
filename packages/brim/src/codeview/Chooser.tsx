@@ -439,7 +439,7 @@ export const MultiChooser: React.FC<{context: MultiChooserContext, existingNode:
 
   return (
     <div className="Chooser">
-      <input className="Chooser-input" value={text} onChange={onChange} onKeyDown={onKeyDown} ref={inputRef} autoFocus />
+      <input className="Chooser-input" value={text} onChange={onChange} onKeyDown={onKeyDown} ref={inputRef} />
       <ul className="Chooser-dropdown">
         {dropdownState.choices.map((choice, idx) => {
           const classNames = [];
@@ -500,7 +500,7 @@ export const TextChooser: React.FC<{existingNode: TextNode, onCommitChoice: (nod
 
   return (
     <div className="Chooser">
-      <input className="Chooser-input" value={text} onChange={onChange} onKeyDown={onKeyDown} ref={inputRef} autoFocus />
+      <input className="Chooser-input" value={text} onChange={onChange} onKeyDown={onKeyDown} ref={inputRef} />
     </div>
   );
 }
