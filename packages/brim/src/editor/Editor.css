@@ -110,6 +110,8 @@
   --color-ref: #1d8a3b;
   --color-name: rgb(111, 66, 193);
   --color-label: rgb(103, 72, 0);
+
+  --black-icon-filter: none;
 }
 
 .theme-dark {
@@ -125,4 +127,6 @@
   --color-ref: #1d8a3b;
   --color-name: #c6a6ff;
   --color-label: rgb(224 195 128);
+
+  --black-icon-filter: invert(1);
 }

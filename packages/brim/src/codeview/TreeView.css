@@ -337,8 +337,6 @@
   color: var(--color-label);
 }
 
-
-
-.Theme-dark .TreeView-literal-icon {
-  filter: invert(1);
+.TreeView-literal-icon {
+  filter: var(--black-icon-filter);
 }
