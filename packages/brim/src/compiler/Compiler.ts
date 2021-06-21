@@ -8,7 +8,7 @@ export class CompilationError extends Error {
 // Value of map is type, but we only do types of functions for now, which is just their interface
 type CompilationEnvironment = Environment<UID, null | FunctionInterfaceNode>;
 
-function compileTreeFuncDef(def: FunctionDefinitionNode, outerEnv: CompilationEnvironment): [CompiledDefinition, Set<UID>] {
+function compileTreeFuncDef(def: FunctionDefinitionNode, outerEnv: CompilationEnvironment): CompiledDefinition {
   const impl = def.impl;
   if (impl.kind !== NodeKind.TreeImpl) {
     throw new Error();
@@ -202,11 +202,11 @@ function compileTreeFuncDef(def: FunctionDefinitionNode, outerEnv: CompilationEn
         } else if (node.impl.kind === NodeKind.TreeImpl) {
 
           // Compile
-          const [compiledSubdef, outerIdRefs] = compileTreeFuncDef(node, combinedEnv);
+          const compiledSubdef = compileTreeFuncDef(node, combinedEnv);
           compiledSubdefs.push(compiledSubdef);
 
           // Traverse to all dependencies (stream and function)
-          for (const id of outerIdRefs) {
+          for (const id of compiledSubdef.orefs) {
             traverseToId(id);
           }
 
@@ -264,9 +264,10 @@ function compileTreeFuncDef(def: FunctionDefinitionNode, outerEnv: CompilationEn
     apps,
     defs: compiledSubdefs,
     oid,
+    orefs: [...outerReferencedIds],
   };
 
-  return [compiledDefinition, outerReferencedIds];
+  return compiledDefinition;
 }
 
 export function compileGlobalTreeDefinition(def: FunctionDefinitionNode, globalFunctionEnvironment: Environment<UID, FunctionDefinitionNode>): CompiledDefinition {
@@ -275,7 +276,7 @@ export function compileGlobalTreeDefinition(def: FunctionDefinitionNode, globalF
     compGlobalEnv.set(fid, defNode.iface);
   });
 
-  const [compiledDefinition, /*outerReferencedIds*/] = compileTreeFuncDef(def, compGlobalEnv);
+  const compiledDefinition = compileTreeFuncDef(def, compGlobalEnv);
 
   return compiledDefinition;
 }

@@ -19,4 +19,5 @@ export interface CompiledDefinition {
   readonly apps: ReadonlyArray<AppSpec>; // already toposorted
   readonly defs: ReadonlyArray<CompiledDefinition>; // local contained definitions
   readonly oid: UID | null; // stream id that it outputted (if there is output)
+  readonly orefs: ReadonlyArray<UID>; // ids referenced in outer scopes
 }

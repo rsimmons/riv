@@ -8,6 +8,7 @@ import globalNativeFunctions from '../builtin/globalNatives';
 import { ExecutionContext } from 'riv-runtime';
 import { CompiledDefinition } from '../compiler/CompiledDefinition';
 import { StaticEnvironment } from '../compiler/TreeUtil';
+import { codegenRoot } from '../runner/FasterFunction';
 
 export interface ProgramInfo {
   readonly id: string;
@@ -17,7 +18,7 @@ export interface ProgramInfo {
 interface ExecutionState {
   context: ExecutionContext;
   compiledDefinition: CompiledDefinition | null;
-  updateCompiledDefinition: (newDefinition: CompiledDefinition) => void;
+  // updateCompiledDefinition: (newDefinition: CompiledDefinition) => void;
 }
 
 interface State {
@@ -107,39 +108,29 @@ function compileMainDef(mainDef: FunctionDefinitionNode, globalFunctions: Readon
   }
 
   const compiledResult = compileGlobalTreeDefinition(mainDef, globalFunctionEnvironment);
-  // console.log('compiled:', compiledResult);
+
   return compiledResult;
 }
 
 function updateExecution(state: State, newCompiledDefinition: CompiledDefinition): State {
   if (state.execution) {
-    const { updateCompiledDefinition } = state.execution;
-
-    beginBatch();
-    try {
-      updateCompiledDefinition(newCompiledDefinition);
-    } catch (e) {
-      throw e;
-    }
-    endBatch();
-
-    return state;
-  } else {
-    // There is no old state, so we need to create the long-lived stuff
-    const [liveStreamFunc, updateCompiledDefinition] = createLiveFunction(newCompiledDefinition, nativeFunctionEnvironment);
-    const context = createNullaryVoidRootExecutionContext(liveStreamFunc);
-
-    context.update(); // first update that generally kicks off further async updates
-
-    return {
-      ...state,
-      execution: {
-        context,
-        compiledDefinition: newCompiledDefinition,
-        updateCompiledDefinition,
-      },
-    };
+    const { context } = state.execution;
+    context.terminate();
   }
+
+  const createMain = codegenRoot(newCompiledDefinition, false);
+  const {main} = createMain(nativeFunctionEnvironment);
+  const context = createNullaryVoidRootExecutionContext(main);
+
+  context.update(); // first update that generally kicks off further async updates
+
+  return {
+    ...state,
+    execution: {
+      context,
+      compiledDefinition: newCompiledDefinition,
+    },
+  };
 }
 
 function updateTree(state: State, newRoot: FunctionDefinitionNode): State {
